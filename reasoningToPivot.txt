@@ -1,9 +1,10 @@
 Hi Kallum, 
 
 I had a bit of a think over the past few weeks and wanted to rewrite the sim in python to make it easier to develop.
-If you don't mind could you have a look at the logic I want to implement & my thought process to see if it makes sense from a VD Point of view?
+If you don't mind could you have a look at the logic I want to implement & my thought process to see if it makes sense to you? especially from a VD pov
 
 1. Why I don't want to use the existing simulation
+
 I think the simulation does try to give us useful information and it's been really good at teaching me what formulas I can potentially use.
 But, I don't quite agree with the following, correct me if I'm wrong but this is what I learnt from reading up, looking into code, and talking to one of the guys that worked on a lap time sim:
 
