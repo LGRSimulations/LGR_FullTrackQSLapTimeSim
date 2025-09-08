@@ -1,0 +1,16 @@
+{
+    "powertrain": {
+        "engine": {
+            "type": "ICE",
+            "max_power": 500,
+            "max_torque": 600
+        },
+        "transmission": {
+            "type": "DCT",
+            "gears": 7
+        }
+    },
+    "track": {
+        "filepath" : "datasets/Tracks/FSUK.txt"
+    }
+}
