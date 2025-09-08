@@ -5,7 +5,7 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-@dataclass
+@dataclass  # using dataclasses removes the need for constructor boilerplate
 class TrackPoint:
     """Represents a single point on the track with all relevant geometric properties."""
     distance: float
@@ -32,16 +32,16 @@ class Track:
 
 def loadTrack(filePath: str) -> Track:
     """
-    Load FSUK track format (x, y, z, q coordinates).
+    Load track format (x, y, z, q coordinates).
     
     Args:
-        file_path: Path to FSUK track file
+        file_path: Path to track file
         
     Returns:
         Track object with computed geometric properties
     """
     absPath = os.path.abspath(filePath)
-    logger.info(f"Loading FSUK track from {absPath}")
+    logger.info(f"Loading track from {absPath}")
     
     # Read the track data, skipping comment lines
     data = []
@@ -93,7 +93,11 @@ def loadTrack(filePath: str) -> Track:
         raise ValueError("No valid track data found in file")
     
 def _calcCumDist(x: np.ndarray, y: np.ndarray, z: np.ndarray) -> np.ndarray:
-    """Calculate cumulative distance along track from coordinate arrays."""
+    """
+    Calculate cumulative distance along track from coordinate arrays.
+    Returns: 1D array of cumulative distances starting from 0.
+    Unit: meters
+    """
     dx = np.diff(x)
     dy = np.diff(y)
     dz = np.diff(z)
@@ -114,7 +118,13 @@ def _calcCurvature(x: np.ndarray, y: np.ndarray, distances: np.ndarray) -> np.nd
     κ = (x'y'' - y'x'') / (x'^2 + y'^2)^(3/2)
     
     Where primes indicate derivatives with respect to distance.
+    Second derivatives ('') describe how the direction of the tangent vector changes.
     Sign convention: positive for left turns, negative for right turns.
+        High curvature = tight turn.
+        Low curvature = gentle turn or straight.
+
+    Returns: 1D array of curvature values at each track point. 
+    Unit: 1/m (inverse meters)
     """
     n = len(x)
     curvatures = np.zeros(n)
@@ -148,7 +158,12 @@ def _calcCurvature(x: np.ndarray, y: np.ndarray, distances: np.ndarray) -> np.nd
 
 
 def _calcHeadings(x: np.ndarray, y: np.ndarray) -> np.ndarray:
-    """Calculate track heading angles in radians."""
+    """
+    Calculate track heading angles in radians.
+    Returns:
+    1D array of heading angles at each track point.
+    Unit: radians (0 = East, π/2 = North, π = West, -π/2 = South)
+    """
     n = len(x)
     headings = np.zeros(n)
     
@@ -165,16 +180,21 @@ def _calcHeadings(x: np.ndarray, y: np.ndarray) -> np.ndarray:
 
 
 def _calcElevationAngles(distances: np.ndarray, z: np.ndarray) -> np.ndarray:
-    """Calculate elevation angles (grade) in radians."""
+    """
+    Calculate elevation angles (grade) in radians.
+    Returns:
+    1D array of elevation angles at each track point.
+    Unit: radians (positive = uphill, negative = downhill)
+    """
     n = len(distances)
-    elevation_angles = np.zeros(n)
+    elevationAngles = np.zeros(n)
     
     for i in range(n-1):
         ds = distances[i+1] - distances[i]
         dz = z[i+1] - z[i]
         if ds > 1e-10:
-            elevation_angles[i] = np.arctan(dz / ds)
+            elevationAngles[i] = np.arctan(dz / ds)
     
-    elevation_angles[-1] = elevation_angles[-2] if n > 1 else 0.0
+    elevationAngles[-1] = elevationAngles[-2] if n > 1 else 0.0
     
-    return elevation_angles
+    return elevationAngles
