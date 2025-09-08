@@ -15,6 +15,7 @@ def main():
 
     # Import modules
     from track.track import loadTrack
+    from vehicle.vehicle import createVehicle
     # Create results dir
 
     # Validation tests
@@ -29,5 +30,13 @@ def main():
         print("Error loading track:", e)
         return
 
+    # Load vehicle parameters
+    try:
+        vehicle = createVehicle()
+        print(f"Loaded vehicle: {vehicle.name}, mass: {vehicle.mass} kg")
+    except Exception as e:
+        print("Error loading vehicle:", e)
+        return
+    
 if __name__ == "__main__":
     main()
