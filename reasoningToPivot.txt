@@ -1,0 +1,34 @@
+Hi Kallum, 
+
+I had a bit of a think over the past few weeks and wanted to rewrite the sim in python to make it easier to develop.
+If you don't mind could you have a look at the logic I want to implement & my thought process to see if it makes sense from a VD Point of view?
+
+1. Why I don't want to use the existing simulation
+I think the simulation does try to give us useful information and it's been really good at teaching me what formulas I can potentially use.
+But, I don't quite agree with the following, correct me if I'm wrong but this is what I learnt from reading up, looking into code, and talking to one of the guys that worked on a lap time sim:
+
+- From a code optimisation pov, the interpolation table, and the way it's being looked up is incredibly slow, the lookup is O(n) so that's a good start. However, for each segment, to find lateral force balance it loops through up to 1 million indices of 4 tyre force arrays at each trial velocity.... It's fine and all using lookup tables, but in this case, it's far better to simply calculate it. This can be optimised, but there's something fundamentally wrong here. (For context: OBR lap time sim took 2 mins and they thought that was slow)
+
+- The steering angle controller, is just a direction pointer, and not an assistant to the solver, like it literally only points either one of the directions.
+
+- From a VD pov, yaw moment balance is unaccounted for. While neutral steer is fine for basic use cases such as in point mass where it's just 1 or 2 tyres, but not quite liking it when we are trying to look at 2 axles. Coming back to my point, yaw moment is not quite accounted for, I'd prefer if we assert it to 0. Assuming completely steady-state, as opposed to the current implementation where it's kind of all over the place? (Correct me if I'm wrong here though)
+
+2. What I'd like to do instead, is 
+
+- Rewrite the thing in python. I'm more comfortable in Python, those wanting a job in simulations will benefit from knowing python, combined with me already wanting to pivot away due to above reasons, this is the perfect chance to rewrite it.
+
+- In the lap time sim, would be nice to have aSteer and aSideslip as our degrees of freedom
+
+- we do this by using 2 functions that work as a sort of 2-nested optimisation loop
+    1. f1: try and guess a vCar, then optimise the aSteer, aSideslip, track curvature, determine empirically using a decently comprehensive bicycle model, what's the potential gLat & yaw moment (This function being a "try all the damn possibilities for our modelled vehicle" in this section of the track) 
+    2. f2: find vCarMax given the gLat from f1, track curvature, and in doing so set yourself a theoretical fastest limit (This function being kind of a physical limits function) 
+
+- The optimisation loop is then just 
+    1. guess vCar
+    2. ⁠Iterate over aSteer & aSideSlip, filter only for yaw moment = 0 
+    3. ⁠If yes, compute gLat, determine if under vCarMax 
+    4. ⁠If yes, increase vCar a bit and try again
+    5. ⁠Else return previous vCar as limit
+
+- This way, we optimise for aSteer, aSideslip, and we can also play around with parameters like weight bal, mech bal, etc
+- It is also the opposite of all the crazy lookup table stuff that was happening earlier.
