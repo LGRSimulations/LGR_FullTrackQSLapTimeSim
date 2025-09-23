@@ -33,7 +33,7 @@ def main():
     # Load vehicle parameters
     try:
         vehicle = createVehicle()
-        print(f"Loaded vehicle: {vehicle.name}, mass: {vehicle.mass} kg")
+        print(f"Loaded vehicle: {vehicle.params.name}, mass: {vehicle.params.mass} kg")
     except Exception as e:
         print("Error loading vehicle:", e)
         return
