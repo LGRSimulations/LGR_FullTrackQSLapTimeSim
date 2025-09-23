@@ -8,6 +8,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class VehicleParameters:
     """Core vehicle parameters for point mass simulation."""
+    name: str 
     mass: float  # kg
     frontalArea: float  # m²
     dragCoefficient: float  # dimensionless
@@ -26,87 +27,81 @@ class PowerUnit:
     Handles both ICE and electric powertrains.
     """
     
-    def __init__(self, powerData: Optional[pd.DataFrame] = None, 
-                 maxPower: float = 200000.0,  # W
-                 maxTorque: float = 1000.0,   # Nm
-                 maxRPM: float = 10000.0):    # RPM
+    def __init__(self, powerData: pd.DataFrame):
         """
         Initialize power unit.
         
         Args:
-            power_data: DataFrame with columns ['Motor Speed [RPM]', 'Continuous Power [kW]', 'Peak Power [kW]']
+            powerData: DataFrame with columns ['Motor Speed [RPM]', 'Continuous Power [kW]', 'Peak Power [kW]']
             maxPower: Maximum power in Watts
             maxTorque: Maximum torque in Nm
             maxRPM: Maximum RPM
         """
 
-        self.maxPower = maxPower
-        self.maxTorque = maxTorque
-        self.maxRPM = maxRPM
+        powerData = self.setupFromData(powerData)
+        if powerData is None:
+            raise ValueError("powerData must be a pandas DataFrame and cannot be None.")
         
-        if powerData is not None:
-            self.setupFromData(powerData)
-        else:
-            logger.warning("No power data provided, no fallback implemented.")
-    
     def setupFromData(self, df: pd.DataFrame):
-        """Setup power unit from DataFrame (dummy values for now)."""
-        # Return dummy arrays for rpm and continuousPower
-        self.rpm = np.array([0, 1000, 2000, 3000, 4000, 5000])
-        self.continuousPower = np.array([0, 20000, 40000, 60000, 80000, 100000])  # in Watts
-
+        """Setup power unit from DataFrame."""
+        powerData = df
+        return powerData
+    
 class TireModel:
     """
     Tire model for grip calculations.
     Use interpolated lookup tables for tyre forces.
     """
     
-    def __init__(self, tire_data: Optional[pd.DataFrame] = None, 
-                 base_mu: float = 1.4):
+    def __init__(self, tireDataLat: pd.DataFrame, tireDataLong: pd.DataFrame):
         """
         Initialize tire model.
         
         Args:
-            tire_data: DataFrame with tire force vs slip angle data
-            base_mu: Base friction coefficient for simple model
-        """
-        self.base_mu = base_mu
-        
-        if tire_data is not None:
-            self._setup_from_data(tire_data)
-        else:
-            logger.warning("No tire data provided. No fallback implemented")
-    def _setup_from_data(self, df: pd.DataFrame):
-        """Setup tire model from DataFrame (dummy values for now)."""
-        # Dummy implementation
-        self.slip_angles = np.array([-15, -10, -5, 0, 5, 10, 15])
+            tireDataLat: DataFrame with lateral tire data (e.g. slip angle vs lateral force)
+            tireDataLong: DataFrame with longitudinal tire data (e.g. slip ratio vs longitudinal force)
+            """
+        self.tireDataLat = tireDataLat
+        self.tireDataLong = tireDataLong
+
+        tireData = self.setupFromData(tireDataLat, tireDataLong)
+        if tireData is None:
+            raise ValueError("tireData must be a pandas DataFrame and cannot be None.")
+    def setupFromData(self, dfLat: pd.DataFrame, dfLong: pd.DataFrame):
+        """Setup tire model from DataFrames."""
+        combinedTireData = {
+            'latTireData': dfLat,
+            'longTireData': dfLong
+        }
+
+        return combinedTireData
 
 class Vehicle:
     """Complete vehicle model combining all subsystems."""
     
     def __init__(self, parameters: VehicleParameters, 
-                 power_unit: PowerUnit, 
-                 tire_model: TireModel):
+                 powerUnit: PowerUnit, 
+                 tireModel: TireModel):
         """
         Initialize complete vehicle model.
         
         Args:
             parameters: Vehicle physical parameters
-            power_unit: Power unit model
-            tire_model: Tire model
+            powerUnit: Power unit model
+            tireModel: Tire model
         """
         self.params = parameters
-        self.power_unit = power_unit
-        self.tire_model = tire_model
+        self.power_unit = powerUnit
+        self.tire_model = tireModel
         
         # Calculate derived parameters
         self.weight = parameters.mass * 9.81  # N
         
-        logger.info(f"Vehicle initialized: {parameters.mass}kg, {power_unit.maxPower/1000:.1f}kW")
 
 def createVehicle() -> Vehicle:
     """Create a default vehicle with dummy parameters."""
     params = VehicleParameters(
+        name="TestCar",
         mass=1500.0,
         frontalArea=2.2,
         dragCoefficient=0.32,
@@ -119,7 +114,27 @@ def createVehicle() -> Vehicle:
         maxGLongAccel=0.8,
         maxGLongBrake=1.0
     )
-    power_unit = PowerUnit()
-    tire_model = TireModel()
-    loadedVehicle = Vehicle(params, power_unit, tire_model)
+    # Create dummy powerData DataFrame
+    rpm = np.array([0, 1000, 2000, 3000, 4000, 5000])
+    torque = np.array([600, 600, 550, 500, 400, 300])
+    power = (rpm * torque * 2 * np.pi) / 60
+    powerData = pd.DataFrame({
+        'Motor Speed [RPM]': rpm,
+        'Continuous Power [kW]': power / 1000,
+        'Peak Power [kW]': power / 1000
+    })
+    # Create dummy tire data DataFrames
+    tireDataLat = pd.DataFrame({
+        'Slip Angle [deg]': [-15, -10, -5, 0, 5, 10, 15],
+        'Lateral Force [N]': [-8000, -6000, -3000, 0, 3000, 6000, 8000]
+    })
+    tireDataLong = pd.DataFrame({
+        'Slip Ratio [%]': [-0.2, -0.1, -0.05, 0, 0.05, 0.1, 0.2],
+        'Longitudinal Force [N]': [-4000, -2000, -1000, 0, 1000, 2000, 4000]
+    })
+
+
+    powerUnit = PowerUnit(powerData)
+    tireModel = TireModel(tireDataLat, tireDataLong)
+    loadedVehicle = Vehicle(params, powerUnit, tireModel)
     return loadedVehicle
