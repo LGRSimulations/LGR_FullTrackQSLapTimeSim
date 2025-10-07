@@ -14,7 +14,7 @@ def main():
     # Import modules
     from track.track import loadTrack
     from vehicle.vehicle import createVehicle
-    from simulator.simulator import initLapTimeSimulation
+    from simulator.simulator import runLapTimeSimulation
 
     # Load Track data
     print("Using track filepath:", config["track"]["filepath"])
@@ -36,7 +36,7 @@ def main():
     
     # Initialise simulation loop 
     try:
-        initLapTimeSimulation(track, vehicle, config)
+        runLapTimeSimulation(track, vehicle, config)
     except Exception as e:
         print("Error during simulation:", e)
         return
