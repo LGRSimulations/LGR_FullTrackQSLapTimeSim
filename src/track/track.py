@@ -1,7 +1,9 @@
 import logging
 import os
-from dataclasses import dataclass
 import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +32,7 @@ class Track:
         self.is_closed = is_closed
         self.total_length = points[-1].distance if points else 0.0
 
-def loadTrack(filePath: str) -> Track:
+def loadTrack(filePath: str, debugMode) -> Track:
     """
     Load track format (x, y, z, q coordinates).
     
@@ -87,6 +89,21 @@ def loadTrack(filePath: str) -> Track:
             points.append(point)
         
         logger.info(f"Loaded track with {len(points)} points, total length: {distances[-1]:.1f}m")
+        
+        if debugMode is True:
+            sns.set_theme(style="darkgrid", context="notebook") # Use seaborn style for the plot
+
+            # 3D track visualization for validation
+            fig = plt.figure()
+            ax = fig.add_subplot(111, projection='3d')
+            ax.plot(x, y, z, label='Track 3D Path')
+            ax.set_xlabel('X (m)')
+            ax.set_ylabel('Y (m)')
+            ax.set_zlabel('Z (m)')
+            ax.set_title('Track 3D Map')
+            ax.legend()
+            plt.show()  # Plot persists until manually closed
+
         return Track(points, is_closed=True)
 
     if not data:
@@ -103,11 +120,11 @@ def _calcCumDist(x: np.ndarray, y: np.ndarray, z: np.ndarray) -> np.ndarray:
     dz = np.diff(z)
     
     # 3D distance calculation
-    segment_lengths = np.sqrt(dx**2 + dy**2 + dz**2)
+    segmentLengths = np.sqrt(dx**2 + dy**2 + dz**2)
     
     # Cumulative distance starting from 0
     distances = np.zeros(len(x))
-    distances[1:] = np.cumsum(segment_lengths)
+    distances[1:] = np.cumsum(segmentLengths)
     
     return distances
 

@@ -11,19 +11,14 @@ config = loadConfig(configPath)
 
 def main():
 
-    # TODO: Load vehicle data and track data, then run simulation
-
     # Import modules
     from track.track import loadTrack
     from vehicle.vehicle import createVehicle
-    # Create results dir
-
-    # Validation tests
 
     # Load Track data
     print("Using track filepath:", config["track"]["filepath"])
     try: 
-        track = loadTrack(config["track"]["filepath"])
+        track = loadTrack(config["track"]["filepath"], config.get("debugMode", False))
         print(f"Loaded track with {len(track.points)} points, total length: {track.total_length:.2f} m")
 
     except Exception as e:
