@@ -3,6 +3,8 @@ import numpy as np
 from dataclasses import dataclass
 from typing import Optional
 import pandas as pd
+from scipy.interpolate import interp1d
+
 logger = logging.getLogger(__name__)
 
 @dataclass
@@ -17,7 +19,8 @@ class VehicleParameters:
     wheelbase: float  # m
     trackWidth: float  # m
     coGHeight: float  # m
-    maxGLat: float  # g (tire grip limit for point mass)
+    coGLongitudinalPos: float  # fraction of wheelbase from front axle (0 to 1)
+    maxGLat: float  # g (tyre grip limit for point mass)
     maxGLongAccel: float  # g (acceleration limit)
     maxGLongBrake: float  # g (braking limit)
 
@@ -47,57 +50,128 @@ class PowerUnit:
         powerData = df
         return powerData
     
-class TireModel:
+class TyreModel:
     """
-    Tire model for grip calculations.
+    tyre model for grip calculations.
     Use interpolated lookup tables for tyre forces.
     """
     
-    def __init__(self, tireDataLat: pd.DataFrame, tireDataLong: pd.DataFrame):
+    def __init__(self, tyreDataLat: pd.DataFrame, tyreDataLong: pd.DataFrame):
         """
-        Initialize tire model.
+        Initialize tyre model.
         
         Args:
-            tireDataLat: DataFrame with lateral tire data (e.g. slip angle vs lateral force)
-            tireDataLong: DataFrame with longitudinal tire data (e.g. slip ratio vs longitudinal force)
+            tyreDataLat: DataFrame with lateral tyre data (e.g. slip angle vs lateral force)
+            tyreDataLong: DataFrame with longitudinal tyre data (e.g. slip ratio vs longitudinal force)
             """
-        self.tireDataLat = tireDataLat
-        self.tireDataLong = tireDataLong
+        self.tyreDataLat = tyreDataLat
+        self.tyreDataLong = tyreDataLong
 
-        tireData = self.setupFromData(tireDataLat, tireDataLong)
-        if tireData is None:
-            raise ValueError("tireData must be a pandas DataFrame and cannot be None.")
+        # Create interpolation functions for lateral forces
+        self.latForceInterp = interp1d(
+            tyreDataLat['Slip Angle [deg]'],
+            tyreDataLat['Lateral Force [N]'],
+            kind='linear',
+            fill_value='extrapolate'
+        )
+
+        tyreData = self.setupFromData(tyreDataLat, tyreDataLong)
+        if tyreData is None:
+            raise ValueError("tyreData must be a pandas DataFrame and cannot be None.")
+        
     def setupFromData(self, dfLat: pd.DataFrame, dfLong: pd.DataFrame):
-        """Setup tire model from DataFrames."""
-        combinedTireData = {
-            'latTireData': dfLat,
-            'longTireData': dfLong
+        """Setup tyre model from DataFrames."""
+        combinedtyreData = {
+            'latTyreData': dfLat,
+            'longTyreData': dfLong
         }
 
-        return combinedTireData
+        return combinedtyreData
 
+    def getLateralForce(self, slipAngle: float) -> float:
+        """
+        Get lateral force for a given slip angle.
+        For MVP, we ignore normal_load (use constant from dummy data).
+        
+        Args:
+            slip_angle: Slip angle in degrees
+            normal_load: Normal load in N (ignored for now)
+            
+        Returns:
+            Lateral force in N
+        """
+        return float(self.latForceInterp(slipAngle))
+    
 class Vehicle:
     """Complete vehicle model combining all subsystems."""
     
     def __init__(self, parameters: VehicleParameters, 
                  powerUnit: PowerUnit, 
-                 tireModel: TireModel):
+                 TyreModel: TyreModel):
         """
         Initialize complete vehicle model.
         
         Args:
             parameters: Vehicle physical parameters
             powerUnit: Power unit model
-            tireModel: Tire model
+            TyreModel: tyre model
         """
         self.params = parameters
         self.power_unit = powerUnit
-        self.tire_model = tireModel
+        self.tyre_model = TyreModel
         
         # Calculate derived parameters
         self.weight = parameters.mass * 9.81  # N
         
-
+    def computeTyreForces(self, slipAngleFront: float, slipAngleRear: float):
+        """
+        Compute lateral tire forces using the tire model.
+        
+        Args:
+            slip_angle_front: Front tire slip angle in degrees
+            slip_angle_rear: Rear tire slip angle in degrees
+            normal_load: Normal load on tire in N
+            
+        Returns:
+            (F_front, F_rear): Lateral forces in N
+        """
+        F_front = self.tyre_model.getLateralForce(slipAngleFront)
+        F_rear = self.tyre_model.getLateralForce(slipAngleRear)
+        return F_front, F_rear
+    
+    def computeYawMoment(self, F_front: float, F_rear: float, aSteer: float) -> float:
+        """
+        Compute yaw moment based on tire forces and steering angle.
+        
+        Args:
+            F_front: Front lateral force in N
+            F_rear: Rear lateral force in N
+            aSteer: Steering angle in degrees
+        
+        Returns:
+            Yaw moment in Nm
+        """
+        aSteerRad = np.radians(aSteer)
+        l_f = self.params.wheelbase * self.params.coGLongitudinalPos    # longitudinal distance from CoG to front axle
+        l_r = self.params.wheelbase * self.params.coGLongitudinalPos    # longitudinal distance from CoG to rear axle
+        M_z = F_front * l_f * np.cos(aSteerRad) - F_rear * l_r          # yaw moment based on forces and distances
+        return M_z
+    
+    def computeLateralAcceleration(self, F_front: float, F_rear: float, vCar: float) -> float:
+        """
+        Compute lateral acceleration based on tire forces.
+        
+        Args:
+            F_front: Front lateral force in N
+            F_rear: Rear lateral force in N
+            vCar: Vehicle speed in m/s (not used in point mass model)
+            
+        Returns:
+            Lateral acceleration in m/s²
+        """
+        a_y = (F_front + F_rear) / self.params.mass
+        return a_y
+        
 def createVehicle() -> Vehicle:
     """Create a default vehicle with dummy parameters."""
     params = VehicleParameters(
@@ -110,6 +184,7 @@ def createVehicle() -> Vehicle:
         wheelbase=2.5,
         trackWidth=1.6,
         coGHeight=0.55,
+        coGLongitudinalPos=0.5,
         maxGLat=1.2,
         maxGLongAccel=0.8,
         maxGLongBrake=1.0
@@ -137,28 +212,28 @@ def createVehicle() -> Vehicle:
         'Max RPM': [5000]*6,
         'Min RPM': [0]*6
     })
-    # Create dummy tire data DataFrames
-    # Lateral tire data (cornering)
-    tireDataLat = pd.DataFrame({
+    # Create dummy tyre data DataFrames
+    # Lateral tyre data (cornering)
+    tyreDataLat = pd.DataFrame({
         'Slip Angle [deg]': [-15, -10, -5, 0, 5, 10, 15],
         'Lateral Force [N]': [-8000, -6000, -3000, 0, 3000, 6000, 8000],
         'Normal Load [N]': [3000]*7,           # constant for now
         'Camber Angle [deg]': [0]*7,           # neutral camber
-        'Tire Pressure [kPa]': [200]*7,        # constant for now
+        'tyre Pressure [kPa]': [200]*7,        # constant for now
         'Temperature [C]': [25]*7              # constant for now
     })
 
-    # Longitudinal tire data (traction/braking)
-    tireDataLong = pd.DataFrame({
+    # Longitudinal tyre data (traction/braking)
+    tyreDataLong = pd.DataFrame({
         'Slip Ratio [%]': [-0.2, -0.1, -0.05, 0, 0.05, 0.1, 0.2],
         'Longitudinal Force [N]': [-4000, -2000, -1000, 0, 1000, 2000, 4000],
         'Normal Load [N]': [3000]*7,
-        'Tire Pressure [kPa]': [200]*7,
+        'tyre Pressure [kPa]': [200]*7,
         'Temperature [C]': [25]*7
     })
 
 
     powerUnit = PowerUnit(powerData)
-    tireModel = TireModel(tireDataLat, tireDataLong)
-    loadedVehicle = Vehicle(params, powerUnit, tireModel)
+    tyreModel = TyreModel(tyreDataLat, tyreDataLong)
+    loadedVehicle = Vehicle(params, powerUnit, tyreModel)
     return loadedVehicle

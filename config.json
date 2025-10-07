@@ -13,5 +13,5 @@
     "track": {
         "filepath" : "datasets/Tracks/FSUK.txt"
     },
-    "debugMode": true
+    "debugMode": false
 }
