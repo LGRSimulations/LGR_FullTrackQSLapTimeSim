@@ -1,5 +1,9 @@
 import numpy as np
 import logging
+import concurrent.futures
+import matplotlib.pyplot as plt
+import seaborn as sns
+
 logger = logging.getLogger(__name__)
 
 def computeVCarMax(gLat: float, curvature: float) -> float:
@@ -174,14 +178,17 @@ def backwardPass(track, vehicle, pointSpeeds):
 def computeSpeedProfile(track, vehicle, config):
     """
     Compute final speed profile using forward and backward passes for all track points.
+    Parallelises the optimisation of cornering speeds at each point.
     """
     # Step 1: For each track point, optimise max cornering speed given vehicle model
-    pointSpeeds = []
-    for point in track.points:
+    def optimiseAtPoints(point):
         logger.info(f"Optimizing speed at distance={point.distance:.1f}m, curvature={point.curvature:.4f}")
         vCarLimit = optimiseSpeedAtPoint(point.curvature, vehicle, config)
-        pointSpeeds.append(vCarLimit)
         logger.info(f"  -> Max speed: {vCarLimit:.2f} m/s")
+        return vCarLimit
+
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        pointSpeeds = list(executor.map(optimiseAtPoints, track.points))
     
     # Step 2: Forward Pass (acceleration limited)
     forwardSpeeds = forwardPass(track, vehicle, pointSpeeds)
@@ -200,11 +207,6 @@ def runLapTimeSimulation(track, vehicle, config) -> None:
     # Compute speed profile
     finalSpeeds, cornerSpeeds = computeSpeedProfile(track, vehicle, config)
 
-    # Log results for first 10 points (for quick validation)
-    for i in range(min(10, len(track.points))):
-        point = track.points[i]
-        logger.info(f"Point {i}: Distance={point.distance:.1f}m, Curvature={point.curvature:.4f}, Speed={finalSpeeds[i]:.2f} m/s")
-
     # Compute lap time
     lapTime = 0.0
     for i in range(1, len(track.points)):
@@ -215,3 +217,16 @@ def runLapTimeSimulation(track, vehicle, config) -> None:
             lapTime += dt
     logger.info(f"Estimated lap time: {lapTime:.2f} seconds")
     logger.info("Lap time simulation completed.")
+
+    # Plot results
+    sns.set_theme(style="darkgrid", context="notebook")
+    distances = [p.distance for p in track.points]
+    plt.figure(figsize=(12, 6))
+    plt.plot(distances, finalSpeeds, label='vCar (Simulated)', linewidth=2)
+    plt.plot(distances, cornerSpeeds, '--', label='Theoretical Limit', alpha=0.7)
+    plt.xlabel('Distance along track (m)')
+    plt.ylabel('Speed (m/s)')
+    plt.title(f'Lap Time: {lapTime:.2f} s\nSpeed Profile vs Theoretical Limit')
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
