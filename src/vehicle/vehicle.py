@@ -186,8 +186,8 @@ def createVehicle() -> Vehicle:
         coGHeight=0.55,
         coGLongitudinalPos=0.5,
         maxGLat=1.2,
-        maxGLongAccel=0.8,
-        maxGLongBrake=1.0
+        maxGLongAccel=0.8,  # Ideally we get this from power unit
+        maxGLongBrake=1.0   # Ideally we get this from brake system
     )
     # Create dummy powerData DataFrame
     rpm = np.array([0, 1000, 2000, 3000, 4000, 5000])           # RPM at crankshaft   

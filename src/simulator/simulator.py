@@ -16,7 +16,7 @@ def computeVCarMax(gLat: float, curvature: float) -> float:
         Maximum speed in m/s
     """
     if abs(curvature) < 1e-6:  # straight line
-        return np.inf
+        return np.float64(70.0)    # arbitrary high speed on straights
     
     # calculate vCarMax based on lateral acceleration and curvature
     vCarMax = np.sqrt(abs(gLat) / abs(curvature))   # m/s
@@ -94,7 +94,7 @@ def optimiseSpeedAtPoint(curvature: float, vehicle, config):
     aSteerRange = np.linspace(-10, 10, 21)  # degrees
     aSideslipRange = np.linspace(-5, 5, 11)  # degrees
 
-    maxIterations = 500
+    maxIterations = 2000
     iteration = 0
 
     while iteration < maxIterations:
@@ -123,16 +123,95 @@ def optimiseSpeedAtPoint(curvature: float, vehicle, config):
     logger.warning("Max iterations reached without convergence at curvature={curvature:.4f}")
     return vCarPrev
 
-def initLapTimeSimulation(track, vehicle, config) -> None:
-    """Initialize and run a lap time simulation."""
-    logger.info("Starting lap time simulation...")
-    # For each track point, optimize speed
-    speeds = []
-    for point in track.points[:10]:  # Test with first 10 points for now
+def forwardPass(track, vehicle, pointSpeeds):
+    """
+    Forward pass: acceleration-limited speed profile.
+    Uses all track points.
+    """
+    n_points = len(track.points)
+    speeds = np.zeros(n_points)
+    speeds[0] = pointSpeeds[0]  # start at first point speed
+
+    for i in range(1, n_points):
+        # Distance to next point
+        ds = track.points[i].distance - track.points[i-1].distance
+
+        # Maximum acceleration (from vehicle limits)
+        a_max = vehicle.params.maxGLongAccel * 9.81  # m/s^2
+
+        # Maximum speed we can reach accelerating from previous point
+        v_accel = np.sqrt(speeds[i-1]**2 + 2 * a_max * ds)
+
+        # Take minimum of acceleration-limited and corner-limited speed
+        speeds[i] = min(v_accel, pointSpeeds[i])
+
+    return speeds
+
+def backwardPass(track, vehicle, pointSpeeds):
+    """
+    Backward pass: braking-limited speed profile.
+    Uses all track points.
+    """
+    n_points = len(track.points)
+    speeds = np.zeros(n_points)
+    speeds[-1] = pointSpeeds[-1]  # end at last point speed
+
+    for i in range(n_points-2, -1, -1):
+        # Distance to next point
+        ds = track.points[i+1].distance - track.points[i].distance
+
+        # Maximum deceleration (from vehicle limits)
+        aBrake = vehicle.params.maxGLongBrake * 9.81  # m/s^2
+
+        # Maximum speed we can reach braking from next point
+        vBrake = np.sqrt(speeds[i+1]**2 + 2 * aBrake * ds)
+
+        # Take minimum of braking-limited and corner-limited speed
+        speeds[i] = min(vBrake, pointSpeeds[i])
+
+    return speeds
+
+def computeSpeedProfile(track, vehicle, config):
+    """
+    Compute final speed profile using forward and backward passes for all track points.
+    """
+    # Step 1: For each track point, optimise max cornering speed given vehicle model
+    pointSpeeds = []
+    for point in track.points:
         logger.info(f"Optimizing speed at distance={point.distance:.1f}m, curvature={point.curvature:.4f}")
         vCarLimit = optimiseSpeedAtPoint(point.curvature, vehicle, config)
-        speeds.append(vCarLimit)
+        pointSpeeds.append(vCarLimit)
         logger.info(f"  -> Max speed: {vCarLimit:.2f} m/s")
     
-    logger.info("Lap time simulation complete.")
-    logger.info(f"Speed profile (first 10 points): {speeds}")
+    # Step 2: Forward Pass (acceleration limited)
+    forwardSpeeds = forwardPass(track, vehicle, pointSpeeds)
+
+    # Step 3: Backward Pass (braking limited)
+    backwardSpeeds = backwardPass(track, vehicle, pointSpeeds)
+
+    # Step 4: Take min of forward and backward pass speeds
+    finalSpeeds = np.minimum(forwardSpeeds, backwardSpeeds)
+    return finalSpeeds, pointSpeeds
+
+def runLapTimeSimulation(track, vehicle, config) -> None:
+    """Initialize and run a lap time simulation for the whole track."""
+    logger.info("Starting lap time simulation...")
+    
+    # Compute speed profile
+    finalSpeeds, cornerSpeeds = computeSpeedProfile(track, vehicle, config)
+
+    # Log results for first 10 points (for quick validation)
+    for i in range(min(10, len(track.points))):
+        point = track.points[i]
+        logger.info(f"Point {i}: Distance={point.distance:.1f}m, Curvature={point.curvature:.4f}, Speed={finalSpeeds[i]:.2f} m/s")
+
+    # Compute lap time
+    lapTime = 0.0
+    for i in range(1, len(track.points)):
+        ds = track.points[i].distance - track.points[i-1].distance
+        v_avg = (finalSpeeds[i] + finalSpeeds[i-1]) / 2
+        if v_avg > 0:
+            dt = ds / v_avg
+            lapTime += dt
+    logger.info(f"Estimated lap time: {lapTime:.2f} seconds")
+    logger.info("Lap time simulation completed.")
