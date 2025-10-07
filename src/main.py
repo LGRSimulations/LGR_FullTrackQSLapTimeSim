@@ -14,6 +14,7 @@ def main():
     # Import modules
     from track.track import loadTrack
     from vehicle.vehicle import createVehicle
+    from simulator.simulator import initLapTimeSimulation
 
     # Load Track data
     print("Using track filepath:", config["track"]["filepath"])
@@ -33,5 +34,7 @@ def main():
         print("Error loading vehicle:", e)
         return
     
+    # Initialise simulation loop 
+
 if __name__ == "__main__":
     main()
