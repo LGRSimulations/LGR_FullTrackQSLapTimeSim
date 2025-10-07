@@ -115,22 +115,46 @@ def createVehicle() -> Vehicle:
         maxGLongBrake=1.0
     )
     # Create dummy powerData DataFrame
-    rpm = np.array([0, 1000, 2000, 3000, 4000, 5000])
-    torque = np.array([600, 600, 550, 500, 400, 300])
-    power = (rpm * torque * 2 * np.pi) / 60
+    rpm = np.array([0, 1000, 2000, 3000, 4000, 5000])           # RPM at crankshaft   
+    torque = np.array([600, 600, 550, 500, 400, 300])           # Torque at crankshaft (Nm)      
+    power = (rpm * torque * 2 * np.pi) / 60                     # Power at crankshaft (W)
+    efficiency = np.array([85, 88, 90, 92, 90, 88])             # Powertrain efficiency (%)
+    fuelConsumption = np.array([250, 220, 200, 190, 210, 230])  # g/kWh
+    gear = np.array([1, 2, 3, 4, 5, 6])                         # Gear number
+    throttle = np.array([100, 100, 100, 100, 100, 100])         # Throttle position (%)
+    finalDrive = np.array([3.5, 3.5, 3.5, 3.5, 3.5, 3.5])       # Final drive ratio
+
     powerData = pd.DataFrame({
         'Motor Speed [RPM]': rpm,
+        'Torque [Nm]': torque,
         'Continuous Power [kW]': power / 1000,
-        'Peak Power [kW]': power / 1000
+        'Peak Power [kW]': power / 1000,
+        'Efficiency [%]': efficiency,
+        'Fuel Consumption [g/kWh]': fuelConsumption,
+        'Gear': gear,
+        'Throttle Position [%]': throttle,
+        'Final Drive Ratio': finalDrive,
+        'Max RPM': [5000]*6,
+        'Min RPM': [0]*6
     })
     # Create dummy tire data DataFrames
+    # Lateral tire data (cornering)
     tireDataLat = pd.DataFrame({
         'Slip Angle [deg]': [-15, -10, -5, 0, 5, 10, 15],
-        'Lateral Force [N]': [-8000, -6000, -3000, 0, 3000, 6000, 8000]
+        'Lateral Force [N]': [-8000, -6000, -3000, 0, 3000, 6000, 8000],
+        'Normal Load [N]': [3000]*7,           # constant for now
+        'Camber Angle [deg]': [0]*7,           # neutral camber
+        'Tire Pressure [kPa]': [200]*7,        # constant for now
+        'Temperature [C]': [25]*7              # constant for now
     })
+
+    # Longitudinal tire data (traction/braking)
     tireDataLong = pd.DataFrame({
         'Slip Ratio [%]': [-0.2, -0.1, -0.05, 0, 0.05, 0.1, 0.2],
-        'Longitudinal Force [N]': [-4000, -2000, -1000, 0, 1000, 2000, 4000]
+        'Longitudinal Force [N]': [-4000, -2000, -1000, 0, 1000, 2000, 4000],
+        'Normal Load [N]': [3000]*7,
+        'Tire Pressure [kPa]': [200]*7,
+        'Temperature [C]': [25]*7
     })
 
 
