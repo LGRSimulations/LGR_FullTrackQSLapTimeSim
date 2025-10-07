@@ -20,7 +20,7 @@ This repository outlines a long-term roadmap for building a modular, high-perfor
 | Phase | Focus | Purpose |
 |-------|-------|---------|
 | 1️⃣ | Point Mass Sim | Build fundamental lap time sim and racing line optimizer |
-| 2️⃣ | Dual-Axle Bicycle Model | Add load transfer, tire force realism, yaw dynamics |
+| 2️⃣ | Dual-Axle Bicycle Model | Add load transfer, tyre force realism, yaw dynamics |
 | 3️⃣ | Setup-Aware Sim | Output full telemetry, evaluate setups, generate component loads |
 
 ---
@@ -34,7 +34,7 @@ This repository outlines a long-term roadmap for building a modular, high-perfor
 ### 🧰 Features
 - Track as curvature or x/y map
 - Forward-backward velocity integration
-- Simple tire model or interpolated μ from lookup table
+- Simple tyre model or interpolated μ from lookup table
 - Optional aerodynamic drag/downforce
 
 ### ✅ Validation
@@ -56,14 +56,14 @@ This repository outlines a long-term roadmap for building a modular, high-perfor
 ## Phase 2 – 🚗 Dual-Axle Bicycle Model Simulator
 
 ### 🎯 Goal
-- Introduce **yaw, understeer/oversteer**, and **realistic tire forces**
+- Introduce **yaw, understeer/oversteer**, and **realistic tyre forces**
 - Enable study of **brake bias, load transfer, weight distribution**
 
 ### 🧰 Features
 - Front/rear axle forces
 - Longitudinal & lateral load transfer
 - Aero CoP influence
-- Tire load sensitivity (from lookup table or Pacejka)
+- tyre load sensitivity (from lookup table or Pacejka)
 - Steering & throttle control logic
 
 ### ✅ Validation
@@ -139,7 +139,7 @@ This repository outlines a long-term roadmap for building a modular, high-perfor
 ## 💻 Performance Considerations
 
 - Vectorized Python using `numpy`
-- Use `scipy.interpolate` for fast tire model lookup
+- Use `scipy.interpolate` for fast tyre model lookup
 - Profile & optimize bottlenecks (`cProfile`, `line_profiler`)
 - For future acceleration: consider `numba` or `cython`
 
@@ -150,7 +150,7 @@ This repository outlines a long-term roadmap for building a modular, high-perfor
 | Purpose | Tool |
 |--------|------|
 | Sim backend | Python (NumPy, SciPy) |
-| Tire models | Interpolated lookup, Magic Formula |
+| tyre models | Interpolated lookup, Magic Formula |
 | Data handling | Pandas, HDF5/Parquet |
 | Plotting | Matplotlib, Seaborn |
 | RL | Stable Baselines3, PyTorch |
@@ -163,7 +163,7 @@ This repository outlines a long-term roadmap for building a modular, high-perfor
 Start with:
 - `point_mass_sim.py`: Base sim with GGV limits
 - `track_loader.py`: Load & process track curvature or x/y data
-- `tire_model.py`: Interpolation wrapper for tire lookup tables
+- `tyre_model.py`: Interpolation wrapper for tyre lookup tables
 - `setup_optimization.py`: Framework to sweep configs for Phase 3
 
 ---

@@ -35,6 +35,10 @@ def main():
         return
     
     # Initialise simulation loop 
-
+    try:
+        initLapTimeSimulation(track, vehicle, config)
+    except Exception as e:
+        print("Error during simulation:", e)
+        return
 if __name__ == "__main__":
     main()
