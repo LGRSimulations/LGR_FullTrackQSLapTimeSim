@@ -3,6 +3,7 @@ import logging
 import concurrent.futures
 import matplotlib.pyplot as plt
 import seaborn as sns
+from mpl_toolkits.mplot3d import Axes3D
 
 logger = logging.getLogger(__name__)
 
@@ -90,15 +91,15 @@ def optimiseSpeedAtPoint(curvature: float, vehicle, config):
     """
     
     # Initial guess
-    vCar = 0.5     # m/s
-    vCarStep = 0.5  # m/s increment
+    vCar = 1     # m/s
+    vCarStep = 1  # m/s increment
     vCarPrev = 0.0
     
     # Define ranges for aSteer and aSideslip (degrees)
     aSteerRange = np.linspace(-10, 10, 21)  # degrees
     aSideslipRange = np.linspace(-5, 5, 11)  # degrees
 
-    maxIterations = 2000
+    maxIterations = 1000
     iteration = 0
 
     while iteration < maxIterations:
@@ -207,26 +208,81 @@ def runLapTimeSimulation(track, vehicle, config) -> None:
     # Compute speed profile
     finalSpeeds, cornerSpeeds = computeSpeedProfile(track, vehicle, config)
 
-    # Compute lap time
+    # Compute lap time and collect acceleration traces
     lapTime = 0.0
+    gLatChannel = []
+    gLongChannel = []
     for i in range(1, len(track.points)):
         ds = track.points[i].distance - track.points[i-1].distance
-        v_avg = (finalSpeeds[i] + finalSpeeds[i-1]) / 2
-        if v_avg > 0:
-            dt = ds / v_avg
+        vPrev = finalSpeeds[i-1]
+        vCurr = finalSpeeds[i]
+        vAvg = (vCurr + vPrev) / 2
+        # Longitudinal acceleration (finite difference)
+        if ds > 0:
+            gLong = ((vCurr**2 - vPrev**2) / (2 * ds)) / 9.81
+        else:
+            gLong = 0.0
+        gLongChannel.append(gLong)
+        # Lateral acceleration (from curvature)
+        gLat = vCurr**2 * track.points[i].curvature / 9.81
+        gLatChannel.append(gLat)
+        if vAvg > 0:
+            dt = ds / vAvg
             lapTime += dt
     logger.info(f"Estimated lap time: {lapTime:.2f} seconds")
     logger.info("Lap time simulation completed.")
 
-    # Plot results
-    sns.set_theme(style="darkgrid", context="notebook")
+    # Prepare arrays for plotting
     distances = [p.distance for p in track.points]
-    plt.figure(figsize=(12, 6))
-    plt.plot(distances, finalSpeeds, label='vCar (Simulated)', linewidth=2)
-    plt.plot(distances, cornerSpeeds, '--', label='Theoretical Limit', alpha=0.7)
-    plt.xlabel('Distance along track (m)')
-    plt.ylabel('Speed (m/s)')
-    plt.title(f'Lap Time: {lapTime:.2f} s\nSpeed Profile vs Theoretical Limit')
-    plt.legend()
-    plt.tight_layout()
+    xCoords = [p.x for p in track.points]
+    yCoords = [p.y for p in track.points]
+    vCar_kph = np.array(finalSpeeds) * 3.6  # Convert m/s to kph
+    cornerSpeeds_kph = np.array(cornerSpeeds) * 3.6  # Convert m/s to kph
+
+    # --- Plot 1: Speed Profile with gLat and gLong traces ---
+    sns.set_theme(style="darkgrid", context="notebook")
+    fig1, ax1 = plt.subplots(figsize=(12, 6))
+    ax1.plot(distances, vCar_kph, label='vCar (kph)', linewidth=2, color='tab:blue')
+    ax1.plot(distances, cornerSpeeds_kph, '--', label='Theoretical vCar limit', alpha=0.7, color='tab:gray')
+    ax1.set_xlabel('Distance along track (m)')
+    ax1.set_ylabel('Speed (kph)')
+    ax1.set_ylim(0, 150)  # Limit left axis to 150 kph
+    ax1.set_title(f'Lap Time: {lapTime:.2f} s\nLap Time Sim telemetry')
+    ax1.legend(loc='upper left')
+    # No grid for plot 1
+
+    # Create second y-axis for gLat and gLong
+    ax2 = ax1.twinx()
+    ax2.plot(distances[1:], gLatChannel, label='gLat', color='tab:green')
+    ax2.plot(distances[1:], gLongChannel, label='gLong', color='tab:orange')
+    ax2.set_ylabel('Acceleration (g)')
+    ax2.set_ylim(-10, 5)
+    ax2.legend(loc='upper right')
+    fig1.tight_layout()
+
+    # --- Plot 2: G-G-V Diagram ---
+    fig2, ax3 = plt.subplots(figsize=(8, 8))
+    scatter_g = ax3.scatter(gLongChannel, gLatChannel, c=vCar_kph[1:], cmap='viridis', s=20)
+    ax3.set_xlabel('Longitudinal Acceleration (g)')
+    ax3.set_ylabel('Lateral Acceleration (g)')
+    ax3.set_title('G-G-V Diagram')
+    cbar_g = fig2.colorbar(scatter_g, ax=ax3)
+    cbar_g.set_label('Speed (kph)')
+    ax3.grid(True, which='both', linestyle='--', alpha=0.7)
+    ax3.set_xlim(-1.5, 1.5)
+    ax3.set_ylim(-1.0, 1.0)
+    fig2.tight_layout()
+
+    # --- Plot 3: 2D Track Map with vCar Colour Gradient ---
+    fig3, ax4 = plt.subplots(figsize=(10, 8))
+    scatter_track = ax4.scatter(xCoords, yCoords, c=vCar_kph, cmap='plasma', s=8)
+    ax4.set_xlabel('X (m)')
+    ax4.set_ylabel('Y (m)')
+    ax4.set_title('2D Track Map: vCar (kph) Colour Gradient')
+    cbar_track = fig3.colorbar(scatter_track, ax=ax4)
+    cbar_track.set_label('Speed (kph)')
+    ax4.axis('equal')
+    fig3.tight_layout()
+
+    # Show all plots at once
     plt.show()
