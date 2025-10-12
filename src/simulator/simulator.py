@@ -19,8 +19,6 @@ def computeVCarMax(gLat: float, curvature: float) -> float:
     Returns:
         Maximum speed in m/s
     """
-    if abs(curvature) < 1e-6:  # straight line
-        return np.float64(70.0)    # arbitrary high speed on straights
     
     # calculate vCarMax based on lateral acceleration and curvature
     vCarMax = np.sqrt(abs(gLat) / abs(curvature))   # m/s
@@ -85,16 +83,7 @@ def findVehicleStateAtPoint(curvature: float, vehicle):
     Returns:
         dict: {'success': bool, 'vCar': float, 'aSteer': float, 'aSideslip': float}
     """
-    
-    # Handle straight line case
-    if abs(curvature) < 1e-6:
-        return {
-            'success': True,
-            'vCar': 70.0,  # arbitrary high speed for straights
-            'aSteer': 0.0,
-            'aSideslip': 0.0
-        }
-    
+
     # Define objective function to maximize vCar (by minimizing negative vCar)
     def objective(x):
         vCar, aSteer, aSideslip = x
@@ -184,13 +173,7 @@ def optimiseSpeedAtPoints(trackPoints, vehicle, config):
     
     for point in trackPoints:
         curvature = point.curvature
-        
-        # Check if this is a straight line (or close to it)
-        if abs(curvature) < 1e-4:  # Small threshold for numerical stability
-            logger.info(f"Straight line detected (curvature={curvature:.6f}). Setting vCar to maximum.")
-            pointSpeeds.append(100.0)  # Return maximum speed for straights
-            continue
-            
+
         # Optimise vCar using constrained optimization
         result = findVehicleStateAtPoint(curvature, vehicle)
         
