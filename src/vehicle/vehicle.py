@@ -94,8 +94,8 @@ class TyreModel:
         For MVP, we ignore normal_load (use constant from dummy data).
         
         Args:
-            slip_angle: Slip angle in degrees
-            normal_load: Normal load in N (ignored for now)
+            slipAngle: Slip angle in degrees
+            normalLoad: Normal load in N (ignored for now)
             
         Returns:
             Lateral force in N
@@ -143,6 +143,9 @@ class Vehicle:
         """
         Compute yaw moment based on tire forces and steering angle.
         
+        For steady-state cornering, yaw moment = 0 when:
+        F_front * l_f = F_rear * l_r
+        
         Args:
             F_front: Front lateral force in N
             F_rear: Rear lateral force in N
@@ -151,10 +154,14 @@ class Vehicle:
         Returns:
             Yaw moment in Nm
         """
-        aSteerRad = np.radians(aSteer)
-        l_f = self.params.wheelbase * self.params.coGLongitudinalPos    # longitudinal distance from CoG to front axle
-        l_r = self.params.wheelbase * self.params.coGLongitudinalPos    # longitudinal distance from CoG to rear axle
-        M_z = F_front * l_f * np.cos(aSteerRad) - F_rear * l_r          # yaw moment based on forces and distances
+        # Calculate distances from CoG to axles
+        l_f = self.params.wheelbase * (1 - self.params.coGLongitudinalPos)  # distance to front
+        l_r = self.params.wheelbase * self.params.coGLongitudinalPos        # distance to rear
+        
+        # Yaw moment = (front force × front moment arm) - (rear force × rear moment arm)
+        # In steady state, this should equal zero
+        M_z = F_front * l_f - F_rear * l_r
+        
         return M_z
     
     def computeLateralAcceleration(self, F_front: float, F_rear: float, vCar: float) -> float:

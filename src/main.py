@@ -20,7 +20,7 @@ def main():
     print("Using track filepath:", config["track"]["filepath"])
     try: 
         track = loadTrack(config["track"]["filepath"], config.get("debugMode", False))
-        print(f"Loaded track with {len(track.points)} points, total length: {track.total_length:.2f} m")
+        print(f"Loaded track with {len(track.points)} points, total length: {track.totalLength:.2f} m")
 
     except Exception as e:
         print("Error loading track:", e)
