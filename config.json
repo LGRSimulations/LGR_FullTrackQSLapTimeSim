@@ -13,6 +13,10 @@
     "track": {
         "filepath" : "datasets/Tracks/FSUK.txt"
     },
+    "tyreModel":{
+        "filepath": "datasets/Tyres/tyreData.csv",
+        "type": "lookup"
+    },
     "debugMode": false,
     "fullTelemetryMode": true
 }

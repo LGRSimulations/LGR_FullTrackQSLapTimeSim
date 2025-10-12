@@ -180,6 +180,8 @@ class Vehicle:
         a_y = (F_front + F_rear) / self.params.mass
         return a_y
         
+from .Tyres.baseTyre import createTyreModel
+
 def createVehicle(config) -> Vehicle:
     """Create a default vehicle with dummy parameters."""
     params = VehicleParameters(
@@ -220,28 +222,8 @@ def createVehicle(config) -> Vehicle:
         'Max RPM': [5000]*6,
         'Min RPM': [0]*6
     })
-    # Create dummy tyre data DataFrames
-    # Lateral tyre data (cornering)
-    tyreDataLat = pd.DataFrame({
-        'Slip Angle [deg]': [-15, -10, -5, 0, 5, 10, 15],
-        'Lateral Force [N]': [-8000, -6000, -3000, 0, 3000, 6000, 8000],
-        'Normal Load [N]': [3000]*7,           # constant for now
-        'Camber Angle [deg]': [0]*7,           # neutral camber
-        'tyre Pressure [kPa]': [200]*7,        # constant for now
-        'Temperature [C]': [25]*7              # constant for now
-    })
-
-    # Longitudinal tyre data (traction/braking)
-    tyreDataLong = pd.DataFrame({
-        'Slip Ratio [%]': [-0.2, -0.1, -0.05, 0, 0.05, 0.1, 0.2],
-        'Longitudinal Force [N]': [-4000, -2000, -1000, 0, 1000, 2000, 4000],
-        'Normal Load [N]': [3000]*7,
-        'tyre Pressure [kPa]': [200]*7,
-        'Temperature [C]': [25]*7
-    })
-
 
     powerUnit = PowerUnit(powerData)
-    tyreModel = TyreModel(tyreDataLat, tyreDataLong)
+    tyreModel = createTyreModel(config.get('tyreModel', {}))
     loadedVehicle = Vehicle(params, powerUnit, tyreModel, config)
     return loadedVehicle
