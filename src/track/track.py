@@ -24,13 +24,13 @@ class Track:
     
     Attributes:
         points: List of TrackPoint objects
-        total_length: Total track length in meters
+        totalLength: Total track length in meters
         is_closed: Whether the track forms a closed loop
     """
     def __init__(self, points: list[TrackPoint], is_closed: bool = True):
         self.points = points
         self.is_closed = is_closed
-        self.total_length = points[-1].distance if points else 0.0
+        self.totalLength = points[-1].distance if points else 0.0
 
 def loadTrack(filePath: str, debugMode) -> Track:
     """
