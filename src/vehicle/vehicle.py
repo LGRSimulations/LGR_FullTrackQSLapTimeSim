@@ -181,6 +181,7 @@ class Vehicle:
         return a_y
         
 from .Tyres.baseTyre import createTyreModel
+from .Powertrain.basePowertrain import createPowertrainModel
 
 def createVehicle(config) -> Vehicle:
     """Create a default vehicle with dummy parameters."""
@@ -199,31 +200,8 @@ def createVehicle(config) -> Vehicle:
         maxGLongAccel=0.8,  # Ideally we get this from power unit
         maxGLongBrake=1.0   # Ideally we get this from brake system
     )
-    # Create dummy powerData DataFrame
-    rpm = np.array([0, 1000, 2000, 3000, 4000, 5000])           # RPM at crankshaft   
-    torque = np.array([600, 600, 550, 500, 400, 300])           # Torque at crankshaft (Nm)      
-    power = (rpm * torque * 2 * np.pi) / 60                     # Power at crankshaft (W)
-    efficiency = np.array([85, 88, 90, 92, 90, 88])             # Powertrain efficiency (%)
-    fuelConsumption = np.array([250, 220, 200, 190, 210, 230])  # g/kWh
-    gear = np.array([1, 2, 3, 4, 5, 6])                         # Gear number
-    throttle = np.array([100, 100, 100, 100, 100, 100])         # Throttle position (%)
-    finalDrive = np.array([3.5, 3.5, 3.5, 3.5, 3.5, 3.5])       # Final drive ratio
-
-    powerData = pd.DataFrame({
-        'Motor Speed [RPM]': rpm,
-        'Torque [Nm]': torque,
-        'Continuous Power [kW]': power / 1000,
-        'Peak Power [kW]': power / 1000,
-        'Efficiency [%]': efficiency,
-        'Fuel Consumption [g/kWh]': fuelConsumption,
-        'Gear': gear,
-        'Throttle Position [%]': throttle,
-        'Final Drive Ratio': finalDrive,
-        'Max RPM': [5000]*6,
-        'Min RPM': [0]*6
-    })
-
-    powerUnit = PowerUnit(powerData)
+    
+    powerUnit = createPowertrainModel(config.get('powertrain', {}))
     tyreModel = createTyreModel(config.get('tyreModel', {}))
     loadedVehicle = Vehicle(params, powerUnit, tyreModel, config)
     return loadedVehicle
