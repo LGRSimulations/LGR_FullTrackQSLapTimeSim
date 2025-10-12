@@ -13,5 +13,6 @@
     "track": {
         "filepath" : "datasets/Tracks/FSUK.txt"
     },
-    "debugMode": false
+    "debugMode": false,
+    "fullTelemetryMode": true
 }
