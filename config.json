@@ -1,14 +1,11 @@
 {
     "powertrain": {
-        "engine": {
-            "type": "ICE",
-            "max_power": 500,
-            "max_torque": 600
-        },
-        "transmission": {
-            "type": "DCT",
-            "gears": 7
-        }
+        "powertrain" : "datasets/Powertrains/powertrain.csv",
+        "type": "lookup"
+    },
+    "drivetrain" :{
+        "filepath" : "datasets/Drivetrain/DT_6Speed.csv",
+        "type": "lookup"
     },
     "track": {
         "filepath" : "datasets/Tracks/FSUK.txt"
