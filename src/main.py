@@ -28,7 +28,7 @@ def main():
 
     # Load vehicle parameters
     try:
-        vehicle = createVehicle()
+        vehicle = createVehicle(config)
         print(f"Loaded vehicle: {vehicle.params.name}, mass: {vehicle.params.mass} kg")
     except Exception as e:
         print("Error loading vehicle:", e)

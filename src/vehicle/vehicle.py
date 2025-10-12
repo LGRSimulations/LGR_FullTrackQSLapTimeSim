@@ -1,7 +1,6 @@
 import logging
 import numpy as np
 from dataclasses import dataclass
-from typing import Optional
 import pandas as pd
 from scipy.interpolate import interp1d
 
@@ -107,18 +106,20 @@ class Vehicle:
     
     def __init__(self, parameters: VehicleParameters, 
                  powerUnit: PowerUnit, 
-                 TyreModel: TyreModel):
+                 tyreModel: TyreModel,
+                 config):
         """
         Initialize complete vehicle model.
         
         Args:
             parameters: Vehicle physical parameters
             powerUnit: Power unit model
-            TyreModel: tyre model
+            tyreModel: tyre model
         """
         self.params = parameters
-        self.power_unit = powerUnit
-        self.tyre_model = TyreModel
+        self.powerUnit = powerUnit
+        self.tyreModel = tyreModel
+        self.config = config
         
         # Calculate derived parameters
         self.weight = parameters.mass * 9.81  # N
@@ -135,8 +136,8 @@ class Vehicle:
         Returns:
             (F_front, F_rear): Lateral forces in N
         """
-        F_front = self.tyre_model.getLateralForce(slipAngleFront)
-        F_rear = self.tyre_model.getLateralForce(slipAngleRear)
+        F_front = self.tyreModel.getLateralForce(slipAngleFront)
+        F_rear = self.tyreModel.getLateralForce(slipAngleRear)
         return F_front, F_rear
     
     def computeYawMoment(self, F_front: float, F_rear: float, aSteer: float) -> float:
@@ -179,7 +180,7 @@ class Vehicle:
         a_y = (F_front + F_rear) / self.params.mass
         return a_y
         
-def createVehicle() -> Vehicle:
+def createVehicle(config) -> Vehicle:
     """Create a default vehicle with dummy parameters."""
     params = VehicleParameters(
         name="TestCar",
@@ -242,5 +243,5 @@ def createVehicle() -> Vehicle:
 
     powerUnit = PowerUnit(powerData)
     tyreModel = TyreModel(tyreDataLat, tyreDataLong)
-    loadedVehicle = Vehicle(params, powerUnit, tyreModel)
+    loadedVehicle = Vehicle(params, powerUnit, tyreModel, config)
     return loadedVehicle
