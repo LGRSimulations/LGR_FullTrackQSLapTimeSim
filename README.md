@@ -23,14 +23,16 @@ This is the industry-standard Version Control software. There are others but git
 
 2. Download your desired virtual environment manager
 
-I have been recommending using Conda, specifically [miniconda](https://www.anaconda.com/download/success)
+I have been recommending using Conda, specifically [miniconda](https://www.anaconda.com/download/success), select the RIGHT option where it says miniconda.
 
 3. Download your desired IDE (Integrated Development Environment)
 
 I use [Visual Studio Code](https://code.visualstudio.com/), VS Code has everything you need really.
 
+4. In VS code, download the python extension (select 3.13.0 if given the choice)
+
 ### Setting up your environment
-The following instructions are if you use Visual Studio Code, and miniconda. If you have any other setup, skip to step 5.
+The following instructions are if you use Visual Studio Code, and miniconda.
 
 1. Clone the repository 
 
