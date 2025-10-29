@@ -70,11 +70,6 @@ Note: If at any point in time, VS Code doesn't seem to have what I stated above,
 - Refer to config.json, this is where we choose the datasets we want to use for the lap time sim. 
 - Datasets are found in the `datasets` folder. Datasets include Powertrain, Tyre, FSUK track data, etc.
 
-### Start developing 
-
-Referring to the [github](https://github.com/LGRSimulations/LGR_FullTrackQSLapTimeSim), you should see an "issues" tab, pick a work item, and develop from there!
-
 ## 📬 Questions?
 
 Open an issue or discussion! Ping me (Branson Tay) a Teams or LinkedIn message, am happy to discuss the simulator in more detail.
-
