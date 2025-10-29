@@ -165,7 +165,7 @@ class LookupTableTyreModel(BaseTyreModel):
                         'Lateral Force [N]': df['Lateral Force [N]'] if 'Lateral Force [N]' in df.columns else df['LatForce'],
                         'Normal Load [N]': df['Normal Load [N]'] if 'Normal Load [N]' in df.columns else [3000] * len(df),
                         'Camber Angle [deg]': df['Camber Angle [deg]'] if 'Camber Angle [deg]' in df.columns else [0] * len(df),
-                        'tyre Pressure [kPa]': df['tyre Pressure [kPa]'] if 'tyre Pressure [kPa]' in df.columns else [200] * len(df),
+                        'Tyre Pressure [kPa]': df['Tyre Pressure [kPa]'] if 'Tyre Pressure [kPa]' in df.columns else [200] * len(df),
                         'Temperature [C]': df['Temperature [C]'] if 'Temperature [C]' in df.columns else [25] * len(df)
                     })
                     
@@ -174,7 +174,7 @@ class LookupTableTyreModel(BaseTyreModel):
                         'Slip Ratio [%]': df['Slip Ratio [%]'] if 'Slip Ratio [%]' in df.columns else df['SlipRatio'],
                         'Longitudinal Force [N]': df['Longitudinal Force [N]'] if 'Longitudinal Force [N]' in df.columns else df['LongForce'],
                         'Normal Load [N]': df['Normal Load [N]'] if 'Normal Load [N]' in df.columns else [3000] * len(df),
-                        'tyre Pressure [kPa]': df['tyre Pressure [kPa]'] if 'tyre Pressure [kPa]' in df.columns else [200] * len(df),
+                        'Tyre Pressure [kPa]': df['Tyre Pressure [kPa]'] if 'Tyre Pressure [kPa]' in df.columns else [200] * len(df),
                         'Temperature [C]': df['Temperature [C]'] if 'Temperature [C]' in df.columns else [25] * len(df)
                     })
             elif filepath.endswith('.json'):
@@ -192,7 +192,7 @@ class LookupTableTyreModel(BaseTyreModel):
                     'Lateral Force [N]': lateral_data.get('forces', []),
                     'Normal Load [N]': lateral_data.get('normal_loads', [3000] * len(lateral_data.get('slip_angles', []))),
                     'Camber Angle [deg]': lateral_data.get('camber_angles', [0] * len(lateral_data.get('slip_angles', []))),
-                    'tyre Pressure [kPa]': lateral_data.get('pressures', [200] * len(lateral_data.get('slip_angles', []))),
+                    'Tyre Pressure [kPa]': lateral_data.get('pressures', [200] * len(lateral_data.get('slip_angles', []))),
                     'Temperature [C]': lateral_data.get('temperatures', [25] * len(lateral_data.get('slip_angles', [])))
                 })
                 
@@ -200,7 +200,7 @@ class LookupTableTyreModel(BaseTyreModel):
                     'Slip Ratio [%]': longitudinal_data.get('slip_ratios', []),
                     'Longitudinal Force [N]': longitudinal_data.get('forces', []),
                     'Normal Load [N]': longitudinal_data.get('normal_loads', [3000] * len(longitudinal_data.get('slip_ratios', []))),
-                    'tyre Pressure [kPa]': longitudinal_data.get('pressures', [200] * len(longitudinal_data.get('slip_ratios', []))),
+                    'Tyre Pressure [kPa]': longitudinal_data.get('pressures', [200] * len(longitudinal_data.get('slip_ratios', []))),
                     'Temperature [C]': longitudinal_data.get('temperatures', [25] * len(longitudinal_data.get('slip_ratios', [])))
                 })
             else:
@@ -278,8 +278,6 @@ def createTyreModel(config: Dict[str, Any]) -> BaseTyreModel:
     
     if modelType.lower() == 'lookup' or modelType.lower() == 'lookuptable':
         return LookupTableTyreModel.from_config(config)
-    # Add additional model types as needed
-    # elif model_type.lower() == 'pacejka':
-    #     return PacejkaTyreModel.from_config(config)
+    # TODO: Implement PacejkaTyreModel support here
     else:
         raise ValueError(f"Unknown tyre model type: {modelType}")

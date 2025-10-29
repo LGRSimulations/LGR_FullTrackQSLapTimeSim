@@ -235,8 +235,6 @@ def createPowertrainModel(config: Dict[str, Any]) -> BasePowertrainModel:
     
     if model_type.lower() == 'lookup' or model_type.lower() == 'lookuptable':
         return LookupTablePowertrainModel.from_config(config)
-    # Add additional model types as needed
-    # elif model_type.lower() == 'custom':
-    #     return CustomPowertrainModel.from_config(config)
+    # TODO: Implement support for custom powertrain models here.
     else:
         raise ValueError(f"Unknown powertrain model type: {model_type}")

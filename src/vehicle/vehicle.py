@@ -114,7 +114,8 @@ class Vehicle:
         Args:
             parameters: Vehicle physical parameters
             powerUnit: Power unit model
-            tyreModel: tyre model
+            tyreModel: Tyre model
+            config: Configuration dictionary
         """
         self.params = parameters
         self.powerUnit = powerUnit
