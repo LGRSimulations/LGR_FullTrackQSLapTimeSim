@@ -1,174 +1,80 @@
 
-# 🏎️ Lap Time Simulator Development Roadmap
+# LGR Quasi-Static Lap Time Simulator 
 
 ## Purpose of this repo
-- Validate design decisions, and test certain parameters of LGR FS25/26 car
-- Explore the breadth and depth of Lap Time Sims
+Validate design decisions, and test parameters of Leeds Gryphon Racing FS25/26 car
 
+## Description of the simulator 
 
-This repository outlines a long-term roadmap for building a modular, high-performance **lap time simulation framework**. The end goal is to develop a simulation and machine learning system capable of:
+This simulator is a Quasi-static, steady-state lap time sim. Fancy words. What do they mean?
+- Quasi-static: Break track into small segments, at each segment, determine what's the max speed, propagate speeds forwards, and backwards, and we get a nice speed profile!
+- Steady-state: We assert all forces to be resolved at any point in time. (Especially lateral and yaw balance)
 
-- Recommending optimal **vehicle setups**
-- Determining the **optimal racing line**
-- Working across **different vehicle models** (ICE, EV, Hybrid)
-- Generating data for validation, component design
+A more in-depth description of the simulator can be found on the [wiki](https://github.com/LGRSimulations/LGR_FullTrackQSLapTimeSim/wiki/Description-of-Simulator)
 
----
+## Setup
+There's a few steps to get setup. Follow them in order and you should be fine.
 
-## 🔁 Overview of Phases
+### Prerequisites
+1. Download git
 
-| Phase | Focus | Purpose |
-|-------|-------|---------|
-| 1️⃣ | Point Mass Sim | Build fundamental lap time sim and racing line optimizer |
-| 2️⃣ | Dual-Axle Bicycle Model | Add load transfer, tyre force realism, yaw dynamics |
-| 3️⃣ | Setup-Aware Sim | Output full telemetry, evaluate setups, generate component loads |
+Download [git](https://git-scm.com/) for your operating system 
+This is the industry-standard Version Control software. There are others but git is the most popular. Ensure you click the option that adds to PATH!!!
 
----
+2. Download your desired virtual environment manager
 
-## Phase 1 – 🧠 Point Mass Lap Time Simulator
+I have been recommending using Conda, specifically [miniconda](https://www.anaconda.com/download/success)
 
-### 🎯 Goal
-- Compute **optimal velocity profile** and **racing line**
-- Use **GGV (acceleration envelope)** or μ-limited lookup tables
+3. Download your desired IDE (Integrated Development Environment)
 
-### 🧰 Features
-- Track as curvature or x/y map
-- Forward-backward velocity integration
-- Simple tyre model or interpolated μ from lookup table
-- Optional aerodynamic drag/downforce
+I use [Visual Studio Code](https://code.visualstudio.com/), VS Code has everything you need really.
 
-### ✅ Validation
-- Circular track test → verify lateral limit: `a_lat = μ·g`
-- Straight-line acceleration vs power curve
-- Analytical results (e.g., Milliken ideal line)
+### Setting up your environment
+The following instructions are if you use Visual Studio Code, and miniconda. If you have any other setup, skip to step 5.
 
-### 🔍 Insights
-- Max performance envelopes
-- Line vs speed trade-offs
-- Lap time sensitivity to grip/aero
+1. Clone the repository 
 
-### ⚡️ Performance
-- Millisecond-scale simulation
-- Suitable for parameter sweeps & ML pretraining
+- In VS Code, click on source control on the left hand side of your screen. Then insert the following link to clone it when it prompts you to do so.
+```https://github.com/LGRSimulations/LGR_FullTrackQSLapTimeSim.git```
+- Navigate to the folder that you desire your code to be located.
 
----
+OR 
 
-## Phase 2 – 🚗 Dual-Axle Bicycle Model Simulator
+- In your terminal (top bar of VS Code), navigate to where you want your code to be located, then type the following:
 
-### 🎯 Goal
-- Introduce **yaw, understeer/oversteer**, and **realistic tyre forces**
-- Enable study of **brake bias, load transfer, weight distribution**
+``` git clone https://github.com/LGRSimulations/LGR_FullTrackQSLapTimeSim.git```
 
-### 🧰 Features
-- Front/rear axle forces
-- Longitudinal & lateral load transfer
-- Aero CoP influence
-- tyre load sensitivity (from lookup table or Pacejka)
-- Steering & throttle control logic
+2. Setup your environment
 
-### ✅ Validation
-- Step steer: yaw rate vs steer angle
-- Understeer gradient analysis
-- Braking & cornering overlap (friction ellipse)
+We will use conda to setup your environment. 
 
-### 🔍 Insights
-- Influence of CoG height, brake bias, and weight distribution
-- More accurate lap time prediction than point-mass
-- Lateral load distribution under G
+- Make sure your VS Code has your desired repo open.
+- In your terminal, ensure conda is installed correctly by typing `conda`, you should see some commands from conda appear.
+- type ```conda create -n test_env python=3.13.0 anaconda```, this creates a new virtual environment. (Note that test_env is your environment name, up to you to name it)
+- Once the environment is created, type ```conda activate test_env``` to activate the environment.
+- In visual studio code, use the shortcut `ctrl + shift + p` and select option "Python: Select Interpreter"
+- Select your aforenamed environment
+- Voila, you have set up your virtual environment for development!
 
-### ⚡️ Performance
-- Still fast (<100ms/lap)
-- Useful for tuning & basic optimization loops
+Note: If at any point in time, VS Code doesn't seem to have what I stated above, close all VS code windows, and try again. You might face the issue where VS Code's terminal isn't recognising Conda. In that case, type `cmd` in your windows search bar and use the command prompt to perform all of the above instead.
 
----
+### Running the lap time sim
 
-## Phase 3 – 🔧 Setup-Aware Lap Time Simulator
+- In your terminal (ensuring you're in the desired Virtual Env), type `pip install -r requirements.txt`. This downloads all the required libraries & packages
+- In your explorer (top left of VS Code) find the `src/main.py` file
+- Run the main.py file.
+- Let the simulator do its magic, and you should get some pretty plots after!
 
-### 🎯 Goal
-- Simulate **vehicle setup tuning**
-- Output **component-level loads** (pushrods, dampers, uprights)
-- Full telemetry-style outputs (acceleration, pedals, velocities)
+#### Configure the simulator 
 
-### 🧰 Features
-- Vehicle config parameters: toe, camber, spring rates, ARB, ride height
-- Pushrod load calculation from body accelerations
-- Pedal/brake/throttle mapping to forces
-- Support for ICE and EV drivetrains
+- Refer to config.json, this is where we choose the datasets we want to use for the lap time sim. 
+- Datasets are found in the `datasets` folder. Datasets include Powertrain, Tyre, FSUK track data, etc.
 
-### ✅ Validation
-- Compare to real-world data or IPG CarMaker outputs
-- Structural force checks vs FEA expectations
-- Component-level load tracking for design input
+### Start developing 
 
-### 🔍 Insights
-- Setup sensitivity for performance & durability
-- Loads for FEA of uprights, wishbones, mounts
-- Realistic telemetry for ML training/validation
-
-### ⚡️ Performance
-- ~0.5–1s per lap depending on complexity
-- Still lightweight enough for use in looped optimization
-
----
-
-## Phase 4 – 🤖 Reinforcement Learning Integration
-
-### 🎯 Goal
-- Use the sim as an **RL environment** for:
-  - Setup recommendation
-  - Optimal line control
-  - Fast policy transfer across vehicle models
-
-### 🧰 Features
-- Observation space: state, track, setup
-- Action space: setup parameters, line adjustments, pedal inputs
-- Reward: lap time, grip usage, energy consumption
-
-### ✅ Validation
-- Compare RL performance to sim-optimal baseline
-- Analyze learned setup vs engineering best practices
-- Visualize GGV usage and line smoothness
-
-### 🔍 Outcomes
-- Autonomous performance engineering agent
-- Generalized tuning across vehicle platforms
-- Fast evaluation for new tracks or conditions
-
----
-
-## 💻 Performance Considerations
-
-- Vectorized Python using `numpy`
-- Use `scipy.interpolate` for fast tyre model lookup
-- Profile & optimize bottlenecks (`cProfile`, `line_profiler`)
-- For future acceleration: consider `numba` or `cython`
-
----
-
-## 🔧 Tools and Libraries
-
-| Purpose | Tool |
-|--------|------|
-| Sim backend | Python (NumPy, SciPy) |
-| tyre models | Interpolated lookup, Magic Formula |
-| Data handling | Pandas, HDF5/Parquet |
-| Plotting | Matplotlib, Seaborn |
-| RL | Stable Baselines3, PyTorch |
-| UI (Optional) | Streamlit, Dash |
-
----
-
-## 📦 Want to Contribute?
-
-Start with:
-- `point_mass_sim.py`: Base sim with GGV limits
-- `track_loader.py`: Load & process track curvature or x/y data
-- `tyre_model.py`: Interpolation wrapper for tyre lookup tables
-- `setup_optimization.py`: Framework to sweep configs for Phase 3
-
----
+Referring to the [github](https://github.com/LGRSimulations/LGR_FullTrackQSLapTimeSim), you should see an "issues" tab, pick a work item, and develop from there!
 
 ## 📬 Questions?
 
-Open an issue or discussion! Whether you're working on EV strategy, motorsport simulation, or ML for vehicle dynamics — let's build something great.
+Open an issue or discussion! Ping me (Branson Tay) a Teams or LinkedIn message, am happy to discuss the simulator in more detail.
 
