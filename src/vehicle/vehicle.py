@@ -1,7 +1,6 @@
 import logging
 import numpy as np
 from dataclasses import dataclass
-from typing import Optional
 import pandas as pd
 from scipy.interpolate import interp1d
 
@@ -94,8 +93,8 @@ class TyreModel:
         For MVP, we ignore normal_load (use constant from dummy data).
         
         Args:
-            slip_angle: Slip angle in degrees
-            normal_load: Normal load in N (ignored for now)
+            slipAngle: Slip angle in degrees
+            normalLoad: Normal load in N (ignored for now)
             
         Returns:
             Lateral force in N
@@ -107,18 +106,21 @@ class Vehicle:
     
     def __init__(self, parameters: VehicleParameters, 
                  powerUnit: PowerUnit, 
-                 TyreModel: TyreModel):
+                 tyreModel: TyreModel,
+                 config):
         """
         Initialize complete vehicle model.
         
         Args:
             parameters: Vehicle physical parameters
             powerUnit: Power unit model
-            TyreModel: tyre model
+            tyreModel: Tyre model
+            config: Configuration dictionary
         """
         self.params = parameters
-        self.power_unit = powerUnit
-        self.tyre_model = TyreModel
+        self.powerUnit = powerUnit
+        self.tyreModel = tyreModel
+        self.config = config
         
         # Calculate derived parameters
         self.weight = parameters.mass * 9.81  # N
@@ -135,13 +137,16 @@ class Vehicle:
         Returns:
             (F_front, F_rear): Lateral forces in N
         """
-        F_front = self.tyre_model.getLateralForce(slipAngleFront)
-        F_rear = self.tyre_model.getLateralForce(slipAngleRear)
+        F_front = self.tyreModel.getLateralForce(slipAngleFront)
+        F_rear = self.tyreModel.getLateralForce(slipAngleRear)
         return F_front, F_rear
     
     def computeYawMoment(self, F_front: float, F_rear: float, aSteer: float) -> float:
         """
         Compute yaw moment based on tire forces and steering angle.
+        
+        For steady-state cornering, yaw moment = 0 when:
+        F_front * l_f = F_rear * l_r
         
         Args:
             F_front: Front lateral force in N
@@ -151,10 +156,14 @@ class Vehicle:
         Returns:
             Yaw moment in Nm
         """
-        aSteerRad = np.radians(aSteer)
-        l_f = self.params.wheelbase * self.params.coGLongitudinalPos    # longitudinal distance from CoG to front axle
-        l_r = self.params.wheelbase * self.params.coGLongitudinalPos    # longitudinal distance from CoG to rear axle
-        M_z = F_front * l_f * np.cos(aSteerRad) - F_rear * l_r          # yaw moment based on forces and distances
+        # Calculate distances from CoG to axles
+        l_f = self.params.wheelbase * (1 - self.params.coGLongitudinalPos)  # distance to front
+        l_r = self.params.wheelbase * self.params.coGLongitudinalPos        # distance to rear
+        
+        # Yaw moment = (front force × front moment arm) - (rear force × rear moment arm)
+        # In steady state, this should equal zero
+        M_z = F_front * l_f - F_rear * l_r
+        
         return M_z
     
     def computeLateralAcceleration(self, F_front: float, F_rear: float, vCar: float) -> float:
@@ -172,7 +181,10 @@ class Vehicle:
         a_y = (F_front + F_rear) / self.params.mass
         return a_y
         
-def createVehicle() -> Vehicle:
+from .Tyres.baseTyre import createTyreModel
+from .Powertrain.basePowertrain import createPowertrainModel
+
+def createVehicle(config) -> Vehicle:
     """Create a default vehicle with dummy parameters."""
     params = VehicleParameters(
         name="TestCar",
@@ -189,51 +201,8 @@ def createVehicle() -> Vehicle:
         maxGLongAccel=0.8,  # Ideally we get this from power unit
         maxGLongBrake=1.0   # Ideally we get this from brake system
     )
-    # Create dummy powerData DataFrame
-    rpm = np.array([0, 1000, 2000, 3000, 4000, 5000])           # RPM at crankshaft   
-    torque = np.array([600, 600, 550, 500, 400, 300])           # Torque at crankshaft (Nm)      
-    power = (rpm * torque * 2 * np.pi) / 60                     # Power at crankshaft (W)
-    efficiency = np.array([85, 88, 90, 92, 90, 88])             # Powertrain efficiency (%)
-    fuelConsumption = np.array([250, 220, 200, 190, 210, 230])  # g/kWh
-    gear = np.array([1, 2, 3, 4, 5, 6])                         # Gear number
-    throttle = np.array([100, 100, 100, 100, 100, 100])         # Throttle position (%)
-    finalDrive = np.array([3.5, 3.5, 3.5, 3.5, 3.5, 3.5])       # Final drive ratio
-
-    powerData = pd.DataFrame({
-        'Motor Speed [RPM]': rpm,
-        'Torque [Nm]': torque,
-        'Continuous Power [kW]': power / 1000,
-        'Peak Power [kW]': power / 1000,
-        'Efficiency [%]': efficiency,
-        'Fuel Consumption [g/kWh]': fuelConsumption,
-        'Gear': gear,
-        'Throttle Position [%]': throttle,
-        'Final Drive Ratio': finalDrive,
-        'Max RPM': [5000]*6,
-        'Min RPM': [0]*6
-    })
-    # Create dummy tyre data DataFrames
-    # Lateral tyre data (cornering)
-    tyreDataLat = pd.DataFrame({
-        'Slip Angle [deg]': [-15, -10, -5, 0, 5, 10, 15],
-        'Lateral Force [N]': [-8000, -6000, -3000, 0, 3000, 6000, 8000],
-        'Normal Load [N]': [3000]*7,           # constant for now
-        'Camber Angle [deg]': [0]*7,           # neutral camber
-        'tyre Pressure [kPa]': [200]*7,        # constant for now
-        'Temperature [C]': [25]*7              # constant for now
-    })
-
-    # Longitudinal tyre data (traction/braking)
-    tyreDataLong = pd.DataFrame({
-        'Slip Ratio [%]': [-0.2, -0.1, -0.05, 0, 0.05, 0.1, 0.2],
-        'Longitudinal Force [N]': [-4000, -2000, -1000, 0, 1000, 2000, 4000],
-        'Normal Load [N]': [3000]*7,
-        'tyre Pressure [kPa]': [200]*7,
-        'Temperature [C]': [25]*7
-    })
-
-
-    powerUnit = PowerUnit(powerData)
-    tyreModel = TyreModel(tyreDataLat, tyreDataLong)
-    loadedVehicle = Vehicle(params, powerUnit, tyreModel)
+    
+    powerUnit = createPowertrainModel(config.get('powertrain', {}))
+    tyreModel = createTyreModel(config.get('tyreModel', {}))
+    loadedVehicle = Vehicle(params, powerUnit, tyreModel, config)
     return loadedVehicle
