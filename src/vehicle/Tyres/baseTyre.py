@@ -278,6 +278,9 @@ def createTyreModel(config: Dict[str, Any]) -> BaseTyreModel:
     
     if modelType.lower() == 'lookup' or modelType.lower() == 'lookuptable':
         return LookupTableTyreModel.from_config(config)
+    elif modelType.lower() == 'ac_lut':
+        from .acLutTyre import ACLutTyreModel
+        return ACLutTyreModel.from_config(config)
     # TODO: Implement PacejkaTyreModel support here
     else:
         raise ValueError(f"Unknown tyre model type: {modelType}")

@@ -83,7 +83,17 @@ def findVehicleStateAtPoint(curvature: float, vehicle):
     Returns:
         dict: {'success': bool, 'vCar': float, 'aSteer': float, 'aSideslip': float}
     """
-
+    # Handle straight sections (zero curvature)
+    if abs(curvature) < 1e-3:
+        # For straight sections, maximum speed is limited by drag/power
+        # For now, return a high speed with zero steering
+        return {
+            'success': True,
+            'vCar': 200.0,  # High speed for straights (adjust based on power limits)
+            'aSteer': 0.0,
+            'aSideslip': 0.0
+        }
+    
     # Define objective function to maximize vCar (by minimizing negative vCar)
     def objective(x):
         vCar, aSteer, aSideslip = x
@@ -93,7 +103,8 @@ def findVehicleStateAtPoint(curvature: float, vehicle):
     def constraintYawMoment(x):
         vCar, aSteer, aSideslip = x
         result = evaluateVehicleState(vCar, aSteer, aSideslip, curvature, vehicle)
-        return -abs(result['M_z'])  # We want M_z close to 0
+        tolerance = 50.0  # Nm tolerance for yaw moment
+        return tolerance - abs(result['M_z'])  # Must be >= 0
     
     # Define constraint function for lateral acceleration vs. curvature
     def constraintGLat(x):
@@ -102,13 +113,19 @@ def findVehicleStateAtPoint(curvature: float, vehicle):
         vCarMax = computeVCarMax(result['gLat'], curvature)
         return vCarMax - vCar  # Must be >= 0
     
-    # Initial guess: starting point for optimization
-    initial_guess = [10.0, 2.0, 1.0]  # [vCar, aSteer, aSideslip]
+    # Initial guess based on simple bicycle model
+    # Estimate initial steering angle from curvature and wheelbase
+    L = vehicle.params.wheelbase
+    initialASteer = np.degrees(abs(curvature) * L)  # Simple Ackermann
+    initialASteer = np.clip(initialASteer, 0.1, 8.0)  # Reasonable range
+    
+    # Initial guess: conservative speed, estimated steering, small sideslip
+    initialGuess = [15.0, initialASteer, 0.5]  # [vCar, aSteer, aSideslip]
     
     # Define bounds for optimization variables
     bounds = [
-        (1.0, 100.0),     # vCar between 1 and 100 m/s
-        (-10.0, 10.0),    # aSteer between -10 and 10 degrees
+        (1.0, 150.0),     # vCar between 1 and 150 m/s
+        (-30.0, 30.0),    # aSteer between -30 and 30 degrees
         (-5.0, 5.0)       # aSideslip between -5 and 5 degrees
     ]
     
@@ -122,7 +139,7 @@ def findVehicleStateAtPoint(curvature: float, vehicle):
     try:
         result = minimize(
             objective, 
-            initial_guess,
+            initialGuess,
             method='SLSQP',     # We use the SLSQP method for constrained optimization
             bounds=bounds,
             constraints=constraints,

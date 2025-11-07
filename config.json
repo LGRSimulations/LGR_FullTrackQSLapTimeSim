@@ -11,8 +11,10 @@
         "filepath" : "datasets/Tracks/FSUK.txt"
     },
     "tyreModel":{
-        "filepath": "datasets/Tyres/tyreData.csv",
-        "type": "lookup"
+        "filepath": "datasets/vehicle/tyre_data/DX_LUT.csv",
+        "filepath2": "datasets/vehicle/tyre_data/DY_LUT.csv",
+        "type": "AC_LUT",
+        "baseMu": 1.5
     },
     "debugMode": false,
     "fullTelemetryMode": true
