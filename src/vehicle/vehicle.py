@@ -20,9 +20,10 @@ class VehicleParameters:
     rearTrackWidth: float  # m
     coGHeight: float  # m
     coGLongitudinalPos: float  # fraction of wheelbase from front axle (0 to 1)
-    maxGLat: float  # g (tyre grip limit for point mass)
-    maxGLongAccel: float  # g (acceleration limit)
-    maxGLongBrake: float  # g (braking limit)
+    wheelRadius: float  # m (effective rolling radius)
+    finalDriveRatio: float  # dimensionless (final drive gear ratio)
+    gearRatios: list  # dimensionless (gear ratios for each gear)
+    transmissionEfficiency: float  # dimensionless (0-1, mechanical efficiency)
 
 class PowerUnit:
     """
@@ -194,6 +195,135 @@ class Vehicle:
         """
         a_y = (F_front + F_rear) / self.params.mass
         return a_y
+    
+    def computeAeroDrag(self, vCar: float) -> float:
+        """
+        Compute aerodynamic drag force at given speed.
+        
+        F_drag = 0.5 * rho * Cd * A * v^2
+        
+        Args:
+            vCar: Vehicle speed in m/s
+            
+        Returns:
+            Drag force in N
+        """
+        rho = 1.225  # Air density in kg/m^3 at sea level
+        F_drag = 0.5 * rho * self.params.dragCoefficient * self.params.frontalArea * vCar**2
+        return F_drag
+    
+    def computeDownforce(self, vCar: float) -> float:
+        """
+        Compute aerodynamic downforce at given speed.
+        
+        F_downforce = 0.5 * rho * Cl * A * v^2
+        
+        Args:
+            vCar: Vehicle speed in m/s
+            
+        Returns:
+            Downforce in N
+        """
+        rho = 1.225  # Air density in kg/m^3 at sea level
+        F_downforce = 0.5 * rho * self.params.downforceCoefficient * self.params.frontalArea * vCar**2
+        return F_downforce
+    
+    def speedToRPM(self, vCar: float, gearRatio: float) -> float:
+        """
+        Convert vehicle speed to engine RPM for given gear ratio.
+        
+        RPM = (v * 60 * gearRatio * finalDrive) / (2 * pi * wheelRadius)
+        
+        Args:
+            vCar: Vehicle speed in m/s
+            gearRatio: Gear ratio (dimensionless)
+            
+        Returns:
+            Engine RPM
+        """
+        if vCar < 0.01:  # Avoid division issues at very low speeds
+            return 0.0
+        
+        # RPM = (speed * 60 * total_gear_ratio) / (2 * pi * wheel_radius)
+        totalGearRatio = gearRatio * self.params.finalDriveRatio
+        rpm = (vCar * 60 * totalGearRatio) / (2 * np.pi * self.params.wheelRadius)
+        return rpm
+    
+    def computeWheelTorque(self, rpm: float, gearRatio: float, throttle: float = 1.0) -> float:
+        """
+        Compute wheel torque from engine RPM and gear ratio.
+        
+        T_wheel = T_engine * gearRatio * finalDrive * efficiency
+        
+        Args:
+            rpm: Engine RPM
+            gearRatio: Gear ratio (dimensionless)
+            throttle: Throttle position (0 to 1)
+            
+        Returns:
+            Wheel torque in Nm
+        """
+        # Get engine torque from powertrain
+        engineTorque = self.powerUnit.getTorque(rpm, throttle)
+        
+        # Apply gear ratios and transmission efficiency
+        totalGearRatio = gearRatio * self.params.finalDriveRatio
+        wheelTorque = engineTorque * totalGearRatio * self.params.transmissionEfficiency
+        
+        return wheelTorque
+    
+    def computeLongitudinalForce(self, vCar: float, gearRatio: float, throttle: float = 1.0) -> float:
+        """
+        Compute longitudinal force at wheels for given speed and gear.
+        
+        F_x = T_wheel / wheelRadius - F_drag
+        
+        Args:
+            vCar: Vehicle speed in m/s
+            gearRatio: Gear ratio (dimensionless)
+            throttle: Throttle position (0 to 1)
+            
+        Returns:
+            Net longitudinal force in N
+        """
+        # Convert speed to RPM
+        rpm = self.speedToRPM(vCar, gearRatio)
+        
+        # Get wheel torque
+        wheelTorque = self.computeWheelTorque(rpm, gearRatio, throttle)
+        
+        # Convert torque to force at wheel contact patch
+        F_traction = wheelTorque / self.params.wheelRadius
+        
+        # Subtract drag force
+        F_drag = self.computeAeroDrag(vCar)
+        
+        # Net longitudinal force
+        F_x = F_traction - F_drag
+        
+        return F_x
+    
+    def selectOptimalGear(self, vCar: float) -> float:
+        """
+        Select the optimal gear for maximum acceleration at given speed.
+        
+        Args:
+            vCar: Vehicle speed in m/s
+            
+        Returns:
+            Optimal gear ratio
+        """
+        maxForce = -float('inf')
+        optimalGear = self.params.gearRatios[0]
+        
+        # Try each gear and find which gives maximum force
+        for gearRatio in self.params.gearRatios:
+            F_x = self.computeLongitudinalForce(vCar, gearRatio)
+            if F_x > maxForce:
+                maxForce = F_x
+                optimalGear = gearRatio
+        
+        return optimalGear
         
 from .Tyres.baseTyre import createTyreModel
 from .Powertrain.basePowertrain import createPowertrainModel
@@ -229,9 +359,10 @@ def loadVehicleParameters(filepath: str) -> VehicleParameters:
         rearTrackWidth=data['geometry']['rearTrackWidth'],
         coGHeight=data['geometry']['coGHeight'],
         coGLongitudinalPos=data['geometry']['coGLongitudinalPos'],
-        maxGLat=data['performance']['maxGLat'],
-        maxGLongAccel=data['performance']['maxGLongAccel'],
-        maxGLongBrake=data['performance']['maxGLongBrake']
+        wheelRadius=data['drivetrain']['wheelRadius'],
+        finalDriveRatio=data['drivetrain']['finalDriveRatio'],
+        gearRatios=data['drivetrain']['gearRatios'],
+        transmissionEfficiency=data['drivetrain']['transmissionEfficiency']
     )
     
     logger.info(f"Loaded vehicle parameters from {filepath}")

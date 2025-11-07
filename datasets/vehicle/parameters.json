@@ -16,10 +16,11 @@
         "coGHeight": 0.48,
         "coGLongitudinalPos": 0.5
     },
-    "performance": {
-        "maxGLat": 1.2,
-        "maxGLongAccel": 0.8,
-        "maxGLongBrake": 1.0
+    "drivetrain": {
+        "wheelRadius": 0.2032,
+        "finalDriveRatio": 2.6,
+        "gearRatios": [2.75, 2, 1.667, 1.304, 1.208],
+        "transmissionEfficiency": 0.95
     },
     "_comments": {
         "mass": "kg",
@@ -32,8 +33,9 @@
         "rearTrackWidth": "m",
         "coGHeight": "m",
         "coGLongitudinalPos": "fraction of wheelbase from front axle (0 to 1)",
-        "maxGLat": "g (tyre grip limit for point mass)",
-        "maxGLongAccel": "g (acceleration limit)",
-        "maxGLongBrake": "g (braking limit)"
+        "wheelRadius": "m (effective rolling radius)",
+        "finalDriveRatio": "dimensionless (final drive gear ratio)",
+        "gearRatios": "dimensionless (gear ratios for each gear)",
+        "transmissionEfficiency": "dimensionless (0-1, mechanical efficiency)"
     }
 }
