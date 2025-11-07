@@ -205,7 +205,15 @@ def optimiseSpeedAtPoints(trackPoints, vehicle, config):
 
 def forwardPass(track, vehicle, pointSpeeds):
     """
-    Forward pass: acceleration-limited speed profile.
+    Forward pass: acceleration-limited speed profile using powertrain model.
+    Propagates speeds forward using available engine forces minus drag.
+    
+    At each segment:
+    - Select optimal gear for current speed
+    - Compute available traction force from powertrain (F_x = T_wheel / r_wheel)
+    - Subtract aerodynamic drag
+    - Update speed via kinematics: v_pred = sqrt(v_prev^2 + 2 * a_lon * ds)
+    
     Uses all track points.
     """
     nPoints = len(track.points)
@@ -215,21 +223,50 @@ def forwardPass(track, vehicle, pointSpeeds):
     for i in range(1, nPoints):
         # Distance to next point
         ds = track.points[i].distance - track.points[i-1].distance
-
-        # Maximum acceleration (from vehicle limits)
-        a_max = vehicle.params.maxGLongAccel * 9.81  # m/s^2
-
-        # Maximum speed we can reach accelerating from previous point
-        v_accel = np.sqrt(speeds[i-1]**2 + 2 * a_max * ds)
-
+        
+        if ds <= 0:
+            speeds[i] = speeds[i-1]
+            continue
+        
+        # Previous speed - use actual speed from previous point
+        vPrev = speeds[i-1]
+        
+        # Use minimum speed threshold for calculations to avoid numerical issues
+        vCalc = max(vPrev, 1.0)
+        
+        # Select optimal gear for this speed
+        gearRatio = vehicle.selectOptimalGear(vCalc)
+        
+        # Compute net longitudinal force (traction - drag) at previous speed
+        F_x = vehicle.computeLongitudinalForce(vCalc, gearRatio, throttle=1.0)
+        
+        # Compute longitudinal acceleration
+        a_lon = F_x / vehicle.params.mass
+        
+        # Compute predicted speed using kinematics: v^2 = v0^2 + 2*a*ds
+        v_pred_squared = vPrev**2 + 2 * a_lon * ds
+        
+        if v_pred_squared < 0:
+            v_pred = vPrev
+        else:
+            v_pred = np.sqrt(v_pred_squared)
+        
         # Take minimum of acceleration-limited and corner-limited speed
-        speeds[i] = min(v_accel, pointSpeeds[i])
+        v_pred = min(v_pred, pointSpeeds[i])
+        speeds[i] = v_pred
 
     return speeds
 
 def backwardPass(track, vehicle, pointSpeeds):
     """
-    Backward pass: braking-limited speed profile.
+    Backward pass: braking-limited speed profile using tyre model.
+    
+    Propagates speeds backward from end to start. At each segment:
+    - Compute maximum braking force from tyre longitudinal grip (using DX_LUT)
+    - Calculate maximum deceleration: a_brake = F_brake / mass
+    - Work backwards: v_i = sqrt(v_{i+1}^2 + 2 * a_brake * ds)
+    - Enforce v_i <= pointSpeeds[i] (corner limit)
+    
     Uses all track points.
     """
     nPoints = len(track.points)
@@ -239,13 +276,52 @@ def backwardPass(track, vehicle, pointSpeeds):
     for i in range(nPoints-2, -1, -1):
         # Distance to next point
         ds = track.points[i+1].distance - track.points[i].distance
-
-        # Maximum deceleration (from vehicle limits)
-        aBrake = vehicle.params.maxGLongBrake * 9.81  # m/s^2
-
-        # Maximum speed we can reach braking from next point
-        vBrake = np.sqrt(speeds[i+1]**2 + 2 * aBrake * ds)
-
+        
+        if ds <= 0:
+            speeds[i] = speeds[i+1]
+            continue
+        
+        # Next speed (where we need to brake to)
+        vNext = speeds[i+1]
+        
+        # Compute normal load per tire (static, no load transfer for now)
+        normalLoadPerTire = vehicle.computeStaticNormalLoad()
+        
+        # Get longitudinal grip multiplier from tyre model (DX)
+        # The tyre model will return the peak longitudinal force for this load
+        # For braking, we assume maximum slip ratio to get peak force
+        peak_slip_ratio = 12.0  # percent, typical peak for most tyres
+        
+        # Get longitudinal force per tire at peak slip (braking)
+        # Multiply by 4 for all tires (assuming all-wheel braking)
+        F_brake_per_tire = vehicle.tyreModel.getLongitudinalForce(
+            slipRatio=-peak_slip_ratio,  # Negative for braking
+            normalLoad=normalLoadPerTire
+        )
+        
+        # Total braking force (all 4 tires)
+        F_brake_total = abs(F_brake_per_tire) * 4
+        
+        # Add aerodynamic drag assistance (drag helps when braking)
+        # Use average speed for drag calculation
+        vAvg = vNext  # Conservative estimate
+        F_drag = vehicle.computeAeroDrag(vAvg)
+        
+        # Total braking capability
+        F_brake_total_with_drag = F_brake_total + F_drag
+        
+        # Maximum deceleration
+        aBrake = F_brake_total_with_drag / vehicle.params.mass
+        
+        # Maximum speed we can be at and still brake to vNext
+        # v_current^2 = v_next^2 + 2*a*ds
+        vBrake_squared = vNext**2 + 2 * aBrake * ds
+        
+        if vBrake_squared < 0:
+            vBrake = vNext
+        else:
+            vBrake = np.sqrt(vBrake_squared)
+        
         # Take minimum of braking-limited and corner-limited speed
         speeds[i] = min(vBrake, pointSpeeds[i])
 
@@ -330,15 +406,15 @@ def runLapTimeSimulation(track, vehicle, config) -> None:
 
     # --- Plot 2: G-G-V Diagram ---
     fig2, ax3 = plt.subplots(figsize=(8, 8))
-    scatter_g = ax3.scatter(gLongChannel, gLatChannel, c=vCar_kph[1:], cmap='viridis', s=20)
-    ax3.set_xlabel('Longitudinal Acceleration (g)')
-    ax3.set_ylabel('Lateral Acceleration (g)')
+    scatter_g = ax3.scatter(gLatChannel, gLongChannel, c=vCar_kph[1:], cmap='viridis', s=20)
+    ax3.set_xlabel('Lateral Acceleration (g)')
+    ax3.set_ylabel('Longitudinal Acceleration (g)')
     ax3.set_title('G-G-V Diagram')
     cbar_g = fig2.colorbar(scatter_g, ax=ax3)
     cbar_g.set_label('Speed (kph)')
     ax3.grid(True, which='both', linestyle='--', alpha=0.7)
-    ax3.set_xlim(-1.5, 1.5)
-    ax3.set_ylim(-1.0, 1.0)
+    ax3.set_xlim(min(gLatChannel)-1, max(gLatChannel)+1)
+    ax3.set_ylim(min(gLongChannel)-1, max(gLongChannel)+1)
     fig2.tight_layout()
 
     # --- Plot 3: 2D Track Map with vCar Colour Gradient ---

@@ -1,6 +1,6 @@
 {
     "powertrain": {
-        "powertrain" : "datasets/Powertrains/powertrain.csv",
+        "powertrain" : "datasets/vehicle/PU_data/EMRAX_228_HV_CC_P_motor_speed.csv",
         "type": "lookup"
     },
     "drivetrain" :{

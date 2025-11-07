@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import os
 from scipy.interpolate import interp1d
 from abc import ABC, abstractmethod
@@ -86,13 +87,18 @@ class LookupTablePowertrainModel(BasePowertrainModel):
         super().__init__()
         self.powertrainData = powertrainData
         
-        # Create interpolation functions for torque
-        self.torqueInterp = self._create_interpolator('Torque [Nm]')
+        # Note: We don't create a torque interpolator because torque will be calculated from power
+        # self.torqueInterp = self._create_interpolator('Torque [Nm]')
         
-        # Create interpolation functions for power
-        self.powerInterp = self._create_interpolator('Continuous Power [kW]')
+        # Create interpolation functions for power (use Continuous Power, fallback to Peak Power)
+        if 'Continuous Power [kW]' in powertrainData.columns:
+            self.powerInterp = self._create_interpolator('Continuous Power [kW]')
+        elif 'Peak Power [kW]' in powertrainData.columns:
+            self.powerInterp = self._create_interpolator('Peak Power [kW]')
+        else:
+            raise ValueError("Powertrain data must contain either 'Continuous Power [kW]' or 'Peak Power [kW]' column")
         
-        # Create interpolation functions for efficiency
+        # Create interpolation functions for efficiency (if available)
         self.efficiencyInterp = self._create_interpolator('Efficiency [%]')
         
         # Store min/max RPM
@@ -163,6 +169,7 @@ class LookupTablePowertrainModel(BasePowertrainModel):
     def getTorque(self, rpm: float, throttle: float = 1.0) -> float:
         """
         Get torque for given RPM and throttle position.
+        Calculates torque from power: T = P / (2π × RPM / 60) = (P × 60) / (2π × RPM)
         
         Args:
             rpm: Engine/motor speed in RPM
@@ -171,12 +178,29 @@ class LookupTablePowertrainModel(BasePowertrainModel):
         Returns:
             Torque in Nm
         """
+        # Handle zero or very low RPM
+        if rpm < 1.0:
+            # At very low RPM, return a reasonable starting torque
+            # Use power at minimum RPM to estimate
+            power_kW = self.getPower(1.0, throttle)
+            # Assume a reasonable torque at standstill (e.g., power at min RPM converted)
+            return (power_kW * 1000 * 60) / (2 * np.pi * 1.0) if power_kW > 0 else 0.0
+        
         # Ensure RPM is within bounds
         rpm = max(self.minRPM, min(rpm, self.maxRPM))
+        rpm = float(rpm)  # Ensure rpm is a native Python float
         
-        # Get base torque and scale by throttle
-        base_torque = float(self.torqueInterp(rpm))
-        return base_torque * throttle
+        # Get power at this RPM
+        power_kW = self.getPower(rpm, throttle)
+        
+        # Convert power (kW) to torque (Nm)
+        # P (Watts) = T (Nm) × ω (rad/s)
+        # ω (rad/s) = 2π × RPM / 60
+        # T = P / ω = P × 60 / (2π × RPM)
+        power_watts = power_kW * 1000
+        torque = (power_watts * 60) / (2 * np.pi * rpm)
+        
+        return torque
     
     def getPower(self, rpm: float, throttle: float = 1.0) -> float:
         """
@@ -189,13 +213,13 @@ class LookupTablePowertrainModel(BasePowertrainModel):
         Returns:
             Power in kW
         """
-        # Option 1: Interpolate directly from power curve
-        base_power = float(self.powerInterp(rpm))
+        # Ensure RPM is within bounds
+        rpm = max(self.minRPM, min(rpm, self.maxRPM))
+        rpm = float(rpm)
         
-        # Option 2: Calculate from torque
-        # torque = self.getTorque(rpm, throttle)
-        # power_watts = (rpm * torque * 2 * np.pi) / 60
-        # base_power = power_watts / 1000  # convert to kW
+        # Interpolate power from the curve
+        # Use continuous power curve (or peak if continuous not available)
+        base_power = float(self.powerInterp(rpm))
         
         return base_power * throttle
     
