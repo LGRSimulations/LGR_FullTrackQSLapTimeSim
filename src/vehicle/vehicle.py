@@ -125,6 +125,16 @@ class Vehicle:
         # Calculate derived parameters
         self.weight = parameters.mass * 9.81  # N
         
+    def computeStaticNormalLoad(self) -> float:
+        """
+        Compute static normal load per tire (assuming equal distribution).
+        For point mass model without load transfer.
+        
+        Returns:
+            Normal load per tire in N
+        """
+        return self.params.mass * 9.81 / 4.0
+        
     def computeTyreForces(self, slipAngleFront: float, slipAngleRear: float):
         """
         Compute lateral tire forces using the tire model.
@@ -132,13 +142,16 @@ class Vehicle:
         Args:
             slip_angle_front: Front tire slip angle in degrees
             slip_angle_rear: Rear tire slip angle in degrees
-            normal_load: Normal load on tire in N
             
         Returns:
             (F_front, F_rear): Lateral forces in N
         """
-        F_front = self.tyreModel.getLateralForce(slipAngleFront)
-        F_rear = self.tyreModel.getLateralForce(slipAngleRear)
+        # Calculate static normal load per tire
+        tyreNormalLoad = self.computeStaticNormalLoad()
+        # Get lateral forces from tyre model
+        # For now, assume both front and rear tires have same normal load
+        F_front = self.tyreModel.getLateralForce(slipAngleFront, normalLoad=tyreNormalLoad)*2  # two front tires
+        F_rear = self.tyreModel.getLateralForce(slipAngleRear, normalLoad=tyreNormalLoad)*2    # two rear tires
         return F_front, F_rear
     
     def computeYawMoment(self, F_front: float, F_rear: float, aSteer: float) -> float:
@@ -188,7 +201,7 @@ def createVehicle(config) -> Vehicle:
     """Create a default vehicle with dummy parameters."""
     params = VehicleParameters(
         name="TestCar",
-        mass=1500.0,
+        mass=1000.0,
         frontalArea=2.2,
         dragCoefficient=0.32,
         downforceCoefficient=2.5,
