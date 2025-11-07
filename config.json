@@ -16,6 +16,7 @@
         "type": "AC_LUT",
         "baseMu": 1.5
     },
+    "vehicleParameters": "datasets/vehicle/parameters.json",
     "debugMode": false,
     "fullTelemetryMode": true
 }

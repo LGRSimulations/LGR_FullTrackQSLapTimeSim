@@ -16,7 +16,8 @@ class VehicleParameters:
     downforceCoefficient: float  # dimensionless (L/D ratio typically)
     aeroCentreOfPressure: float  # m from front axle
     wheelbase: float  # m
-    trackWidth: float  # m
+    frontTrackWidth: float  # m
+    rearTrackWidth: float  # m
     coGHeight: float  # m
     coGLongitudinalPos: float  # fraction of wheelbase from front axle (0 to 1)
     maxGLat: float  # g (tyre grip limit for point mass)
@@ -196,24 +197,53 @@ class Vehicle:
         
 from .Tyres.baseTyre import createTyreModel
 from .Powertrain.basePowertrain import createPowertrainModel
+import json
+import os
+
+def loadVehicleParameters(filepath: str) -> VehicleParameters:
+    """
+    Load vehicle parameters from a JSON configuration file.
+    
+    Args:
+        filepath: Path to the parameters JSON file
+        
+    Returns:
+        VehicleParameters object
+    """
+    if not os.path.exists(filepath):
+        raise FileNotFoundError(f"Vehicle parameters file not found: {filepath}")
+    
+    with open(filepath, 'r') as f:
+        data = json.load(f)
+    
+    # Read parameters from JSON structure
+    params = VehicleParameters(
+        name=data['general']['name'],
+        mass=data['general']['mass'],
+        frontalArea=data['aerodynamics']['frontalArea'],
+        dragCoefficient=data['aerodynamics']['dragCoefficient'],
+        downforceCoefficient=data['aerodynamics']['downforceCoefficient'],
+        aeroCentreOfPressure=data['aerodynamics']['aeroCentreOfPressure'],
+        wheelbase=data['geometry']['wheelbase'],
+        frontTrackWidth=data['geometry']['frontTrackWidth'],
+        rearTrackWidth=data['geometry']['rearTrackWidth'],
+        coGHeight=data['geometry']['coGHeight'],
+        coGLongitudinalPos=data['geometry']['coGLongitudinalPos'],
+        maxGLat=data['performance']['maxGLat'],
+        maxGLongAccel=data['performance']['maxGLongAccel'],
+        maxGLongBrake=data['performance']['maxGLongBrake']
+    )
+    
+    logger.info(f"Loaded vehicle parameters from {filepath}")
+    return params
 
 def createVehicle(config) -> Vehicle:
-    """Create a default vehicle with dummy parameters."""
-    params = VehicleParameters(
-        name="TestCar",
-        mass=1000.0,
-        frontalArea=2.2,
-        dragCoefficient=0.32,
-        downforceCoefficient=2.5,
-        aeroCentreOfPressure=1.0,
-        wheelbase=2.5,
-        trackWidth=1.6,
-        coGHeight=0.55,
-        coGLongitudinalPos=0.5,
-        maxGLat=1.2,
-        maxGLongAccel=0.8,  # Ideally we get this from power unit
-        maxGLongBrake=1.0   # Ideally we get this from brake system
-    )
+    """Create vehicle from configuration file."""
+    # Get vehicle parameters filepath from config
+    paramsFilepath = config.get('vehicleParameters', 'datasets/vehicle/parameters.json')
+    
+    # Load parameters from file
+    params = loadVehicleParameters(paramsFilepath)
     
     powerUnit = createPowertrainModel(config.get('powertrain', {}))
     tyreModel = createTyreModel(config.get('tyreModel', {}))
