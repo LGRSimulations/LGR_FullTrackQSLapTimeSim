@@ -1,0 +1,39 @@
+{
+    "general": {
+        "name": "F25Car",
+        "mass": 275.0
+    },
+    "aerodynamics": {
+        "frontalArea": 0.75,
+        "dragCoefficient": 0.85,
+        "downforceCoefficient": 0.07,
+        "aeroCentreOfPressure": 1.0
+    },
+    "geometry": {
+        "wheelbase": 1.6,
+        "frontTrackWidth": 1.26,
+        "rearTrackWidth": 1.23,
+        "coGHeight": 0.48,
+        "coGLongitudinalPos": 0.5
+    },
+    "performance": {
+        "maxGLat": 1.2,
+        "maxGLongAccel": 0.8,
+        "maxGLongBrake": 1.0
+    },
+    "_comments": {
+        "mass": "kg",
+        "frontalArea": "m²",
+        "dragCoefficient": "dimensionless",
+        "downforceCoefficient": "dimensionless (L/D ratio typically)",
+        "aeroCentreOfPressure": "m from front axle",
+        "wheelbase": "m",
+        "frontTrackWidth": "m",
+        "rearTrackWidth": "m",
+        "coGHeight": "m",
+        "coGLongitudinalPos": "fraction of wheelbase from front axle (0 to 1)",
+        "maxGLat": "g (tyre grip limit for point mass)",
+        "maxGLongAccel": "g (acceleration limit)",
+        "maxGLongBrake": "g (braking limit)"
+    }
+}

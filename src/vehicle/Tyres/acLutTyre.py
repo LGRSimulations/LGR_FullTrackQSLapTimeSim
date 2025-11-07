@@ -13,7 +13,7 @@ class ACLutTyreModel(BaseTyreModel):
     """
     
     def __init__(self, dx_lut: pd.DataFrame, dy_lut: pd.DataFrame, 
-                 baseMu: float = 1.5):
+                 baseMu: float):
         """
         Initialize AC LUT tyre model.
         
@@ -75,7 +75,7 @@ class ACLutTyreModel(BaseTyreModel):
             dy_lut = pd.read_csv(full_path_dy)
             
             # Get optional parameters from config
-            baseMu = config.get('baseMu', 1.5)
+            baseMu = config.get('baseMu')
 
             return cls(dx_lut, dy_lut, baseMu)
             
