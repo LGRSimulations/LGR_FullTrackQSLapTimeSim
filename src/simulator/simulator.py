@@ -50,9 +50,9 @@ def evaluateVehicleState(vCar: float, aSteer: float, aSideslip: float, curvature
     
     # Compute lateral acceleration
     gLat = vehicle.computeLateralAcceleration(F_front, F_rear, vCar)
-    
-    # Check if state is valid (yaw moment near zero)
-    is_valid = abs(M_z) < 1e-1
+
+    # Check if state is valid (yaw moment close to zero)
+    is_valid = abs(M_z) < 50.0  # Nm tolerance
     
     return {
         'gLat': gLat,
@@ -97,10 +97,16 @@ def findVehicleStateAtPoint(curvature: float, vehicle):
     # Define objective function to maximize vCar (by minimizing negative vCar)
     def objective(x):
         vCar, aSteer, aSideslip = x
-        return -vCar  # We minimize negative vCar to maximize vCar
+        result = evaluateVehicleState(vCar, aSteer, aSideslip, curvature, vehicle)
+        penalty = abs(result['M_z']) / 50.0 # Penalty for yaw moment deviation
+        return -vCar + penalty
     
     # Define constraint function for yaw moment equilibrium
     def constraintYawMoment(x):
+        """
+        Ensure that the yaw moment is close to zero. 
+        We use a tolerance of 50 Nm.
+        """
         vCar, aSteer, aSideslip = x
         result = evaluateVehicleState(vCar, aSteer, aSideslip, curvature, vehicle)
         tolerance = 50.0  # Nm tolerance for yaw moment
@@ -108,6 +114,10 @@ def findVehicleStateAtPoint(curvature: float, vehicle):
     
     # Define constraint function for lateral acceleration vs. curvature
     def constraintGLat(x):
+        """ 
+        Ensure that the lateral acceleration corresponds to a feasible maximum speed
+        for the given curvature.
+        """
         vCar, aSteer, aSideslip = x
         result = evaluateVehicleState(vCar, aSteer, aSideslip, curvature, vehicle)
         vCarMax = computeVCarMax(result['gLat'], curvature)
@@ -116,11 +126,11 @@ def findVehicleStateAtPoint(curvature: float, vehicle):
     # Initial guess based on simple bicycle model
     # Estimate initial steering angle from curvature and wheelbase
     L = vehicle.params.wheelbase
-    initialASteer = np.degrees(abs(curvature) * L)  # Simple Ackermann
-    initialASteer = np.clip(initialASteer, 0.1, 8.0)  # Reasonable range
+    initialASteer = np.degrees(abs(curvature) * L)      # Simple Ackermann (aSteer (radians) = curvature * L)
+    initialASteer = np.clip(initialASteer, 0.1, 8.0)    # Reasonable range
     
     # Initial guess: conservative speed, estimated steering, small sideslip
-    initialGuess = [15.0, initialASteer, 0.5]  # [vCar, aSteer, aSideslip]
+    initialGuess = [5.0, initialASteer, 0.5]  # [vCar, aSteer, aSideslip]
     
     # Define bounds for optimization variables
     bounds = [
@@ -134,7 +144,7 @@ def findVehicleStateAtPoint(curvature: float, vehicle):
         {'type': 'ineq', 'fun': constraintYawMoment},
         {'type': 'ineq', 'fun': constraintGLat}
     ]
-    
+
     # Run optimization
     try:
         result = minimize(
@@ -143,7 +153,7 @@ def findVehicleStateAtPoint(curvature: float, vehicle):
             method='SLSQP',     # We use the SLSQP method for constrained optimization
             bounds=bounds,
             constraints=constraints,
-            options={'disp': False, 'maxiter': 100}
+            options={'disp': False, 'maxiter': 10000}
         )
         
         if result.success:
@@ -157,6 +167,7 @@ def findVehicleStateAtPoint(curvature: float, vehicle):
             }
         else:
             logger.warning(f"Optimization failed: {result.message}")
+
             return {
                 'success': False,
                 'vCar': 0.0,
