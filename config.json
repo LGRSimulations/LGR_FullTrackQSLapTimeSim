@@ -1,6 +1,6 @@
 {
     "powertrain": {
-        "powertrain" : "datasets/vehicle/PU_data/EMRAX_228_HV_CC_P_motor_speed.csv",
+        "powertrain" : "datasets/vehicle/PU_data/Honda_CBR_600RR_RPM_vs_Peak_Power.csv",
         "type": "lookup"
     },
     "drivetrain" :{
