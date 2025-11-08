@@ -124,7 +124,7 @@ class ACLutTyreModel(BaseTyreModel):
         peak_slip_angle = 10.0  # degrees
         
         if abs(slipAngle) <= peak_slip_angle:
-            # Linear region
+            # Linear region using formula Fy = (mu * N) * (slipAngle / peak_slip_angle)
             Fy = (mu_y_peak * normalLoad) * (slipAngle / peak_slip_angle)
         else:
             # Post-peak: constant force with sign of slip angle
@@ -160,7 +160,7 @@ class ACLutTyreModel(BaseTyreModel):
         peak_slip_ratio = 12.0  # percent
         
         if abs(slipRatio) <= peak_slip_ratio:
-            # Linear region
+            # Linear region using formula Fx = (mu * N) * (slipRatio / peak_slip_ratio)
             Fx = (mu_x_peak * normalLoad) * (slipRatio / peak_slip_ratio)
         else:
             # Post-peak: constant force with sign of slip ratio
