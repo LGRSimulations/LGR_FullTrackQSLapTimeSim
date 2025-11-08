@@ -24,7 +24,7 @@ def computeVCarMax(gLat: float, curvature: float) -> float:
     vCarMax = np.sqrt(abs(gLat) / abs(curvature))   # m/s
     return vCarMax
 
-def evaluateVehicleState(vCar: float, aSteer: float, aSideslip: float, curvature: float, vehicle):
+def evaluateVehicleState(vCar: float, aSteer: float, aSideslip: float, curvature: float, vehicle, debugMode) -> dict:
     """
     f1: Evaluate vehicle state for given vCar, aSteer, aSideslip, and track curvature.
     
@@ -34,6 +34,7 @@ def evaluateVehicleState(vCar: float, aSteer: float, aSideslip: float, curvature
         aSideslip: Sideslip angle (degrees)
         curvature: Track curvature (1/m)
         vehicle: Vehicle object
+        debugMode: Debug mode flag
         
     Returns:
         dict: {'gLat': float, 'M_z': float, 'is_valid': bool}
@@ -54,6 +55,9 @@ def evaluateVehicleState(vCar: float, aSteer: float, aSideslip: float, curvature
     # Check if state is valid (yaw moment close to zero)
     is_valid = abs(M_z) < 50.0  # Nm tolerance
     
+    # debug info
+    if debugMode:
+        print(f"[DEBUG] variables: vCar={vCar:.2f}, gLat={gLat:.2f}, M_z={M_z:.2f}, is_valid={is_valid}, F_front={F_front:.2f}, F_rear={F_rear:.2f}")
     return {
         'gLat': gLat,
         'M_z': M_z,
@@ -94,11 +98,22 @@ def findVehicleStateAtPoint(curvature: float, vehicle):
             'aSideslip': 0.0
         }
     
-    # Define objective function to maximize vCar (by minimizing negative vCar)
+
+    # For debug: store first and last tried parameters and results
+    debugMode = getattr(vehicle, 'config', {}).get('debugMode', False)
+    debugInfo = {'first_x': None, 'first_result': None, 'last_x': None, 'last_result': None}
+
     def objective(x):
         vCar, aSteer, aSideslip = x
-        result = evaluateVehicleState(vCar, aSteer, aSideslip, curvature, vehicle)
+        result = evaluateVehicleState(vCar, aSteer, aSideslip, curvature, vehicle, debugMode)
         penalty = abs(result['M_z']) / 50.0 # Penalty for yaw moment deviation
+        # Store first and last tried parameters/results if debugMode
+        if debugMode:
+            if debugInfo['first_x'] is None:
+                debugInfo['first_x'] = x.copy() if hasattr(x, 'copy') else list(x)
+                debugInfo['first_result'] = result.copy() if hasattr(result, 'copy') else dict(result)
+            debugInfo['last_x'] = x.copy() if hasattr(x, 'copy') else list(x)
+            debugInfo['last_result'] = result.copy() if hasattr(result, 'copy') else dict(result)
         return -vCar + penalty
     
     # Define constraint function for yaw moment equilibrium
@@ -108,7 +123,7 @@ def findVehicleStateAtPoint(curvature: float, vehicle):
         We use a tolerance of 50 Nm.
         """
         vCar, aSteer, aSideslip = x
-        result = evaluateVehicleState(vCar, aSteer, aSideslip, curvature, vehicle)
+        result = evaluateVehicleState(vCar, aSteer, aSideslip, curvature, vehicle, debugMode)
         tolerance = 50.0  # Nm tolerance for yaw moment
         return tolerance - abs(result['M_z'])  # Must be >= 0
     
@@ -119,10 +134,15 @@ def findVehicleStateAtPoint(curvature: float, vehicle):
         for the given curvature.
         """
         vCar, aSteer, aSideslip = x
-        result = evaluateVehicleState(vCar, aSteer, aSideslip, curvature, vehicle)
+        result = evaluateVehicleState(vCar, aSteer, aSideslip, curvature, vehicle, debugMode)
         vCarMax = computeVCarMax(result['gLat'], curvature)
         return vCarMax - vCar  # Must be >= 0
     
+    def constraintMaxGLat(x):
+        vCar, aSteer, aSideslip = x
+        result = evaluateVehicleState(vCar, aSteer, aSideslip, curvature, vehicle, debugMode)
+        return 2 - abs(result['gLat']) / 9.81     # for 2Gs
+
     # Initial guess based on simple bicycle model
     # Estimate initial steering angle from curvature and wheelbase
     L = vehicle.params.wheelbase
@@ -142,7 +162,8 @@ def findVehicleStateAtPoint(curvature: float, vehicle):
     # Define constraints
     constraints = [
         {'type': 'ineq', 'fun': constraintYawMoment},
-        {'type': 'ineq', 'fun': constraintGLat}
+        {'type': 'ineq', 'fun': constraintGLat},
+        {'type': 'ineq', 'fun': constraintMaxGLat}
     ]
 
     # Run optimization
@@ -150,12 +171,12 @@ def findVehicleStateAtPoint(curvature: float, vehicle):
         result = minimize(
             objective, 
             initialGuess,
-            method='SLSQP',     # We use the SLSQP method for constrained optimization
+            method='SLSQP',
             bounds=bounds,
             constraints=constraints,
-            options={'disp': False, 'maxiter': 10000}
+            options={'disp': False, 'maxiter': 2000}
         )
-        
+
         if result.success:
             vCar, aSteer, aSideslip = result.x
             logger.info(f"Optimization successful: vCar={vCar:.2f}, aSteer={aSteer:.2f}, aSideslip={aSideslip:.2f}")
@@ -167,7 +188,11 @@ def findVehicleStateAtPoint(curvature: float, vehicle):
             }
         else:
             logger.warning(f"Optimization failed: {result.message}")
-
+            if debugMode:
+                print("[DEBUG] Optimization initial guess:", debugInfo['first_x'])
+                print("[DEBUG] Initial evaluateVehicleState:", debugInfo['first_result'])
+                print("[DEBUG] Optimization last tried x:", debugInfo['last_x'])
+                print("[DEBUG] Last evaluateVehicleState:", debugInfo['last_result'])
             return {
                 'success': False,
                 'vCar': 0.0,
@@ -176,6 +201,12 @@ def findVehicleStateAtPoint(curvature: float, vehicle):
             }
     except Exception as e:
         logger.error(f"Optimization error: {str(e)}")
+        if debugMode:
+            print("[DEBUG] Exception during optimization:", str(e))
+            print("[DEBUG] Optimization initial guess:", debugInfo['first_x'])
+            print("[DEBUG] Initial evaluateVehicleState:", debugInfo['first_result'])
+            print("[DEBUG] Optimization last tried x:", debugInfo['last_x'])
+            print("[DEBUG] Last evaluateVehicleState:", debugInfo['last_result'])
         return {
             'success': False,
             'vCar': 0.0,
@@ -204,13 +235,22 @@ def optimiseSpeedAtPoints(trackPoints, vehicle, config):
 
         # Optimise vCar using constrained optimization
         result = findVehicleStateAtPoint(curvature, vehicle)
-        
+        baseMu = getattr(vehicle.tyreModel, 'baseMu')
+
         if result['success']:
             logger.info(f"Optimized vCar: {result['vCar']:.2f} m/s for curvature={curvature:.4f}")
             pointSpeeds.append(result['vCar'])
         else:
             logger.warning(f"Could not find equilibrium state for curvature={curvature:.4f}")
-            pointSpeeds.append(0.0)
+            logger.warning(f"This is point at coordinates x={point.x}, y={point.y}, z={point.z}")
+            # Fallback: curvature-based max speed using baseMu
+            g = 9.81  # m/s²
+            if abs(curvature) > 1e-6:
+                v_fallback = np.sqrt(baseMu * g / abs(curvature))
+            else:
+                v_fallback = 200.0  # For straight, use high speed
+            logger.warning(f"Fallback: using v_fallback={v_fallback:.2f} m/s based on baseMu={baseMu}")
+            pointSpeeds.append(v_fallback)
             
     return pointSpeeds
 
