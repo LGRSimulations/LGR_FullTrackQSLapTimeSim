@@ -93,50 +93,39 @@ class ACLutTyreModel(BaseTyreModel):
         return float(self.dy_interp(normalLoad))
     
     def getLateralForce(self, slipAngle: float, normalLoad: Optional[float] = None, 
-                       camberAngle: Optional[float] = None, 
-                       tyrePressure: Optional[float] = None,
-                       temperature: Optional[float] = None) -> float:
+                    camberAngle: Optional[float] = None, 
+                    tyrePressure: Optional[float] = None,
+                    temperature: Optional[float] = None) -> float:
         """
-        Get lateral force for a given slip angle and normal load.
-        
-        Args:
-            slipAngle: Slip angle in degrees
-            normalLoad: Normal load in N (REQUIRED - must be provided from vehicle dynamics)
-            camberAngle: Camber angle in degrees (ignored for now)
-            tyrePressure: Tyre pressure in kPa (ignored for now)
-            temperature: Tyre temperature in °C (ignored for now)
-            
-        Returns:
-            Lateral force in N
+        Get lateral force for a given slip angle and normal load using a simplified Pacejka Magic Formula.
         """
         if normalLoad is None:
             raise ValueError("normalLoad must be provided. Calculate from vehicle mass and load transfer.")
-        
+
         # Get normalized lateral grip multiplier
         dy_mult = self._get_dy_multiplier(normalLoad)
-        
-        # Calculate peak lateral force
-        # F_y = mu * N * normalized_multiplier
         mu_y_peak = self.baseMu * dy_mult
-        
-        # Simple linear model up to peak slip angle (typically ~8-12 degrees)
-        # For MVP: assume peak at 10 degrees, linear up to that
-        peak_slip_angle = 10.0  # degrees
-        
-        if abs(slipAngle) <= peak_slip_angle:
-            # Linear region using formula Fy = (mu * N) * (slipAngle / peak_slip_angle)
-            Fy = (mu_y_peak * normalLoad) * (slipAngle / peak_slip_angle)
-        else:
-            # Post-peak: constant force with sign of slip angle
-            Fy = (mu_y_peak * normalLoad) * np.sign(slipAngle)
-        
+        Fy_peak = mu_y_peak * normalLoad
+
+        # --- Pacejka parameters ---
+        B = 10.0        # stiffness factor (fit to match cornering stiffness)
+        C = 1.3         # shape factor (controls "roundness" of the curve)
+        D = Fy_peak     # peak value (from your model)
+        E = 0.97        # curvature factor (controls drop-off after peak)
+
+        # Convert slip angle to radians for Pacejka formula
+        alpha_rad = np.radians(slipAngle)
+
+        # Simplified Pacejka Magic Formula (no horizontal/vertical shifts)
+        Fy = D * np.sin(C * np.arctan(B * alpha_rad - E * (B * alpha_rad - np.arctan(B * alpha_rad))))
+
         return Fy
     
     def getLongitudinalForce(self, slipRatio: float, normalLoad: Optional[float] = None,
                             tyrePressure: Optional[float] = None,
                             temperature: Optional[float] = None) -> float:
         """
-        Get longitudinal force for a given slip ratio and normal load.
+        Get longitudinal force for a given slip ratio and normal load using a simplified Pacejka Magic Formula.
         
         Args:
             slipRatio: Slip ratio in percent (e.g., 10 for 10%)
@@ -152,20 +141,22 @@ class ACLutTyreModel(BaseTyreModel):
         
         # Get normalized longitudinal grip multiplier
         dx_mult = self._get_dx_multiplier(normalLoad)
-        
-        # Calculate peak longitudinal force
         mu_x_peak = self.baseMu * dx_mult
-        
-        # Simple linear model up to peak slip ratio (typically ~10-15%)
-        peak_slip_ratio = 12.0  # percent
-        
-        if abs(slipRatio) <= peak_slip_ratio:
-            # Linear region using formula Fx = (mu * N) * (slipRatio / peak_slip_ratio)
-            Fx = (mu_x_peak * normalLoad) * (slipRatio / peak_slip_ratio)
-        else:
-            # Post-peak: constant force with sign of slip ratio
-            Fx = (mu_x_peak * normalLoad) * np.sign(slipRatio)
-        
+        Fx_peak = mu_x_peak * normalLoad
+
+        # --- Pacejka parameters for longitudinal ---
+        # You should fit these to your data for best results!
+        B = 14.5  # stiffness factor (fit to match initial slope)
+        C = 1.5   # shape factor
+        D = Fx_peak  # peak value
+        E = 1.3  # curvature factor
+
+        # Convert slip ratio to a fraction (data is a percent)
+        kappa = slipRatio / 100.0
+
+        # Simplified Pacejka Magic Formula (no horizontal/vertical shifts)
+        Fx = D * np.sin(C * np.arctan(B * kappa - E * (B * kappa - np.arctan(B * kappa))))
+
         return Fx
     
     def getCombinedForces(self, slipAngle: float, slipRatio: float, 
