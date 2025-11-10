@@ -1,0 +1,80 @@
+================================================================================
+MU VALUES SUMMARY FOR FEA ANALYSIS
+================================================================================
+
+OVERALL STATISTICS:
+--------------------------------------------------------------------------------
+Max mu (combined): 3.071
+Max mu (longitudinal): 2.427
+Max mu (lateral): 1.898
+Max gLat: 1.90 g
+Max gLong (accel): 1.30 g
+Max gLong (brake): -2.43 g
+
+
+ACCELERATION PHASE:
+--------------------------------------------------------------------------------
+Occurrences: 70 points
+mu_Long - Mean: 1.024, Max: 1.301, 95th percentile: 1.290
+mu_Lat - Mean: 0.047, Max: 0.297, 95th percentile: 0.254
+mu_Combined - Mean: 1.029, Max: 1.327, 95th percentile: 1.290
+Normal Load per Tyre - Mean: 674.4 N, Max: 674.4 N
+
+BRAKING PHASE:
+--------------------------------------------------------------------------------
+Occurrences: 15 points
+mu_Long - Mean: 1.644, Max: 2.427, 95th percentile: 2.407
+mu_Lat - Mean: 0.034, Max: 0.208, 95th percentile: 0.171
+mu_Combined - Mean: 1.645, Max: 2.427, 95th percentile: 2.407
+Normal Load per Tyre - Mean: 674.4 N, Max: 674.4 N
+
+CORNERING PHASE:
+--------------------------------------------------------------------------------
+Occurrences: 5 points
+mu_Long - Mean: 0.035, Max: 0.052, 95th percentile: 0.050
+mu_Lat - Mean: 1.185, Max: 1.898, 95th percentile: 1.898
+mu_Combined - Mean: 1.186, Max: 1.899, 95th percentile: 1.899
+Normal Load per Tyre - Mean: 674.4 N, Max: 674.4 N
+
+COMBINED PHASE:
+--------------------------------------------------------------------------------
+Occurrences: 167 points
+mu_Long - Mean: 1.402, Max: 2.414, 95th percentile: 2.354
+mu_Lat - Mean: 1.406, Max: 1.898, 95th percentile: 1.898
+mu_Combined - Mean: 2.078, Max: 3.071, 95th percentile: 3.011
+Normal Load per Tyre - Mean: 674.4 N, Max: 674.4 N
+
+================================================================================
+RECOMMENDED FEA LOAD CASES:
+================================================================================
+
+1. PEAK BRAKING CASE:
+   Distance: 755.02 m
+   gLong: -2.43 g
+   mu_Long: 2.427
+   Normal Load per Tyre: 674.4 N
+   Long Force per Tyre: -1636.9 N
+
+2. PEAK ACCELERATION CASE:
+   Distance: 530.32 m
+   gLong: 1.30 g
+   mu_Long: 1.302
+   Normal Load per Tyre: 674.4 N
+   Long Force per Tyre: 878.4 N
+
+3. PEAK CORNERING CASE:
+   Distance: 544.41 m
+   gLat: -1.90 g
+   mu_Lat: 1.898
+   Normal Load per Tyre: 674.4 N
+   Lat Force per Tyre: -1280.3 N
+
+4. PEAK COMBINED CASE:
+   Distance: 13.88 m
+   gLong: -2.41 g
+   gLat: -1.90 g
+   mu_Combined: 3.071
+   Normal Load per Tyre: 674.4 N
+   Long Force per Tyre: -1628.3 N
+   Lat Force per Tyre: -1280.3 N
+

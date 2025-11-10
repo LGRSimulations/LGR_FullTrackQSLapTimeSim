@@ -68,24 +68,29 @@ def evaluateVehicleState(vCar: float, aSteer: float, aSideslip: float, curvature
 
 def findVehicleStateAtPoint(curvature: float, vehicle):
     """
-    Find vehicle state (vCar, aSteer, aSideslip) that satisfies yaw moment = 0
-    and maximizes vCar for given track curvature using constrained optimization.
+    Finds the equilibrium vehicle state (speed, steering angle, sideslip) that satisfies yaw moment equilibrium
+    and maximizes vehicle speed for a given track curvature using constrained optimization.
 
-    We minimise objective function f(x) = vCar
-    Function 1: We optimise using a comprehensive bicycle model, what's the potential gLat & yaw moment we can get
-                We are NOT constraining yaw moment here, we are finding our theoretical max gLat for given vCar, aSteer, aSideslip
-                Where f1 is (glat, yaw moment) = f1(vCar, aSteer, aSideslip, curvature)
-    
-    Function 2: We compute theoretical max vCar for given gLat & curvature.
-                Here we constrain yaw moment = 0, and we are looking for the maximum vCar we can achieve
-                Where f2 is vCarMax = f2(gLat, curvature)
+    The optimization seeks the highest possible speed (vCar) at which the vehicle can negotiate a curve of given curvature,
+    subject to:
+      - Yaw moment equilibrium (|M_z| < 50 Nm)
+      - Lateral acceleration and curvature consistency
+      - Maximum lateral acceleration (e.g., 2g limit)
+      - Physical bounds on speed, steering, and sideslip
 
-    
+    For straight sections (curvature ≈ 0), returns a high speed with zero steering and sideslip.
+
     Args:
-        curvature: Track curvature (1/m)
-        vehicle: Vehicle object
+        curvature (float): Track curvature (1/m)
+        vehicle: Vehicle object with parameters and tyre model
+
     Returns:
-        dict: {'success': bool, 'vCar': float, 'aSteer': float, 'aSideslip': float}
+        dict: {
+            'success': bool,         # Whether optimization succeeded
+            'vCar': float,           # Maximum feasible speed at this curvature (m/s)
+            'aSteer': float,         # Steering angle (degrees)
+            'aSideslip': float       # Sideslip angle (degrees)
+        }
     """
     # Handle straight sections (zero curvature)
     if abs(curvature) < 1e-3:
@@ -139,9 +144,12 @@ def findVehicleStateAtPoint(curvature: float, vehicle):
         return vCarMax - vCar  # Must be >= 0
     
     def constraintMaxGLat(x):
+        """
+        Ensure that the lateral acceleration does not exceed a maximum limit, in this case 2G.
+        """
         vCar, aSteer, aSideslip = x
         result = evaluateVehicleState(vCar, aSteer, aSideslip, curvature, vehicle, debugMode)
-        return 2 - abs(result['gLat']) / 9.81     # for 2Gs
+        return 4 - abs(result['gLat']) / 9.81     # for 2Gs
 
     # Initial guess based on simple bicycle model
     # Estimate initial steering angle from curvature and wheelbase
@@ -403,29 +411,86 @@ def runLapTimeSimulation(track, vehicle, config) -> None:
     # Compute speed profile
     finalSpeeds, cornerSpeeds = computeSpeedProfile(track, vehicle, config)
 
-    # Compute lap time and collect acceleration traces
+    # Compute lap time and collect acceleration traces and mu values
     lapTime = 0.0
     gLatChannel = []
     gLongChannel = []
+    muLongChannel = []  # Longitudinal mu (accel/brake)
+    muLatChannel = []   # Lateral mu (cornering)
+    muCombinedChannel = []  # Combined mu utilization
+    signedMuLongChannel = []  # Signed longitudinal mu
+    signedMuLatChannel = []   # Signed lateral mu
+    normalLoadPerTyre = []
+    longForcePerTyre = []
+    latForcePerTyre = []
+    
     for i in range(1, len(track.points)):
         ds = track.points[i].distance - track.points[i-1].distance
         vPrev = finalSpeeds[i-1]
         vCurr = finalSpeeds[i]
         vAvg = (vCurr + vPrev) / 2
+        
         # Longitudinal acceleration (finite difference)
         if ds > 0:
+            # a = (v^2 - u^2) / (2*s)
             gLong = ((vCurr**2 - vPrev**2) / (2 * ds)) / 9.81
         else:
             gLong = 0.0
         gLongChannel.append(gLong)
+        
         # Lateral acceleration (from curvature)
+        # a_lat = v^2 * curvature
         gLat = vCurr**2 * track.points[i].curvature / 9.81
         gLatChannel.append(gLat)
+        
+        # Compute normal load per tyre (static, could add load transfer later)
+        Fz_per_tyre = vehicle.computeStaticNormalLoad()
+        normalLoadPerTyre.append(Fz_per_tyre)
+        
+        # Compute longitudinal force per tyre
+        # F_long = m * a_long
+        F_long_total = gLong * 9.81 * vehicle.params.mass  # Total longitudinal force
+        F_long_per_tyre = F_long_total / 4.0  # Assume equal distribution to 4 tyres
+        longForcePerTyre.append(F_long_per_tyre)
+        
+        # Compute lateral force per tyre
+        # F_lat = m * a_lat
+        F_lat_total = gLat * 9.81 * vehicle.params.mass  # Total lateral force
+        F_lat_per_tyre = F_lat_total / 4.0  # Assume equal distribution to 4 tyres
+        latForcePerTyre.append(F_lat_per_tyre)
+        
+        # Calculate mu values
+        if Fz_per_tyre > 0:
+            mu_long = abs(F_long_per_tyre) / Fz_per_tyre        # Formula: mu = F / Fz
+            signedMuLong = np.sign(F_long_per_tyre) * mu_long   # Formula: signedMu = sign(F) * mu
+            mu_lat = abs(F_lat_per_tyre) / Fz_per_tyre          # Formula: mu = F / Fz
+            signedMuLat = np.sign(F_lat_per_tyre) * mu_lat      # Formula: signedMu = sign(F) * mu
+            # Combined mu using friction circle
+            mu_combined = np.sqrt(mu_long**2 + mu_lat**2)
+        else:
+            mu_long = 0.0
+            mu_lat = 0.0
+            mu_combined = 0.0
+        
+        muLongChannel.append(mu_long)
+        muLatChannel.append(mu_lat)
+        signedMuLongChannel.append(signedMuLong)
+        signedMuLatChannel.append(signedMuLat)
+        muCombinedChannel.append(mu_combined)
+        
         if vAvg > 0:
             dt = ds / vAvg
             lapTime += dt
+    
     logger.info(f"Estimated lap time: {lapTime:.2f} seconds")
     logger.info("Lap time simulation completed.")
+    
+    # from src.simulator.simulatorLogger import exportTelemetryData
+    # Export telemetry data for FEA analysis
+    # exportTelemetryData(track, finalSpeeds, gLatChannel, gLongChannel, 
+    #                    muLongChannel, muLatChannel, muCombinedChannel,
+    #                    normalLoadPerTyre, longForcePerTyre, latForcePerTyre,
+    #                    config)
 
     # Prepare arrays for plotting
     distances = [p.distance for p in track.points]
@@ -478,6 +543,55 @@ def runLapTimeSimulation(track, vehicle, config) -> None:
     cbar_track.set_label('Speed (kph)')
     ax4.axis('equal')
     fig3.tight_layout()
+
+    
+    # --- Plot 4: Mu Utilization Profile ---
+    fig4, ax5 = plt.subplots(figsize=(12, 6))
+    ax5.plot(distances[1:], muLongChannel, label='Longitudinal', linewidth=2, color='tab:red')
+    ax5.plot(distances[1:], muLatChannel, label='Lateral', linewidth=2, color='tab:blue')
+    ax5.plot(distances[1:], muCombinedChannel, label='Combined', linewidth=2, color='tab:purple', linestyle='--')
+    ax5.set_xlabel('Distance along track (m)')
+    ax5.set_ylabel('Friction Coefficient (μ)')
+    ax5.set_title('Tyre Friction Coefficient Utilization')
+    ax5.legend(loc='upper right')
+    ax5.grid(True, alpha=0.3)
+    ax5.set_ylim(0, max(muCombinedChannel) * 1.1)
+    fig4.tight_layout()
+
+    # --- Plot 5: Mu-Mu Diagram (Friction Ellipse) ---
+    fig5, ax6 = plt.subplots(figsize=(8, 8))
+    scatter_mu = ax6.scatter(signedMuLatChannel, signedMuLongChannel, c=vCar_kph[1:], cmap='plasma', s=20, alpha=0.6)
+    ax6.set_xlabel('Lateral')
+    ax6.set_ylabel('Longitudinal')
+    ax6.set_title('Friction Ellipse (μ-Diagram)')
+    
+    # Draw friction circle reference
+    theta = np.linspace(0, 2*np.pi, 100)
+    if len(muCombinedChannel) > 0:
+        mu_max = max(muCombinedChannel)
+        circle_x = mu_max * np.cos(theta)
+        circle_y = mu_max * np.sin(theta)
+        ax6.plot(circle_x, circle_y, 'k--', alpha=0.3, label=f'abs(μ_max) = {mu_max:.2f}')
+    
+    cbar_mu = fig5.colorbar(scatter_mu, ax=ax6)
+    cbar_mu.set_label('Speed (kph)')
+    ax6.grid(True, which='both', linestyle='--', alpha=0.7)
+    ax6.legend(loc='upper right')
+    ax6.axis('equal')
+    fig5.tight_layout()
+
+    # --- Plot 6: 2D Track Map with Mu Combined Colour Gradient ---
+    fig6, ax7 = plt.subplots(figsize=(10, 8))
+    # Pad mu values to match track points length
+    muCombined_padded = [0.0] + muCombinedChannel
+    scatter_mu_track = ax7.scatter(xCoords, yCoords, c=muCombined_padded, cmap='hot', s=8)
+    ax7.set_xlabel('X (m)')
+    ax7.set_ylabel('Y (m)')
+    ax7.set_title('2D Track Map: Combined Utilization')
+    cbar_mu_track = fig6.colorbar(scatter_mu_track, ax=ax7)
+    cbar_mu_track.set_label('Combined')
+    ax7.axis('equal')
+    fig6.tight_layout()
 
     # Show all plots at once
     plt.show()
