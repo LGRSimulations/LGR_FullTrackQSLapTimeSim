@@ -18,5 +18,6 @@
     },
     "vehicleParameters": "datasets/vehicle/parameters.json",
     "debugMode": false,
-    "fullTelemetryMode": true
+    "fullTelemetryMode": true,
+    "outputDirectory": "output"
 }
