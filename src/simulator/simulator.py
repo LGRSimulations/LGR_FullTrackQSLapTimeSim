@@ -1,339 +1,51 @@
+
+# Import the moved functions from util modules
 import numpy as np
 import logging
-import matplotlib.pyplot as plt
-import seaborn as sns
-from scipy.optimize import minimize
+from .util.prettyGraphs.lapTimeResults import plot_lap_time_results, LapTimeResults
+from .util.calcSpeedProfile import compute_speed_profile
 
 logger = logging.getLogger(__name__)
 
-def computeVCarMax(gLat: float, curvature: float) -> float:
-    """
-    f2: Compute maximum theoretical speed for a given lateral acceleration and track curvature.
-    
-    v_max = sqrt(a_lat / curvature)
-    
-    Args:
-        gLat: Lateral acceleration in m/s^2
-        curvature: Track curvature in 1/m
-        
-    Returns:
-        Maximum speed in m/s
-    """
-    
-    # calculate vCarMax based on lateral acceleration and curvature
-    vCarMax = np.sqrt(abs(gLat) / abs(curvature))   # m/s
-    return vCarMax
-
-def evaluateVehicleState(vCar: float, aSteer: float, aSideslip: float, curvature: float, vehicle):
-    """
-    f1: Evaluate vehicle state for given vCar, aSteer, aSideslip, and track curvature.
-    
-    Args:
-        vCar: Vehicle speed (m/s)
-        aSteer: Steering angle (degrees)
-        aSideslip: Sideslip angle (degrees)
-        curvature: Track curvature (1/m)
-        vehicle: Vehicle object
-        
-    Returns:
-        dict: {'gLat': float, 'M_z': float, 'is_valid': bool}
-    """
-    # Compute slip angles at front and rear (bicycle model)
-    slipAngleFront = aSteer - aSideslip
-    slipAngleRear = -aSideslip
-    
-    # Get tire forces
-    F_front, F_rear = vehicle.computeTyreForces(slipAngleFront, slipAngleRear)
-    
-    # Compute yaw moment
-    M_z = vehicle.computeYawMoment(F_front, F_rear, aSteer)
-    
-    # Compute lateral acceleration
-    gLat = vehicle.computeLateralAcceleration(F_front, F_rear, vCar)
-    
-    # Check if state is valid (yaw moment near zero)
-    is_valid = abs(M_z) < 1e-1
-    
-    return {
-        'gLat': gLat,
-        'M_z': M_z,
-        'is_valid': is_valid,
-        'F_front': F_front,
-        'F_rear': F_rear
-    }
-
-def findVehicleStateAtPoint(curvature: float, vehicle):
-    """
-    Find vehicle state (vCar, aSteer, aSideslip) that satisfies yaw moment = 0
-    and maximizes vCar for given track curvature using constrained optimization.
-
-    We minimise objective function f(x) = vCar
-    Function 1: We optimise using a comprehensive bicycle model, what's the potential gLat & yaw moment we can get
-                We are NOT constraining yaw moment here, we are finding our theoretical max gLat for given vCar, aSteer, aSideslip
-                Where f1 is (glat, yaw moment) = f1(vCar, aSteer, aSideslip, curvature)
-    
-    Function 2: We compute theoretical max vCar for given gLat & curvature.
-                Here we constrain yaw moment = 0, and we are looking for the maximum vCar we can achieve
-                Where f2 is vCarMax = f2(gLat, curvature)
-
-    
-    Args:
-        curvature: Track curvature (1/m)
-        vehicle: Vehicle object
-    Returns:
-        dict: {'success': bool, 'vCar': float, 'aSteer': float, 'aSideslip': float}
-    """
-
-    # Define objective function to maximize vCar (by minimizing negative vCar)
-    def objective(x):
-        vCar, aSteer, aSideslip = x
-        return -vCar  # We minimize negative vCar to maximize vCar
-    
-    # Define constraint function for yaw moment equilibrium
-    def constraintYawMoment(x):
-        vCar, aSteer, aSideslip = x
-        result = evaluateVehicleState(vCar, aSteer, aSideslip, curvature, vehicle)
-        return -abs(result['M_z'])  # We want M_z close to 0
-    
-    # Define constraint function for lateral acceleration vs. curvature
-    def constraintGLat(x):
-        vCar, aSteer, aSideslip = x
-        result = evaluateVehicleState(vCar, aSteer, aSideslip, curvature, vehicle)
-        vCarMax = computeVCarMax(result['gLat'], curvature)
-        return vCarMax - vCar  # Must be >= 0
-    
-    # Initial guess: starting point for optimization
-    initial_guess = [10.0, 2.0, 1.0]  # [vCar, aSteer, aSideslip]
-    
-    # Define bounds for optimization variables
-    bounds = [
-        (1.0, 100.0),     # vCar between 1 and 100 m/s
-        (-10.0, 10.0),    # aSteer between -10 and 10 degrees
-        (-5.0, 5.0)       # aSideslip between -5 and 5 degrees
-    ]
-    
-    # Define constraints
-    constraints = [
-        {'type': 'ineq', 'fun': constraintYawMoment},
-        {'type': 'ineq', 'fun': constraintGLat}
-    ]
-    
-    # Run optimization
-    try:
-        result = minimize(
-            objective, 
-            initial_guess,
-            method='SLSQP',     # We use the SLSQP method for constrained optimization
-            bounds=bounds,
-            constraints=constraints,
-            options={'disp': False, 'maxiter': 100}
-        )
-        
-        if result.success:
-            vCar, aSteer, aSideslip = result.x
-            logger.info(f"Optimization successful: vCar={vCar:.2f}, aSteer={aSteer:.2f}, aSideslip={aSideslip:.2f}")
-            return {
-                'success': True,
-                'vCar': vCar,
-                'aSteer': aSteer,
-                'aSideslip': aSideslip
-            }
-        else:
-            logger.warning(f"Optimization failed: {result.message}")
-            return {
-                'success': False,
-                'vCar': 0.0,
-                'aSteer': 0.0,
-                'aSideslip': 0.0
-            }
-    except Exception as e:
-        logger.error(f"Optimization error: {str(e)}")
-        return {
-            'success': False,
-            'vCar': 0.0,
-            'aSteer': 0.0,
-            'aSideslip': 0.0
-        }
-    
-def optimiseSpeedAtPoints(trackPoints, vehicle, config):
-    """
-    Find maximum vCar at multiple track points where equilibrium states exist.
-    Uses direct constrained optimization for each point.
-    Effectively gives us max cornering speeds given our vehicle model.
-    
-    Args:
-        trackPoints: List of track points with curvature data
-        vehicle: Vehicle object
-        config: Config dict
-        
-    Returns:
-        pointSpeeds: List of maximum speeds for each point (m/s)
-    """
-    pointSpeeds = []
-    
-    for point in trackPoints:
-        curvature = point.curvature
-
-        # Optimise vCar using constrained optimization
-        result = findVehicleStateAtPoint(curvature, vehicle)
-        
-        if result['success']:
-            logger.info(f"Optimized vCar: {result['vCar']:.2f} m/s for curvature={curvature:.4f}")
-            pointSpeeds.append(result['vCar'])
-        else:
-            logger.warning(f"Could not find equilibrium state for curvature={curvature:.4f}")
-            pointSpeeds.append(0.0)
-            
-    return pointSpeeds
-
-def forwardPass(track, vehicle, pointSpeeds):
-    """
-    Forward pass: acceleration-limited speed profile.
-    Uses all track points.
-    """
-    nPoints = len(track.points)
-    speeds = np.zeros(nPoints)
-    speeds[0] = pointSpeeds[0]  # start at first point speed
-
-    for i in range(1, nPoints):
-        # Distance to next point
-        ds = track.points[i].distance - track.points[i-1].distance
-
-        # Maximum acceleration (from vehicle limits)
-        a_max = vehicle.params.maxGLongAccel * 9.81  # m/s^2
-
-        # Maximum speed we can reach accelerating from previous point
-        v_accel = np.sqrt(speeds[i-1]**2 + 2 * a_max * ds)
-
-        # Take minimum of acceleration-limited and corner-limited speed
-        speeds[i] = min(v_accel, pointSpeeds[i])
-
-    return speeds
-
-def backwardPass(track, vehicle, pointSpeeds):
-    """
-    Backward pass: braking-limited speed profile.
-    Uses all track points.
-    """
-    nPoints = len(track.points)
-    speeds = np.zeros(nPoints)
-    speeds[-1] = pointSpeeds[-1]  # end at last point speed
-
-    for i in range(nPoints-2, -1, -1):
-        # Distance to next point
-        ds = track.points[i+1].distance - track.points[i].distance
-
-        # Maximum deceleration (from vehicle limits)
-        aBrake = vehicle.params.maxGLongBrake * 9.81  # m/s^2
-
-        # Maximum speed we can reach braking from next point
-        vBrake = np.sqrt(speeds[i+1]**2 + 2 * aBrake * ds)
-
-        # Take minimum of braking-limited and corner-limited speed
-        speeds[i] = min(vBrake, pointSpeeds[i])
-
-    return speeds
-
-def computeSpeedProfile(track, vehicle, config):
-    """
-    Compute final speed profile using forward and backward passes for all track points.
-    Parallelises the optimisation of cornering speeds at each point.
-    """
-    # Step 1: For each track point, optimise max cornering speed given vehicle model
-    pointSpeeds = optimiseSpeedAtPoints(track.points, vehicle, config)
-    
-    # Step 2: Forward Pass (acceleration limited)
-    forwardSpeeds = forwardPass(track, vehicle, pointSpeeds)
-
-    # Step 3: Backward Pass (braking limited)
-    backwardSpeeds = backwardPass(track, vehicle, pointSpeeds)
-
-    # Step 4: Take min of forward and backward pass speeds
-    finalSpeeds = np.minimum(forwardSpeeds, backwardSpeeds)
-    return finalSpeeds, pointSpeeds
-
-def runLapTimeSimulation(track, vehicle, config) -> None:
+def run_lap_time_simulation(track, vehicle, config) -> None:
     """Initialize and run a lap time simulation for the whole track."""
     logger.info("Starting lap time simulation...")
-    
-    # Compute speed profile
-    finalSpeeds, cornerSpeeds = computeSpeedProfile(track, vehicle, config)
+    # Run the lap time sim, given the track and vehicle
+    final_speeds, corner_speeds = compute_speed_profile(track, vehicle, config)
 
-    # Compute lap time and collect acceleration traces
-    lapTime = 0.0
-    gLatChannel = []
-    gLongChannel = []
+    # Compute lap time and g-forces based on final speeds
+    lap_time = 0.0
+    g_lat_channel = []
+    g_long_channel = []
+    normal_load_per_tyre = []
+    long_force_per_tyre = []
+    lat_force_per_tyre = []
     for i in range(1, len(track.points)):
         ds = track.points[i].distance - track.points[i-1].distance
-        vPrev = finalSpeeds[i-1]
-        vCurr = finalSpeeds[i]
-        vAvg = (vCurr + vPrev) / 2
-        # Longitudinal acceleration (finite difference)
+        v_prev = final_speeds[i-1]
+        v_curr = final_speeds[i]
+        v_avg = (v_curr + v_prev) / 2
         if ds > 0:
-            gLong = ((vCurr**2 - vPrev**2) / (2 * ds)) / 9.81
+            g_long = ((v_curr**2 - v_prev**2) / (2 * ds)) / 9.81
         else:
-            gLong = 0.0
-        gLongChannel.append(gLong)
-        # Lateral acceleration (from curvature)
-        gLat = vCurr**2 * track.points[i].curvature / 9.81
-        gLatChannel.append(gLat)
-        if vAvg > 0:
-            dt = ds / vAvg
-            lapTime += dt
-    logger.info(f"Estimated lap time: {lapTime:.2f} seconds")
+            g_long = 0.0
+        g_long_channel.append(g_long)
+        g_lat = v_curr**2 * track.points[i].curvature / 9.81
+        g_lat_channel.append(g_lat)
+        if v_avg > 0:
+            dt = ds / v_avg
+            lap_time += dt
+    logger.info(f"Estimated lap time: {lap_time:.2f} seconds")
     logger.info("Lap time simulation completed.")
-
-    # Prepare arrays for plotting
-    distances = [p.distance for p in track.points]
-    xCoords = [p.x for p in track.points]
-    yCoords = [p.y for p in track.points]
-    vCar_kph = np.array(finalSpeeds) * 3.6  # Convert m/s to kph
-    cornerSpeeds_kph = np.array(cornerSpeeds) * 3.6  # Convert m/s to kph
-
-    # --- Plot 1: Speed Profile with gLat and gLong traces ---
-    sns.set_theme(style="darkgrid", context="notebook")
-    fig1, ax1 = plt.subplots(figsize=(12, 6))
-    ax1.plot(distances, vCar_kph, label='vCar (kph)', linewidth=2, color='tab:blue')
-    ax1.plot(distances, cornerSpeeds_kph, '--', label='Theoretical vCar limit', alpha=0.7, color='tab:gray')
-    ax1.set_xlabel('Distance along track (m)')
-    ax1.set_ylabel('Speed (kph)')
-    ax1.set_ylim(0, 150)  # Limit left axis to 150 kph
-    ax1.set_title(f'Lap Time: {lapTime:.2f} s\nLap Time Sim telemetry')
-    ax1.legend(loc='upper left')
-    # No grid for plot 1
-
-    # Create second y-axis for gLat and gLong
-    ax2 = ax1.twinx()
-    ax2.plot(distances[1:], gLatChannel, label='gLat', color='tab:green')
-    ax2.plot(distances[1:], gLongChannel, label='gLong', color='tab:orange')
-    ax2.set_ylabel('Acceleration (g)')
-    ax2.set_ylim(-10, 5)
-    ax2.legend(loc='upper right')
-    fig1.tight_layout()
-
-    # --- Plot 2: G-G-V Diagram ---
-    fig2, ax3 = plt.subplots(figsize=(8, 8))
-    scatter_g = ax3.scatter(gLongChannel, gLatChannel, c=vCar_kph[1:], cmap='viridis', s=20)
-    ax3.set_xlabel('Longitudinal Acceleration (g)')
-    ax3.set_ylabel('Lateral Acceleration (g)')
-    ax3.set_title('G-G-V Diagram')
-    cbar_g = fig2.colorbar(scatter_g, ax=ax3)
-    cbar_g.set_label('Speed (kph)')
-    ax3.grid(True, which='both', linestyle='--', alpha=0.7)
-    ax3.set_xlim(-1.5, 1.5)
-    ax3.set_ylim(-1.0, 1.0)
-    fig2.tight_layout()
-
-    # --- Plot 3: 2D Track Map with vCar Colour Gradient ---
-    fig3, ax4 = plt.subplots(figsize=(10, 8))
-    scatter_track = ax4.scatter(xCoords, yCoords, c=vCar_kph, cmap='plasma', s=8)
-    ax4.set_xlabel('X (m)')
-    ax4.set_ylabel('Y (m)')
-    ax4.set_title('2D Track Map: vCar (kph) Colour Gradient')
-    cbar_track = fig3.colorbar(scatter_track, ax=ax4)
-    cbar_track.set_label('Speed (kph)')
-    ax4.axis('equal')
-    fig3.tight_layout()
-
-    # Show all plots at once
-    plt.show()
+    results = LapTimeResults(
+        track=track,
+        final_speeds=np.array(final_speeds),
+        corner_speeds=np.array(corner_speeds),
+        lap_time=lap_time,
+        g_lat_channel=g_lat_channel,
+        g_long_channel=g_long_channel,
+        normal_load_per_tyre=normal_load_per_tyre,
+        long_force_per_tyre=long_force_per_tyre,
+        lat_force_per_tyre=lat_force_per_tyre,
+    )
+    plot_lap_time_results(results)

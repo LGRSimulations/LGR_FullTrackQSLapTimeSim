@@ -32,7 +32,7 @@ class BaseTyreModel(ABC):
         pass
     
     @abstractmethod
-    def getLateralForce(self, slipAngle: float, normalLoad: Optional[float] = None, 
+    def get_lateral_force(self, slipAngle: float, normalLoad: Optional[float] = None, 
                         camberAngle: Optional[float] = None, 
                         tyrePressure: Optional[float] = None,
                         temperature: Optional[float] = None) -> float:
@@ -52,7 +52,7 @@ class BaseTyreModel(ABC):
         pass
     
     @abstractmethod
-    def getLongitudinalForce(self, slipRatio: float, normalLoad: Optional[float] = None,
+    def get_longitudinal_force(self, slipRatio: float, normalLoad: Optional[float] = None,
                             tyrePressure: Optional[float] = None,
                             temperature: Optional[float] = None) -> float:
         """
@@ -70,7 +70,7 @@ class BaseTyreModel(ABC):
         pass
     
     @abstractmethod
-    def getCombinedForces(self, slipAngle: float, slipRatio: float, 
+    def get_combined_forces(self, slipAngle: float, slipRatio: float, 
                          normalLoad: Optional[float] = None) -> tuple:
         """
         Get combined lateral and longitudinal forces when both slip angle and slip ratio exist.
@@ -92,30 +92,26 @@ class LookupTableTyreModel(BaseTyreModel):
     This is the current implementation converted to use the base class.
     """
     
-    def __init__(self, tyreDataLat: pd.DataFrame, tyreDataLong: pd.DataFrame):
+    def __init__(self, tyre_data_lat: pd.DataFrame, tyre_data_long: pd.DataFrame):
         """
         Initialize lookup table tyre model.
         
         Args:
-            tyreDataLat: DataFrame with lateral tyre data
-            tyreDataLong: DataFrame with longitudinal tyre data
+            tyre_data_lat: DataFrame with lateral tyre data
+            tyre_data_long: DataFrame with longitudinal tyre data
         """
         super().__init__()
-        self.tyreDataLat = tyreDataLat
-        self.tyreDataLong = tyreDataLong
-
-        # Create interpolation functions for lateral forces
-        self.latForceInterp = interp1d(
-            tyreDataLat['Slip Angle [deg]'],
-            tyreDataLat['Lateral Force [N]'],
+        self.tyre_data_lat = tyre_data_lat
+        self.tyre_data_long = tyre_data_long
+        self.lat_force_interp = interp1d(
+            tyre_data_lat['Slip Angle [deg]'],
+            tyre_data_lat['Lateral Force [N]'],
             kind='linear',
             fill_value='extrapolate'
         )
-        
-        # Create interpolation functions for longitudinal forces
-        self.longForceInterp = interp1d(
-            tyreDataLong['Slip Ratio [%]'],
-            tyreDataLong['Longitudinal Force [N]'],
+        self.long_force_interp = interp1d(
+            tyre_data_long['Slip Ratio [%]'],
+            tyre_data_long['Longitudinal Force [N]'],
             kind='linear',
             fill_value='extrapolate'
         )
@@ -126,18 +122,18 @@ class LookupTableTyreModel(BaseTyreModel):
         Create a lookup table tyre model from configuration.
         
         Args:
-            config: Dictionary containing configuration parameters with filepath to tyre data
+            config: Dictionary containing configuration parameters with file_path to tyre data
             
         Returns:
             An instance of LookupTableTyreModel
         """
-        filepath = config.get('filepath')
-        if not filepath:
-            raise ValueError("Tyre model config must specify a filepath")
+        file_path = config.get('file_path')
+        if not file_path:
+            raise ValueError("Tyre model config must specify a file_path")
         
         # Get absolute path relative to project root
         project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
-        full_path = os.path.join(project_root, filepath)
+        full_path = os.path.join(project_root, file_path)
         
         # Read and process the tyre data file
         # This assumes a specific CSV format - adapt as needed for your data format
@@ -147,7 +143,7 @@ class LookupTableTyreModel(BaseTyreModel):
                 raise FileNotFoundError(f"Tyre data file not found: {full_path}")
                 
             # Read the tyre data
-            if filepath.endswith('.csv'):
+            if file_path.endswith('.csv'):
                 # For simple CSV format
                 df = pd.read_csv(full_path)
                 
@@ -155,12 +151,12 @@ class LookupTableTyreModel(BaseTyreModel):
                 # This is a simplified example - adjust based on your actual CSV structure
                 if 'dataType' in df.columns:
                     # If the CSV has a column identifying data type
-                    tyreDataLat = df[df['dataType'] == 'lateral'].reset_index(drop=True)
-                    tyreDataLong = df[df['dataType'] == 'longitudinal'].reset_index(drop=True)
+                    tyre_data_lat = df[df['dataType'] == 'lateral'].reset_index(drop=True)
+                    tyre_data_long = df[df['dataType'] == 'longitudinal'].reset_index(drop=True)
                 else:
                     # If separate columns for lateral and longitudinal data
                     # Create lateral dataframe
-                    tyreDataLat = pd.DataFrame({
+                    tyre_data_lat = pd.DataFrame({
                         'Slip Angle [deg]': df['Slip Angle [deg]'] if 'Slip Angle [deg]' in df.columns else df['SlipAngle'],
                         'Lateral Force [N]': df['Lateral Force [N]'] if 'Lateral Force [N]' in df.columns else df['LatForce'],
                         'Normal Load [N]': df['Normal Load [N]'] if 'Normal Load [N]' in df.columns else [3000] * len(df),
@@ -170,14 +166,14 @@ class LookupTableTyreModel(BaseTyreModel):
                     })
                     
                     # Create longitudinal dataframe
-                    tyreDataLong = pd.DataFrame({
+                    tyre_data_long = pd.DataFrame({
                         'Slip Ratio [%]': df['Slip Ratio [%]'] if 'Slip Ratio [%]' in df.columns else df['SlipRatio'],
                         'Longitudinal Force [N]': df['Longitudinal Force [N]'] if 'Longitudinal Force [N]' in df.columns else df['LongForce'],
                         'Normal Load [N]': df['Normal Load [N]'] if 'Normal Load [N]' in df.columns else [3000] * len(df),
                         'Tyre Pressure [kPa]': df['Tyre Pressure [kPa]'] if 'Tyre Pressure [kPa]' in df.columns else [200] * len(df),
                         'Temperature [C]': df['Temperature [C]'] if 'Temperature [C]' in df.columns else [25] * len(df)
                     })
-            elif filepath.endswith('.json'):
+            elif file_path.endswith('.json'):
                 # For JSON format
                 with open(full_path, 'r') as f:
                     tyre_data = json.load(f)
@@ -187,7 +183,7 @@ class LookupTableTyreModel(BaseTyreModel):
                 longitudinal_data = tyre_data.get('longitudinal', {})
                 
                 # Create dataframes
-                tyreDataLat = pd.DataFrame({
+                tyre_data_lat = pd.DataFrame({
                     'Slip Angle [deg]': lateral_data.get('slip_angles', []),
                     'Lateral Force [N]': lateral_data.get('forces', []),
                     'Normal Load [N]': lateral_data.get('normal_loads', [3000] * len(lateral_data.get('slip_angles', []))),
@@ -196,7 +192,7 @@ class LookupTableTyreModel(BaseTyreModel):
                     'Temperature [C]': lateral_data.get('temperatures', [25] * len(lateral_data.get('slip_angles', [])))
                 })
                 
-                tyreDataLong = pd.DataFrame({
+                tyre_data_long = pd.DataFrame({
                     'Slip Ratio [%]': longitudinal_data.get('slip_ratios', []),
                     'Longitudinal Force [N]': longitudinal_data.get('forces', []),
                     'Normal Load [N]': longitudinal_data.get('normal_loads', [3000] * len(longitudinal_data.get('slip_ratios', []))),
@@ -204,67 +200,63 @@ class LookupTableTyreModel(BaseTyreModel):
                     'Temperature [C]': longitudinal_data.get('temperatures', [25] * len(longitudinal_data.get('slip_ratios', [])))
                 })
             else:
-                raise ValueError(f"Unsupported file format: {filepath}")
+                raise ValueError(f"Unsupported file format: {file_path}")
                 
             # Return the model
-            return cls(tyreDataLat, tyreDataLong)
+            return cls(tyre_data_lat, tyre_data_long)
             
         except Exception as e:
             import logging
-            logging.error(f"Failed to load tyre data from {filepath}: {str(e)}")
+            logging.error(f"Failed to load tyre data from {file_path}: {str(e)}")
             raise
     
-    def getLateralForce(self, slipAngle: float, normalLoad: Optional[float] = None, 
-                       camberAngle: Optional[float] = None, 
-                       tyrePressure: Optional[float] = None,
-                       temperature: Optional[float] = None) -> float:
+    def get_lateral_force(self, slip_angle: float, normal_load: Optional[float] = None, 
+                        camber_angle: Optional[float] = None, 
+                        tyre_pressure: Optional[float] = None,
+                        temperature: Optional[float] = None) -> float:
         """
         Get lateral force for a given slip angle.
         For MVP, we use simple interpolation and ignore other parameters.
         """
-        return float(self.latForceInterp(slipAngle))
+        return float(self.lat_force_interp(slip_angle))
     
-    def getLongitudinalForce(self, slipRatio: float, normalLoad: Optional[float] = None,
-                            tyrePressure: Optional[float] = None,
-                            temperature: Optional[float] = None) -> float:
+    def get_longitudinal_force(self, slip_ratio: float, normal_load: Optional[float] = None,
+                              tyre_pressure: Optional[float] = None,
+                              temperature: Optional[float] = None) -> float:
         """
         Get longitudinal force for a given slip ratio.
         For MVP, we use simple interpolation and ignore other parameters.
         """
-        return float(self.longForceInterp(slipRatio))
+        return float(self.long_force_interp(slip_ratio))
     
-    def getCombinedForces(self, slipAngle: float, slipRatio: float, 
-                         normalLoad: Optional[float] = None) -> tuple:
+    def get_combined_forces(self, slip_angle: float, slip_ratio: float, 
+                           normal_load: Optional[float] = None) -> tuple:
         """
         Simple combined slip model that scales forces with friction circle.
         This is a very simplified approach that can be improved later.
         """
         # Pure lateral and longitudinal forces
-        Fy_pure = self.getLateralForce(slipAngle)
-        Fx_pure = self.getLongitudinalForce(slipRatio)
-        
+        fy_pure = self.get_lateral_force(slip_angle)
+        fx_pure = self.get_longitudinal_force(slip_ratio)
         # Simple friction circle approach
-        total_force = np.sqrt(Fx_pure**2 + Fy_pure**2)
-        
+        total_force = np.sqrt(fx_pure**2 + fy_pure**2)
         # If we're below grip limit, return pure forces
         if total_force == 0:
             return (0.0, 0.0)
-            
         # Scale forces to stay within friction circle
-        max_force = max(abs(Fx_pure), abs(Fy_pure)) * 1.414  # Simple approximation of max force
+        max_force = max(abs(fx_pure), abs(fy_pure)) * 1.414  # Simple approximation of max force
         if total_force > max_force:
             scale = max_force / total_force
-            Fx = Fx_pure * scale
-            Fy = Fy_pure * scale
+            fx = fx_pure * scale
+            fy = fy_pure * scale
         else:
-            Fx = Fx_pure
-            Fy = Fy_pure
-            
-        return (Fy, Fx)
+            fx = fx_pure
+            fy = fy_pure
+        return (fy, fx)
 
 
 # Factory function to create appropriate tyre model based on config
-def createTyreModel(config: Dict[str, Any]) -> BaseTyreModel:
+def create_tyre_model(config: Dict[str, Any]) -> BaseTyreModel:
     """
     Factory function to create a tyre model based on configuration.
     
@@ -274,10 +266,12 @@ def createTyreModel(config: Dict[str, Any]) -> BaseTyreModel:
     Returns:
         An instance of a BaseTyreModel subclass
     """
-    modelType = config.get('type', 'lookup')
-    
-    if modelType.lower() == 'lookup' or modelType.lower() == 'lookuptable':
+    model_type = config.get('type', 'lookup')
+    if model_type.lower() == 'lookup' or model_type.lower() == 'lookuptable':
         return LookupTableTyreModel.from_config(config)
+    elif model_type.lower() == 'ac_lut':
+        from .acLutTyre import ACLutTyreModel
+        return ACLutTyreModel.from_config(config)
     # TODO: Implement PacejkaTyreModel support here
     else:
-        raise ValueError(f"Unknown tyre model type: {modelType}")
+        raise ValueError(f"Unknown tyre model type: {model_type}")
