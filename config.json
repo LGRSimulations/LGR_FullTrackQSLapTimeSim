@@ -15,7 +15,6 @@
     "vehicle_parameters": "datasets/vehicle/parameters.json",
     "debug_mode": false,
     "full_telemetry_mode": true
-    ,
     "ambient_conditions": {
         "air_density": 1.225
     }
