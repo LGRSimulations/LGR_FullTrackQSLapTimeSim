@@ -321,11 +321,6 @@ def run_lap_time_simulation(track, vehicle, config) -> None:
     lap_time = 0.0
     g_lat_channel = []
     g_long_channel = []
-    mu_long_channel = []
-    mu_lat_channel = []
-    mu_combined_channel = []
-    signed_mu_long_channel = []
-    signed_mu_lat_channel = []
     normal_load_per_tyre = []
     long_force_per_tyre = []
     lat_force_per_tyre = []
@@ -341,29 +336,6 @@ def run_lap_time_simulation(track, vehicle, config) -> None:
         g_long_channel.append(g_long)
         g_lat = v_curr**2 * track.points[i].curvature / 9.81
         g_lat_channel.append(g_lat)
-        fz_per_tyre = vehicle.compute_static_normal_load()
-        normal_load_per_tyre.append(fz_per_tyre)
-        f_long_total = g_long * 9.81 * vehicle.params.mass
-        f_long_per_tyre = f_long_total / 4.0
-        long_force_per_tyre.append(f_long_per_tyre)
-        f_lat_total = g_lat * 9.81 * vehicle.params.mass
-        f_lat_per_tyre = f_lat_total / 4.0
-        lat_force_per_tyre.append(f_lat_per_tyre)
-        if fz_per_tyre > 0:
-            mu_long = abs(f_long_per_tyre) / fz_per_tyre
-            signed_mu_long = np.sign(f_long_per_tyre) * mu_long
-            mu_lat = abs(f_lat_per_tyre) / fz_per_tyre
-            signed_mu_lat = np.sign(f_lat_per_tyre) * mu_lat
-            mu_combined = np.sqrt(mu_long**2 + mu_lat**2)
-        else:
-            mu_long = 0.0
-            mu_lat = 0.0
-            mu_combined = 0.0
-        mu_long_channel.append(mu_long)
-        mu_lat_channel.append(mu_lat)
-        signed_mu_long_channel.append(signed_mu_long)
-        signed_mu_lat_channel.append(signed_mu_lat)
-        mu_combined_channel.append(mu_combined)
         if v_avg > 0:
             dt = ds / v_avg
             lap_time += dt
@@ -371,19 +343,13 @@ def run_lap_time_simulation(track, vehicle, config) -> None:
     logger.info("Lap time simulation completed.")
     results = LapTimeResults(
         track=track,
-        finalSpeeds=np.array(final_speeds),
-        cornerSpeeds=np.array(corner_speeds),
-        lapTime=lap_time,
-        gLatChannel=g_lat_channel,
-        gLongChannel=g_long_channel,
-        muLongChannel=mu_long_channel,
-        muLatChannel=mu_lat_channel,
-        muCombinedChannel=mu_combined_channel,
-        signedMuLongChannel=signed_mu_long_channel,
-        signedMuLatChannel=signed_mu_lat_channel,
-        normalLoadPerTyre=normal_load_per_tyre,
-        longForcePerTyre=long_force_per_tyre,
-        latForcePerTyre=lat_force_per_tyre,
-        # Add any new channels here in the future!
+        final_speeds=np.array(final_speeds),
+        corner_speeds=np.array(corner_speeds),
+        lap_time=lap_time,
+        g_lat_channel=g_lat_channel,
+        g_long_channel=g_long_channel,
+        normal_load_per_tyre=normal_load_per_tyre,
+        long_force_per_tyre=long_force_per_tyre,
+        lat_force_per_tyre=lat_force_per_tyre,
     )
     plot_lap_time_results(results)

@@ -187,7 +187,8 @@ class Vehicle:
         Returns:
             Drag force in N
         """
-        rho = 1.225  # Air density in kg/m^3 at sea level
+        # Use air density from config if available, else default to 1.225
+        rho = self.config.get('ambient_conditions', {}).get('air_density', 1.225)
         f_drag = 0.5 * rho * self.params.drag_coefficient * self.params.frontal_area * v_car**2
         return f_drag
     
@@ -203,7 +204,8 @@ class Vehicle:
         Returns:
             Downforce in N
         """
-        rho = 1.225  # Air density in kg/m^3 at sea level
+        # Use air density from config if available, else default to 1.225
+        rho = self.config.get('ambient_conditions', {}).get('air_density', 1.225)
         f_downforce = 0.5 * rho * self.params.downforce_coefficient * self.params.frontal_area * v_car**2
         return f_downforce
     

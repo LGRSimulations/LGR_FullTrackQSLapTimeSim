@@ -18,7 +18,7 @@ class ACLutTyreModel(BaseTyreModel):
         Args:
             dx_lut: DataFrame with longitudinal grip multipliers vs load
             dy_lut: DataFrame with lateral grip multipliers vs load
-            base_mu: Base coefficient of friction of the tire compound (default 1.5)
+            base_mu: Base coefficient of friction of the tire compound
         """
         super().__init__()
         self.base_mu = base_mu
@@ -41,14 +41,15 @@ class ACLutTyreModel(BaseTyreModel):
         """
         Create an AC LUT tyre model from configuration.
         Args:
-            config: Dictionary with 'file_path' (DX_LUT) and 'file_path_dy' (DY_LUT)
+            config: Dictionary with 'file_path_dx' (DX_LUT) and 'file_path_dy' (DY_LUT)
+            
         Returns:
             An instance of ACLutTyreModel
         """
-        filepath_dx = config.get('file_path')
+        filepath_dx = config.get('file_path_dx')
         filepath_dy = config.get('file_path_dy')
         if not filepath_dx or not filepath_dy:
-            raise ValueError("AC_LUT tyre model requires 'file_path' (DX_LUT) and 'file_path_dy' (DY_LUT)")
+            raise ValueError("AC_LUT tyre model requires 'file_path_dx' (DX_LUT) and 'file_path_dy' (DY_LUT)")
         project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
         full_path_dx = os.path.join(project_root, filepath_dx)
         full_path_dy = os.path.join(project_root, filepath_dy)
@@ -65,9 +66,7 @@ class ACLutTyreModel(BaseTyreModel):
             import logging
             logging.error(f"Failed to load AC LUT tyre data: {str(e)}")
             raise
-            # Get optional parameters from config
-            base_mu = config.get('base_mu')
-            return cls(dx_lut, dy_lut, base_mu)
+
     
     def _get_dx_multiplier(self, normal_load: float) -> float:
         """Get normalized longitudinal grip multiplier for given load."""
