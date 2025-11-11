@@ -1,7 +1,7 @@
 {
     "general": {
-        "name": "F25Car",
-        "mass": 275.0
+        "name": "F25_IC_Car",
+        "mass": 320.0
     },
     "aerodynamics": {
         "frontalArea": 0.75,
@@ -12,7 +12,7 @@
     "geometry": {
         "wheelbase": 1.6,
         "frontTrackWidth": 1.26,
-        "rearTrackWidth": 1.23,
+        "rearTrackWidth": 1.23, 
         "coGHeight": 0.48,
         "coGLongitudinalPos": 0.5
     },

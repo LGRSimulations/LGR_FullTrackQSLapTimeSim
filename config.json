@@ -3,12 +3,8 @@
         "powertrain" : "datasets/vehicle/PU_data/Honda_CBR_600RR_RPM_vs_Peak_Power.csv",
         "type": "lookup"
     },
-    "drivetrain" :{
-        "filepath" : "datasets/Drivetrain/DT_6Speed.csv",
-        "type": "lookup"
-    },
     "track": {
-        "filepath" : "datasets/Tracks/FSUK.txt"
+        "filepath" : "datasets/tracks/FSUK.txt"
     },
     "tyreModel":{
         "filepath": "datasets/vehicle/tyre_data/DX_LUT.csv",
@@ -18,6 +14,5 @@
     },
     "vehicleParameters": "datasets/vehicle/parameters.json",
     "debugMode": false,
-    "fullTelemetryMode": true,
-    "outputDirectory": "output"
+    "fullTelemetryMode": true
 }
