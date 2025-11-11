@@ -16,7 +16,7 @@ class TrackPoint:
     z: float
     curvature: float
     heading: float
-    elevationAngle: float
+    elevation_angle: float
 
 class Track:
     """
@@ -24,15 +24,15 @@ class Track:
     
     Attributes:
         points: List of TrackPoint objects
-        totalLength: Total track length in meters
+        total_length: Total track length in meters
         is_closed: Whether the track forms a closed loop
     """
     def __init__(self, points: list[TrackPoint], is_closed: bool = True):
         self.points = points
         self.is_closed = is_closed
-        self.totalLength = points[-1].distance if points else 0.0
+        self.total_length = points[-1].distance if points else 0.0
 
-def loadTrack(filePath: str, debugMode) -> Track:
+def load_track(file_path: str, debug_mode) -> Track:
     """
     Load track format (x, y, z, q coordinates).
     
@@ -42,12 +42,12 @@ def loadTrack(filePath: str, debugMode) -> Track:
     Returns:
         Track object with computed geometric properties
     """
-    absPath = os.path.abspath(filePath)
-    logger.info(f"Loading track from {absPath}")
+    abs_path = os.path.abspath(file_path)
+    logger.info(f"Loading track from {abs_path}")
     
     # Read the track data, skipping comment lines
     data = []
-    with open(absPath, 'r') as f:
+    with open(abs_path, 'r') as f:
         for line in f:
             line = line.strip()
             if line and not line.startswith('#') and not line.startswith(':'):
@@ -61,19 +61,19 @@ def loadTrack(filePath: str, debugMode) -> Track:
         # Convert to numpy arrays for efficient computation
         coords = np.array(data)
         x, y, z = coords[:, 0], coords[:, 1], coords[:, 2]
-        
+
         # Calculate distances along track
-        distances = _calcCumDist(x, y, z)
-        
+        distances = _calc_cum_dist(x, y, z)
+
         # Calculate curvature using finite differences
-        curvatures = _calcCurvature(x, y, distances)
-        
+        curvatures = _calc_curvature(x, y, distances)
+
         # Calculate headings
-        headings = _calcHeadings(x, y)
-        
+        headings = _calc_headings(x, y)
+
         # Calculate elevation angles
-        elevationAngles = _calcElevationAngles(distances, z)
-        
+        elevation_angles = _calc_elevation_angles(distances, z)
+
         # Create TrackPoint objects
         points = []
         for i in range(len(x)):
@@ -84,13 +84,13 @@ def loadTrack(filePath: str, debugMode) -> Track:
                 z=z[i],
                 curvature=curvatures[i],
                 heading=headings[i],
-                elevationAngle=elevationAngles[i]
+                elevation_angle=elevation_angles[i]
             )
             points.append(point)
-        
+
         logger.info(f"Loaded track with {len(points)} points, total length: {distances[-1]:.1f}m")
-        
-        if debugMode is True:
+
+        if debug_mode is True:
             sns.set_theme(style="darkgrid", context="notebook") # Use seaborn style for the plot
 
             # 3D track visualization for validation
@@ -109,7 +109,7 @@ def loadTrack(filePath: str, debugMode) -> Track:
     if not data:
         raise ValueError("No valid track data found in file")
     
-def _calcCumDist(x: np.ndarray, y: np.ndarray, z: np.ndarray) -> np.ndarray:
+def _calc_cum_dist(x: np.ndarray, y: np.ndarray, z: np.ndarray) -> np.ndarray:
     """
     Calculate cumulative distance along track from coordinate arrays.
     Returns: 1D array of cumulative distances starting from 0.
@@ -120,16 +120,16 @@ def _calcCumDist(x: np.ndarray, y: np.ndarray, z: np.ndarray) -> np.ndarray:
     dz = np.diff(z)
     
     # 3D distance calculation
-    segmentLengths = np.sqrt(dx**2 + dy**2 + dz**2)
+    segments_lengths = np.sqrt(dx**2 + dy**2 + dz**2)
     
     # Cumulative distance starting from 0
     distances = np.zeros(len(x))
-    distances[1:] = np.cumsum(segmentLengths)
+    distances[1:] = np.cumsum(segments_lengths)
     
     return distances
 
 
-def _calcCurvature(x: np.ndarray, y: np.ndarray, distances: np.ndarray) -> np.ndarray:
+def _calc_curvature(x: np.ndarray, y: np.ndarray, distances: np.ndarray) -> np.ndarray:
     """
     Calculate track curvature using the formula:
     κ = (x'y'' - y'x'') / (x'^2 + y'^2)^(3/2)
@@ -174,7 +174,7 @@ def _calcCurvature(x: np.ndarray, y: np.ndarray, distances: np.ndarray) -> np.nd
     return curvatures
 
 
-def _calcHeadings(x: np.ndarray, y: np.ndarray) -> np.ndarray:
+def _calc_headings(x: np.ndarray, y: np.ndarray) -> np.ndarray:
     """
     Calculate track heading angles in radians.
     Returns:
@@ -196,7 +196,7 @@ def _calcHeadings(x: np.ndarray, y: np.ndarray) -> np.ndarray:
     return headings
 
 
-def _calcElevationAngles(distances: np.ndarray, z: np.ndarray) -> np.ndarray:
+def _calc_elevation_angles(distances: np.ndarray, z: np.ndarray) -> np.ndarray:
     """
     Calculate elevation angles (grade) in radians.
     Returns:
@@ -204,14 +204,14 @@ def _calcElevationAngles(distances: np.ndarray, z: np.ndarray) -> np.ndarray:
     Unit: radians (positive = uphill, negative = downhill)
     """
     n = len(distances)
-    elevationAngles = np.zeros(n)
+    elevation_angles = np.zeros(n)
     
     for i in range(n-1):
         ds = distances[i+1] - distances[i]
         dz = z[i+1] - z[i]
         if ds > 1e-10:
-            elevationAngles[i] = np.arctan(dz / ds)
+            elevation_angles[i] = np.arctan(dz / ds)
     
-    elevationAngles[-1] = elevationAngles[-2] if n > 1 else 0.0
+    elevation_angles[-1] = elevation_angles[-2] if n > 1 else 0.0
     
-    return elevationAngles
+    return elevation_angles

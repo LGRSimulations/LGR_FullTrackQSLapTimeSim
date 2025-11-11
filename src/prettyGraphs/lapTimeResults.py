@@ -49,8 +49,8 @@ def plot_lap_time_results(results):
     # --- Plot 1: Speed Profile with gLat and gLong traces ---
     sns.set_theme(style="darkgrid", context="notebook")
     fig1, ax1 = plt.subplots(figsize=(12, 6))
-    ax1.plot(distances, vCar_kph, label='vCar (kph)', linewidth=2, color='tab:blue')
-    ax1.plot(distances, cornerSpeeds_kph, '--', label='Theoretical vCar limit', alpha=0.7, color='tab:gray')
+    ax1.plot(distances, vCar_kph, label='v_car (kph)', linewidth=2, color='tab:blue')
+    ax1.plot(distances, cornerSpeeds_kph, '--', label='Theoretical v_car limit', alpha=0.7, color='tab:gray')
     ax1.set_xlabel('Distance along track (m)')
     ax1.set_ylabel('Speed (kph)')
     ax1.set_ylim(0, 150)  # Limit left axis to 150 kph
@@ -80,12 +80,12 @@ def plot_lap_time_results(results):
     ax3.set_ylim(min(gLongChannel)-1, max(gLongChannel)+1)
     fig2.tight_layout()
 
-    # --- Plot 3: 2D Track Map with vCar Colour Gradient ---
+    # --- Plot 3: 2D Track Map with v_car Colour Gradient ---
     fig3, ax4 = plt.subplots(figsize=(10, 8))
     scatter_track = ax4.scatter(xCoords, yCoords, c=vCar_kph, cmap='plasma', s=8)
     ax4.set_xlabel('X (m)')
     ax4.set_ylabel('Y (m)')
-    ax4.set_title('2D Track Map: vCar (kph) Colour Gradient')
+    ax4.set_title('2D Track Map: v_car (kph) Colour Gradient')
     cbar_track = fig3.colorbar(scatter_track, ax=ax4)
     cbar_track.set_label('Speed (kph)')
     ax4.axis('equal')
