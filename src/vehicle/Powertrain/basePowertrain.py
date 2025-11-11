@@ -185,8 +185,8 @@ class LookupTablePowertrainModel(BasePowertrainModel):
             return (power_kW * 1000 * 60) / (2 * np.pi * 1.0) if power_kW > 0 else 0.0
         
         # Ensure RPM is within bounds
-            rpm = max(self.min_rpm, min(rpm, self.max_rpm))
-            rpm = float(rpm)  # Ensure rpm is a native Python float
+        rpm = max(self.min_rpm, min(rpm, self.max_rpm))
+        rpm = float(rpm)  # Ensure rpm is a native Python float
         
         # Get power at this RPM
         power_kW = self.getPower(rpm, throttle)
