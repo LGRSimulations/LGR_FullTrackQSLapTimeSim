@@ -42,6 +42,7 @@ while col_idx < len(test_lat_headers):
                 normal_load_val = float(normal_load_str)
                 test_lateral_col_map.append((normal_load_val, col_idx, lateral_force_col_idx, False))
             except ValueError:
+                # Ignore columns where normal load is not a valid float
                 pass
         col_idx += 2
         continue
@@ -50,6 +51,7 @@ while col_idx < len(test_lat_headers):
             normal_load_val = float(normal_load_str)
             test_lateral_col_map.append((normal_load_val, col_idx-1, col_idx, False))
         except ValueError:
+            # Ignore columns where normal load is not a valid float
             pass
         col_idx += 1
         continue
