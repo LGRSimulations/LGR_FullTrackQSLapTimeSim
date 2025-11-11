@@ -1,19 +1,21 @@
 {
     "powertrain": {
-        "powertrain" : "datasets/Powertrains/powertrain.csv",
-        "type": "lookup"
-    },
-    "drivetrain" :{
-        "filepath" : "datasets/Drivetrain/DT_6Speed.csv",
+        "powertrain" : "datasets/vehicle/PU_data/Honda_CBR_600RR_RPM_vs_Peak_Power.csv",
         "type": "lookup"
     },
     "track": {
-        "filepath" : "datasets/Tracks/FSUK.txt"
+        "file_path" : "datasets/tracks/FSUK.txt"
     },
-    "tyreModel":{
-        "filepath": "datasets/Tyres/tyreData.csv",
-        "type": "lookup"
+    "tyre_model":{
+        "file_path_dx": "datasets/vehicle/tyre_data/DX_LUT.csv",
+        "file_path_dy": "datasets/vehicle/tyre_data/DY_LUT.csv",
+        "type": "AC_LUT",
+        "base_mu": 1.5
     },
-    "debugMode": false,
-    "fullTelemetryMode": true
+    "vehicle_parameters": "datasets/vehicle/parameters.json",
+    "debug_mode": false,
+    "full_telemetry_mode": true,
+    "ambient_conditions": {
+        "air_density": 1.225
+    }
 }
