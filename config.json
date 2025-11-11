@@ -4,15 +4,15 @@
         "type": "lookup"
     },
     "track": {
-        "filepath" : "datasets/tracks/FSUK.txt"
+        "file_path" : "datasets/tracks/FSUK.txt"
     },
-    "tyreModel":{
-        "filepath": "datasets/vehicle/tyre_data/DX_LUT.csv",
-        "filepath2": "datasets/vehicle/tyre_data/DY_LUT.csv",
+    "tyre_model":{
+        "file_path": "datasets/vehicle/tyre_data/DX_LUT.csv",
+        "file_path_dy": "datasets/vehicle/tyre_data/DY_LUT.csv",
         "type": "AC_LUT",
-        "baseMu": 1.5
+        "base_mu": 1.5
     },
-    "vehicleParameters": "datasets/vehicle/parameters.json",
-    "debugMode": false,
-    "fullTelemetryMode": true
+    "vehicle_parameters": "datasets/vehicle/parameters.json",
+    "debug_mode": false,
+    "full_telemetry_mode": true
 }

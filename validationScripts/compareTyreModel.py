@@ -113,7 +113,7 @@ for i, (load, slip_idx, force_idx, _) in enumerate(lat_col_map):
     mask = ~np.isnan(slip) & ~np.isnan(fy_exp)
     slip = slip[mask]
     fy_exp = fy_exp[mask]
-    fy_model = np.array([tyre.getLateralForce(sa, normalLoad=load) for sa in slip])
+    fy_model = np.array([tyre.get_lateral_force(sa, normalLoad=load) for sa in slip])
     label_test = f"Test {int(load)}N"
     label_model = f"Model {int(load)}N"
     ax1.plot(slip, [load]*len(slip), fy_exp, 'o', label=label_test if i==0 else "")
@@ -140,7 +140,7 @@ for i, (load, sr_idx, fx_idx) in enumerate(long_col_map):
     mask = ~np.isnan(sr) & ~np.isnan(fx_exp)
     sr = sr[mask]
     fx_exp = fx_exp[mask]
-    fx_model = np.array([tyre.getLongitudinalForce(s*100, normalLoad=load) for s in sr])  # s*100 as SR is fraction
+    fx_model = np.array([tyre.get_longitudinal_force(s*100, normalLoad=load) for s in sr])  # s*100 as SR is fraction
     label_test = f"Test {int(load)}N"
     label_model = f"Model {int(load)}N"
     ax2.plot(sr, [load]*len(sr), fx_exp, 'o', label=label_test if i==0 else "")
