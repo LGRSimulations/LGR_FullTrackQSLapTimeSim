@@ -106,7 +106,7 @@ def find_vehicle_state_at_point(curvature: float, vehicle):
         """
         v_car, a_steer, a_sideslip = x
         result = evaluate_vehicle_state(v_car, a_steer, a_sideslip, curvature, vehicle, debug_mode)
-        tolerance = 50.0
+        tolerance = 5.0
         return tolerance - abs(result['m_z'])
 
     # Define constraint function for lateral acceleration vs. curvature
@@ -125,7 +125,7 @@ def find_vehicle_state_at_point(curvature: float, vehicle):
         """
         v_car, a_steer, a_sideslip = x
         result = evaluate_vehicle_state(v_car, a_steer, a_sideslip, curvature, vehicle, debug_mode)
-        return 4 - abs(result['g_lat']) / 9.81
+        return 2 - abs(result['g_lat']) / 9.81
 
     # Initial guess based on simple bicycle model
     # Estimate initial steering angle from curvature and wheelbase

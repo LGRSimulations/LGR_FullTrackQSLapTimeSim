@@ -1,6 +1,6 @@
 {
     "powertrain": {
-        "powertrain" : "datasets/vehicle/PU_data/Honda_CBR_600RR_RPM_vs_Peak_Power.csv",
+        "powertrain" : "datasets/vehicle/PU_data/EMRAX_228_HV_CC_P_motor_speed.csv",
         "type": "lookup"
     },
     "track": {
@@ -10,7 +10,7 @@
         "file_path_dx": "datasets/vehicle/tyre_data/DX_LUT.csv",
         "file_path_dy": "datasets/vehicle/tyre_data/DY_LUT.csv",
         "type": "AC_LUT",
-        "base_mu": 1.5
+        "base_mu": 1.3
     },
     "vehicle_parameters": "datasets/vehicle/parameters.json",
     "debug_mode": false,

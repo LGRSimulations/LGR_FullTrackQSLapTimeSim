@@ -10,16 +10,16 @@
         "aero_cp": 1.0
     },
     "geometry": {
-        "wheelbase": 1.6,
+        "wheelbase": 1.8,
         "front_track_width": 1.26,
         "rear_track_width": 1.23, 
         "cog_height": 0.48,
-        "cog_longitudinal_pos": 0.5
+        "cog_longitudinal_pos": 0.4
     },
     "drivetrain": {
         "wheel_radius": 0.2032,
-        "final_drive_ratio": 2.6,
-        "gear_ratios": [2.75, 2, 1.667, 1.304, 1.208],
+        "final_drive_ratio": 1,
+        "gear_ratios": [1, 1, 1, 1, 1],
         "transmission_efficiency": 0.95
     },
     "_comments": {
