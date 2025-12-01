@@ -1,7 +1,8 @@
 {
     "general": {
         "name": "F25_IC_Car",
-        "mass": 320.0
+        "mass": 320.0,
+        "base_mu": 1.5
     },
     "aerodynamics": {
         "frontal_area": 0.75,
