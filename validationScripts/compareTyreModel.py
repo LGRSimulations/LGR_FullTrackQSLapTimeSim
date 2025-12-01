@@ -4,23 +4,25 @@ import matplotlib.pyplot as plt
 import os
 import sys
 
-# Import ACLutTyreModel from the src directory
+# Import Look Up table tyre model from the src directory
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
-from vehicle.Tyres.acLutTyre import ACLutTyreModel
+from vehicle.Tyres.baseTyre import LookupTableTyreModel
 
-BASE_MU = 1.5
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 VEHICLE_MASS = 320  # Kg, including driver
 REPRESENTATIVE_NORMAL_LOAD = VEHICLE_MASS * 9.81 / 4  # N, per wheel
 
-MODEL_DX_LUT_PATH = os.path.join(SCRIPT_DIR, '..', 'datasets', 'vehicle', 'tyre_data', 'DX_LUT.csv')
-MODEL_DY_LUT_PATH = os.path.join(SCRIPT_DIR, '..', 'datasets', 'vehicle', 'tyre_data', 'DY_LUT.csv')
 TEST_LATERAL_CSV = os.path.join(SCRIPT_DIR, '..', 'datasets', 'vehicle', 'tyre_data', 'Round_8_12_PSI_Lateral_Load_TyreData.csv')
 TEST_LONGITUDINAL_CSV = os.path.join(SCRIPT_DIR, '..', 'datasets', 'vehicle', 'tyre_data', 'Round_6_12_PSI_Longit_Load_TyreData.csv')
 
-model_DX_LUT = pd.read_csv(MODEL_DX_LUT_PATH)
-model_DY_LUT = pd.read_csv(MODEL_DY_LUT_PATH)
-tyre = ACLutTyreModel(model_DX_LUT, model_DY_LUT, BASE_MU)
+# Parse tyre CSVs with the LookupTableTyreModel helpers and instantiate model
+full_lat_path = os.path.abspath(TEST_LATERAL_CSV)
+full_long_path = os.path.abspath(TEST_LONGITUDINAL_CSV)
+
+tyre_data_lat = LookupTableTyreModel._parse_lateral_file(full_lat_path)
+tyre_data_long = LookupTableTyreModel._parse_longitudinal_file(full_long_path)
+
+tyre = LookupTableTyreModel(tyre_data_lat, tyre_data_long)
 
 # --- Test Lateral Data ---
 test_lat_raw = pd.read_csv(TEST_LATERAL_CSV, header=None)

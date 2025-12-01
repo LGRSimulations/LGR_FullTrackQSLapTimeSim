@@ -1,7 +1,8 @@
 {
     "general": {
         "name": "F25_IC_Car",
-        "mass": 320.0
+        "mass": 320.0,
+        "base_mu": 1.5
     },
     "aerodynamics": {
         "frontal_area": 0.75,
@@ -13,8 +14,15 @@
         "wheelbase": 1.6,
         "front_track_width": 1.26,
         "rear_track_width": 1.23, 
-        "cog_height": 0.48,
-        "cog_longitudinal_pos": 0.5
+        "cog_z": 0.48,
+        "cog_longitudinal_pos": 0.5,
+        "max_cog_z": 0.6
+    },
+    "vehicle_dynamics": {
+        "roll_stiffness": 21439.4904459,
+        "suspension_stiffness": 21439,
+        "damping_coefficient": 0,
+        "max_roll_angle_deg": 10
     },
     "drivetrain": {
         "wheel_radius": 0.2032,
@@ -31,7 +39,7 @@
         "wheelbase": "m",
         "front_track_width": "m",
         "rear_track_width": "m",
-        "cog_height": "m",
+        "cog_z": "m",
         "cog_longitudinal_pos": "fraction of wheelbase from front axle (0 to 1)",
         "wheel_radius": "m (effective rolling radius)",
         "final_drive_ratio": "dimensionless (final drive gear ratio)",
