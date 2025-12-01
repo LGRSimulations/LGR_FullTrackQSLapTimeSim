@@ -55,11 +55,11 @@ def estimate_effective_cog_z(v_car: float, a_steer: float, a_sideslip: float, cu
     """
 
     params = getattr(vehicle, 'params', None)
-    mass = getattr(params, 'mass')               # kg
-    roll_stiffness = getattr(params, 'roll_stiffness') # Nm/rad total      # kg/m^3
-    max_CoG_z = getattr(params, 'max_cog_z')  
-    cog_z = getattr(params, 'cog_z')                     # m
-    track = getattr(params, 'rear_track_width')               # m
+    mass = getattr(params, 'mass')                      # kg
+    roll_stiffness = getattr(params, 'roll_stiffness')  # Nm/rad total
+    max_CoG_z = getattr(params, 'max_cog_z')            # m
+    cog_z = getattr(params, 'cog_z')                    # m
+    track = getattr(params, 'rear_track_width')         # m
 
     # compute lateral acceleration (m/s^2) (use curvature based if available)
     try:

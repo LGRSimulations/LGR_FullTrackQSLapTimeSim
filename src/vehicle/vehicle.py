@@ -11,6 +11,7 @@ class vehicle_parameters:
     """Core vehicle parameters for point mass simulation."""
     name: str
     mass: float  # kg
+    base_mu: float  # dimensionless (base coefficient of friction for tyres)
     frontal_area: float  # m²
     drag_coefficient: float  # dimensionless
     downforce_coefficient: float  # dimensionless (L/D ratio typically)
@@ -324,6 +325,7 @@ def load_vehicle_parameters(file_path: str) -> vehicle_parameters:
     params = vehicle_parameters(
         name=data['general']['name'],
         mass=data['general']['mass'],
+        base_mu=data['general']['base_mu'],
         frontal_area=data['aerodynamics']['frontal_area'],
         drag_coefficient=data['aerodynamics']['drag_coefficient'],
         downforce_coefficient=data['aerodynamics']['downforce_coefficient'],
