@@ -11,6 +11,7 @@ class vehicle_parameters:
     """Core vehicle parameters for point mass simulation."""
     name: str
     mass: float  # kg
+    base_mu: float  # dimensionless (base coefficient of friction for tyres)
     frontal_area: float  # m²
     drag_coefficient: float  # dimensionless
     downforce_coefficient: float  # dimensionless (L/D ratio typically)
@@ -18,12 +19,18 @@ class vehicle_parameters:
     wheelbase: float  # m
     front_track_width: float  # m
     rear_track_width: float  # m
-    cog_height: float  # m
+    cog_z: float  # m
+    max_cog_z: float  # m
+    max_roll_angle_deg: float  # degrees
     cog_longitudinal_pos: float  # fraction of wheelbase from front axle (0 to 1)
     wheel_radius: float  # m (effective rolling radius)
     final_drive_ratio: float  # dimensionless (final drive gear ratio)
     gear_ratios: list  # dimensionless (gear ratios for each gear)
     transmission_efficiency: float  # dimensionless (0-1, mechanical efficiency)
+    roll_stiffness: float  # Nm/deg
+    suspension_stiffness: float  # N/m
+    damping_coefficient: float  # Ns/m
+
 
 class PowerUnit:
     """
@@ -298,7 +305,7 @@ class Vehicle:
                 optimal_gear = gear_ratio
         return optimal_gear
         
-from .Tyres.baseTyre import create_tyre_model
+from vehicle.Tyres.baseTyre import create_tyre_model
 from .Powertrain.basePowertrain import create_powertrain_model
 import json
 import os
@@ -318,6 +325,7 @@ def load_vehicle_parameters(file_path: str) -> vehicle_parameters:
     params = vehicle_parameters(
         name=data['general']['name'],
         mass=data['general']['mass'],
+        base_mu=data['general']['base_mu'],
         frontal_area=data['aerodynamics']['frontal_area'],
         drag_coefficient=data['aerodynamics']['drag_coefficient'],
         downforce_coefficient=data['aerodynamics']['downforce_coefficient'],
@@ -325,12 +333,17 @@ def load_vehicle_parameters(file_path: str) -> vehicle_parameters:
         wheelbase=data['geometry']['wheelbase'],
         front_track_width=data['geometry']['front_track_width'],
         rear_track_width=data['geometry']['rear_track_width'],
-        cog_height=data['geometry']['cog_height'],
+        cog_z=data['geometry']['cog_z'],
         cog_longitudinal_pos=data['geometry']['cog_longitudinal_pos'],
+        max_cog_z=data['geometry']['max_cog_z'],
         wheel_radius=data['drivetrain']['wheel_radius'],
         final_drive_ratio=data['drivetrain']['final_drive_ratio'],
         gear_ratios=data['drivetrain']['gear_ratios'],
-        transmission_efficiency=data['drivetrain']['transmission_efficiency']
+        transmission_efficiency=data['drivetrain']['transmission_efficiency'],
+        roll_stiffness=data['vehicle_dynamics']['roll_stiffness'],
+        suspension_stiffness=data['vehicle_dynamics']['suspension_stiffness'],
+        damping_coefficient=data['vehicle_dynamics']['damping_coefficient'],
+        max_roll_angle_deg=data['vehicle_dynamics']['max_roll_angle_deg']
     )
     logger.info(f"Loaded vehicle parameters from {file_path}")
     return params

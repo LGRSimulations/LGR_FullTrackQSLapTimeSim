@@ -69,7 +69,8 @@ Note: If at any point in time, VS Code doesn't seem to have what I stated above,
 
 #### Configure the simulator 
 
-- Refer to config.json, this is where we choose the datasets we want to use for the lap time sim. 
+- Refer to `config.json`, this is where we choose the datasets we want to use for the lap time sim. 
+- Refer to `datasets/vehicle/parameters.json`
 - Datasets are found in the `datasets` folder. Datasets include Powertrain, Tyre, FSUK track data, etc.
 
 ## 📬 Questions?
