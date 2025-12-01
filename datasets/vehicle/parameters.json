@@ -26,7 +26,7 @@
     },
     "drivetrain": {
         "wheel_radius": 0.2032,
-        "final_drive_ratio": 2.6,
+        "final_drive_ratio": 3.125,
         "gear_ratios": [2.75, 2, 1.667, 1.304, 1.208],
         "transmission_efficiency": 0.95
     },
