@@ -9,8 +9,7 @@
     "tyre_model":{
         "file_path_longit": "datasets/vehicle/tyre_data/Round_6_12_PSI_Longit_Load_TyreData_parsed.csv",
         "file_path_lateral": "datasets/vehicle/tyre_data/Round_8_12_PSI_Lateral_Load_TyreData_parsed.csv",
-        "type": "lookup",
-        "base_mu": 1.5
+        "type": "lookup"
     },
     "vehicle_parameters": "datasets/vehicle/parameters.json",
     "debug_mode": false,

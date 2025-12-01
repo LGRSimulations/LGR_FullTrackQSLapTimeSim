@@ -4,11 +4,10 @@ import matplotlib.pyplot as plt
 import os
 import sys
 
-# Import ACLutTyreModel from the src directory
+# Import Look Up table tyre model from the src directory
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
 from vehicle.Tyres.baseTyre import LookupTableTyreModel
 
-# BASE_MU = 1.5
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 VEHICLE_MASS = 320  # Kg, including driver
 REPRESENTATIVE_NORMAL_LOAD = VEHICLE_MASS * 9.81 / 4  # N, per wheel
