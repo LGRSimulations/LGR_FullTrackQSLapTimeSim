@@ -561,3 +561,26 @@ class LookupTableTyreModel(BaseTyreModel):
         if groups:
             return pd.concat(groups, ignore_index=True)
         return pd.DataFrame(columns=['Slip Angle [deg]', 'Lateral Force [N]', 'Normal Load [N]', 'Camber Angle [deg]', 'Tyre Pressure [kPa]', 'Temperature [C]'])
+    
+def create_tyre_model(config: Dict[str, Any]) -> BaseTyreModel:
+    """
+    Factory function to create a tyre model based on configuration.
+    
+    Args:
+        config: Dictionary containing configuration parameters with 'type' key
+        
+    Returns:
+        An instance of a tyre model
+    """
+    tyre_model_type = config.get('type', 'lookup').lower()
+    if tyre_model_type == 'lookup':
+        full_lat_path = config.get('file_path_lateral').lower()
+        full_long_path = config.get('file_path_longit').lower()
+        tyre_data_lat = LookupTableTyreModel._parse_lateral_file(full_lat_path)
+        tyre_data_long = LookupTableTyreModel._parse_longitudinal_file(full_long_path)
+
+        tyre = LookupTableTyreModel(tyre_data_lat, tyre_data_long)
+
+        return tyre
+    else:
+        raise ValueError(f"Unsupported tyre model type: {tyre_model_type}")

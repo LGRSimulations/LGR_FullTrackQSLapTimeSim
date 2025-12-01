@@ -20,7 +20,7 @@ def optimise_speed_at_points(track_points, vehicle, config):
     for point in track_points:
         curvature = point.curvature
         result = find_vehicle_state_at_point(curvature, vehicle)
-        base_mu = getattr(vehicle.tyre_model, 'base_mu', None)
+        base_mu = getattr(vehicle.tyre_model, 'base_mu', 1.5)   # Default to 1.5 if not set
         if result['success']:
             logger.info(f"Optimized v_car: {result['v_car']:.2f} m/s for curvature={curvature:.4f}")
             point_speeds.append(result['v_car'])
