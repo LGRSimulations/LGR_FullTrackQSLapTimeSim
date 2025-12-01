@@ -17,6 +17,77 @@ def compute_v_car_max(g_lat: float, curvature: float) -> float:
     v_car_max = np.sqrt(abs(g_lat) / abs(curvature))   # m/s
     return v_car_max
 
+def estimate_roll_angle(v_car: float, a_steer: float, a_sideslip: float, curvature: float, vehicle, debug_mode=False):
+    """
+    Conservative roll angle estimate (rad) from lateral load transfer:
+      roll_angle = roll_moment / roll_stiffness
+    Returns (roll_angle_rad, margin) where margin = max_roll_angle_rad - abs(roll_angle_rad).
+    """
+    params = getattr(vehicle, 'params', None)
+    mass = getattr(params, 'mass', 1500.0)
+    cog_z = getattr(params, 'cog_z', getattr(params, 'cog_z'))
+    roll_stiffness = getattr(params, 'roll_stiffness')  # Nm/rad total
+    max_roll_angle_deg = getattr(params, 'max_roll_angle_deg')  # degrees allowed before fail
+    max_roll_angle_rad = np.deg2rad(max_roll_angle_deg)
+
+    # lateral acceleration (use curvature if present)
+    try:
+        g_lat = (v_car**2) * curvature
+    except Exception:
+        g_lat = 0.0
+    g_lat = float(abs(g_lat))
+
+    F_lat = mass * g_lat
+    roll_moment = F_lat * cog_z
+    roll_angle = roll_moment / max(1e-12, roll_stiffness)
+
+    margin = max_roll_angle_rad - abs(roll_angle)
+    if debug_mode:
+        print(f"[DEBUG][roll] v={v_car:.2f} g_lat={g_lat:.2f} roll_angle={roll_angle:.4f} rad "
+              f"max={max_roll_angle_rad:.4f} margin={margin:.4f}")
+    return roll_angle, margin
+    
+def estimate_effective_cog_z(v_car: float, a_steer: float, a_sideslip: float, curvature: float, vehicle, debug_mode) -> tuple:
+    """
+    Estimate effective CoG z (meters) after roll and aero-induced suspension compression.
+    Returns (feasible: bool, cog_z_est: float, margin: float) where margin = max_CoG_z - cog_z_est.
+    Uses vehicle.params.* when available, otherwise falls back to conservative defaults.
+    """
+
+    params = getattr(vehicle, 'params', None)
+    mass = getattr(params, 'mass')               # kg
+    roll_stiffness = getattr(params, 'roll_stiffness') # Nm/rad total      # kg/m^3
+    max_CoG_z = getattr(params, 'max_cog_z')  
+    cog_z = getattr(params, 'cog_z')                     # m
+    track = getattr(params, 'rear_track_width')               # m
+
+    # compute lateral acceleration (m/s^2) (use curvature based if available)
+    try:
+        g_lat = (v_car**2) * curvature
+    except Exception:
+        g_lat = 0.0
+    g_lat = float(abs(g_lat))
+
+    # lateral force and roll moment
+    F_lat = mass * g_lat                    # N
+    roll_moment = F_lat * cog_z             # Nm (approx, lever = cog_z)
+
+    # approximate roll angle (rad) and resulting vertical compression (heuristic)
+    roll_angle = roll_moment / max(1e-12, roll_stiffness)   # rad
+    # vertical displacement due to roll: approximate using small-angle geometry
+    # assume one side compresses roughly by track/2 * sin(roll_angle) -> use absolute value
+    delta_h_roll = abs((track / 2.0) * np.sin(roll_angle))
+
+    # total estimated lowering of CoG
+    cog_z_est = cog_z - (delta_h_roll)
+    # safety clamp (don't go negative)
+    cog_z_est = float(max(0.0, cog_z_est))
+
+    margin = max_CoG_z - cog_z_est
+    feasible = (cog_z_est <= max_CoG_z)
+
+    return feasible, cog_z_est, margin
+
 def evaluate_vehicle_state(v_car: float, a_steer: float, a_sideslip: float, curvature: float, vehicle, debug_mode) -> dict:
     """
     Evaluate vehicle state for given v_car, a_steer, a_sideslip, and track curvature.
@@ -99,15 +170,29 @@ def find_vehicle_state_at_point(curvature: float, vehicle):
             debug_info['last_result'] = result.copy() if hasattr(result, 'copy') else dict(result)
         return -v_car + penalty
 
-    # Define constraint function for yaw moment equilibrium
-    def constraint_yaw_moment(x):
-        """
-        Ensure that the yaw moment is close to zero. We use a tolerance of 50 Nm.
-        """
+
+    # Define constraint function for roll angle
+    def constraint_roll_angle(x):
+        """Inequality constraint: max_roll_angle - abs(roll_angle) >= 0"""
         v_car, a_steer, a_sideslip = x
-        result = evaluate_vehicle_state(v_car, a_steer, a_sideslip, curvature, vehicle, debug_mode)
-        tolerance = 50.0
-        return tolerance - abs(result['m_z'])
+        roll_angle, margin = estimate_roll_angle(v_car, a_steer, a_sideslip, curvature, vehicle, debug_mode)
+        if not np.isfinite(roll_angle):
+            return -1e6
+        return margin
+
+    # Define constraint function for CoG z-axis
+    def constraint_CoG_z_axis(x):
+            """
+            Ensure that the vertical height of the center of gravity remains within physical limits.
+            Uses estimate_effective_cog_z to compute an estimated CoG z for the current state.
+            """
+            v_car, a_steer, a_sideslip = x
+            feasible, cog_z_est, margin = estimate_effective_cog_z(v_car, a_steer, a_sideslip, curvature, vehicle, debug_mode)
+            # constraint must be >= 0 for 'ineq' type: return margin (max_CoG_z - cog_z_est)
+            # If estimate returned NaN or invalid, return large negative so optimizer treats it infeasible
+            if not np.isfinite(cog_z_est):
+                return -1e6
+            return margin
 
     # Define constraint function for lateral acceleration vs. curvature
     def constraint_g_lat(x):
@@ -125,7 +210,7 @@ def find_vehicle_state_at_point(curvature: float, vehicle):
         """
         v_car, a_steer, a_sideslip = x
         result = evaluate_vehicle_state(v_car, a_steer, a_sideslip, curvature, vehicle, debug_mode)
-        return 4 - abs(result['g_lat']) / 9.81
+        return 2 - abs(result['g_lat']) / 9.81
 
     # Initial guess based on simple bicycle model
     # Estimate initial steering angle from curvature and wheelbase
@@ -145,9 +230,10 @@ def find_vehicle_state_at_point(curvature: float, vehicle):
 
     # Define constraints
     constraints = [
-        {'type': 'ineq', 'fun': constraint_yaw_moment},
+        {'type': 'ineq', 'fun': constraint_CoG_z_axis},
         {'type': 'ineq', 'fun': constraint_g_lat},
-        {'type': 'ineq', 'fun': constraint_max_g_lat}
+        {'type': 'ineq', 'fun': constraint_max_g_lat},
+        {'type': 'ineq', 'fun': constraint_roll_angle}
     ]
 
     # Run optimization
