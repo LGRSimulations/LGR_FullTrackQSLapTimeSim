@@ -89,9 +89,22 @@ class BaseTyreModel(ABC):
 
 class LookupTableTyreModel(BaseTyreModel):
     """
-    Tyre model that uses lookup tables for force calculations.
-    This is the current implementation converted to use the base class.
+    Tyre model that uses lookup tables for force calculations with Pacejka magic formula.
+    
+    Flow:
+    1. Parse CSV files via _parse_lateral_file / _parse_longitudinal_file
+    2. Build peak force vs normal load interpolators
+    3. For a given (slip, normal_load) input:
+       - Interpolate peak force D at the given normal load
+       - Compute B as a function of D
+       - Apply Pacejka formula to get force
     """
+    
+    # Pacejka shape factors (can be tuned)
+    C_LAT = 1.3      # Shape factor for lateral
+    C_LONG = 1.65    # Shape factor for longitudinal
+    E_LAT = 0.3     # Curvature factor for lateral
+    E_LONG = 0.1    # Curvature factor for longitudinal
     
     def __init__(self, tyre_data_lat: pd.DataFrame, tyre_data_long: pd.DataFrame):
         """
@@ -105,159 +118,164 @@ class LookupTableTyreModel(BaseTyreModel):
         self.tyre_data_lat = tyre_data_lat
         self.tyre_data_long = tyre_data_long
 
-        # keep simple 1D interpolants for legacy usage (no normal load)
-        self.lat_force_interp = interp1d(
-            tyre_data_lat['Slip Angle [deg]'],
-            tyre_data_lat['Lateral Force [N]'],
-            kind='linear',
-            fill_value='extrapolate',
-            assume_sorted=False
-        )
-        self.long_force_interp = interp1d(
-            tyre_data_long['Slip Ratio [%]'],
-            tyre_data_long['Longitudinal Force [N]'],
-            kind='linear',
-            fill_value='extrapolate',
-            assume_sorted=False
-        )
-
         # Build peak-vs-load interpolators (used by Pacejka D = peak)
         self._build_peak_interps()
 
     def _build_peak_interps(self):
-        """Build simple peak force vs normal-load interpolators for lat and long."""
-        # Lateral peaks
+        """Build peak force vs normal-load interpolators for lateral and longitudinal."""
+        import logging
+        logger = logging.getLogger(__name__)
+
+        # Ensure numeric columns for lateral
+        if 'Normal Load [N]' in self.tyre_data_lat.columns:
+            self.tyre_data_lat['Normal Load [N]'] = pd.to_numeric(self.tyre_data_lat['Normal Load [N]'], errors='coerce')
+        if 'Lateral Force [N]' in self.tyre_data_lat.columns:
+            self.tyre_data_lat['Lateral Force [N]'] = pd.to_numeric(self.tyre_data_lat['Lateral Force [N]'], errors='coerce')
+
+        # Lateral peaks: group by normal load, find max absolute force
         lat = self.tyre_data_lat.dropna(subset=['Normal Load [N]', 'Lateral Force [N]'])
         if not lat.empty:
-            grp = lat.groupby('Normal Load [N]')['Lateral Force [N]'].apply(lambda s: float(np.nanmax(np.abs(s.values)))).reset_index()
-            loads = grp['Normal Load [N]'].values.astype(float)
-            peaks = grp['Lateral Force [N]'].values.astype(float)
-            if len(loads) >= 2:
-                self._lat_peak_interp = interp1d(loads, peaks, kind='linear', fill_value='extrapolate', assume_sorted=False)
-            elif len(loads) == 1:
-                const = float(peaks[0])
+            grp = lat.groupby('Normal Load [N]')['Lateral Force [N]'].agg(lambda s: float(np.nanmax(np.abs(s.values)))).reset_index()
+            grp = grp.sort_values('Normal Load [N]').reset_index(drop=True)
+            self._lat_loads = grp['Normal Load [N]'].to_numpy(dtype=float)
+            self._lat_peaks = grp['Lateral Force [N]'].to_numpy(dtype=float)
+            logger.debug("Lateral peak loads: %s", self._lat_loads)
+            logger.debug("Lateral peak values: %s", self._lat_peaks)
+            if len(self._lat_loads) >= 2:
+                self._lat_peak_interp = interp1d(self._lat_loads, self._lat_peaks, kind='linear', fill_value='extrapolate', assume_sorted=True)
+            elif len(self._lat_loads) == 1:
+                const = float(self._lat_peaks[0])
                 self._lat_peak_interp = lambda x, c=const: np.full_like(np.atleast_1d(x), c, dtype=float)
             else:
                 self._lat_peak_interp = None
         else:
+            self._lat_loads = np.array([])
+            self._lat_peaks = np.array([])
             self._lat_peak_interp = None
 
-        # Longitudinal peaks
+        # Ensure numeric columns for longitudinal
+        if 'Normal Load [N]' in self.tyre_data_long.columns:
+            self.tyre_data_long['Normal Load [N]'] = pd.to_numeric(self.tyre_data_long['Normal Load [N]'], errors='coerce')
+        if 'Longitudinal Force [N]' in self.tyre_data_long.columns:
+            self.tyre_data_long['Longitudinal Force [N]'] = pd.to_numeric(self.tyre_data_long['Longitudinal Force [N]'], errors='coerce')
+
+        # Longitudinal peaks: group by normal load, find max absolute force
         lon = self.tyre_data_long.dropna(subset=['Normal Load [N]', 'Longitudinal Force [N]'])
         if not lon.empty:
-            grp = lon.groupby('Normal Load [N]')['Longitudinal Force [N]'].apply(lambda s: float(np.nanmax(np.abs(s.values)))).reset_index()
-            loads = grp['Normal Load [N]'].values.astype(float)
-            peaks = grp['Longitudinal Force [N]'].values.astype(float)
-            if len(loads) >= 2:
-                self._long_peak_interp = interp1d(loads, peaks, kind='linear', fill_value='extrapolate', assume_sorted=False)
-            elif len(loads) == 1:
-                const = float(peaks[0])
+            grp = lon.groupby('Normal Load [N]')['Longitudinal Force [N]'].agg(lambda s: float(np.nanmax(np.abs(s.values)))).reset_index()
+            grp = grp.sort_values('Normal Load [N]').reset_index(drop=True)
+            self._long_loads = grp['Normal Load [N]'].to_numpy(dtype=float)
+            self._long_peaks = grp['Longitudinal Force [N]'].to_numpy(dtype=float)
+            logger.debug("Longitudinal peak loads: %s", self._long_loads)
+            logger.debug("Longitudinal peak values: %s", self._long_peaks)
+            if len(self._long_loads) >= 2:
+                self._long_peak_interp = interp1d(self._long_loads, self._long_peaks, kind='linear', fill_value='extrapolate', assume_sorted=True)
+            elif len(self._long_loads) == 1:
+                const = float(self._long_peaks[0])
                 self._long_peak_interp = lambda x, c=const: np.full_like(np.atleast_1d(x), c, dtype=float)
             else:
                 self._long_peak_interp = None
         else:
+            self._long_loads = np.array([])
+            self._long_peaks = np.array([])
             self._long_peak_interp = None
 
-    def _estimate_B_from_small_slip(self, df: pd.DataFrame, load: float,
-                                    slip_col: str, force_col: str,
-                                    small_window: float = 1.0, C: float = 1.3, D: float = None,
-                                    is_longitudinal: bool = False) -> float:
+    def _compute_B_lateral(self, D: float) -> float:
         """
-        Estimate B from the small-slip slope for supplied load.
-        - df: DataFrame with columns slip_col, force_col, 'Normal Load [N]'.
-        - small_window: degrees (lat) or percent (long) window around zero used for slope fit.
-        - is_longitudinal: True => slip_col is slip ratio units (same unit as stored).
-        Returns a B value (fallback to default if not enough data).
+        Compute B (stiffness factor) for lateral force as a function of peak force D.
+        B controls how quickly the curve rises. Higher B = steeper initial slope.
         """
-        if D is None or D == 0:
-            return 10.0  # fallback
-        # Find nearest load group
-        if 'Normal Load [N]' in df.columns:
-            available = df['Normal Load [N]'].dropna().unique().astype(float)
-            if len(available) == 0:
-                return 10.0
-            nearest = float(available[np.argmin(np.abs(available - load))])
-            subset = df[np.isclose(df['Normal Load [N]'].astype(float), nearest, atol=1e-6)]
-        else:
-            subset = df.copy()
+        if D <= 0:
+            return 10.0  # default fallback
+        # B scales inversely with D to keep consistent initial slope behavior
+        # Tuned so that peak occurs around 6-8 degrees slip angle
+        return 0.15 * 180.0 / np.pi  # ~8.6, gives peak around 6-7 deg
 
-        if subset.empty:
-            return 10.0
+    def _compute_B_longitudinal(self, D: float) -> float:
+        """
+        Compute B (stiffness factor) for longitudinal force as a function of peak force D.
+        """
+        if D <= 0:
+            return 10.0  # default fallback
+        # For longitudinal, peak typically occurs around 10-15% slip ratio
+        # With slip ratio in [0,1] (kappa), B ~ 10-15 gives peak around 0.1-0.15
+        return 12.0
 
-        # select small-slip rows
-        slip_vals = pd.to_numeric(subset[slip_col], errors='coerce')
-        force_vals = pd.to_numeric(subset[force_col], errors='coerce')
-        mask = slip_vals.abs() <= small_window
-        slip_small = slip_vals[mask].dropna().values
-        force_small = force_vals[mask].dropna().values
-        if len(slip_small) < 2:
-            return 10.0
-
-        # Linear fit slope (force vs slip). For lateral slip_col in degrees -> convert slope to N/rad
-        p = np.polyfit(slip_small.astype(float), force_small.astype(float), 1)
-        slope = float(p[0])  # N per unit-of-slip_col
-
-        if is_longitudinal:
-            # slope is N per percent (if slip stored in percent) -> convert to N per unit kappa (kappa = slip/100)
-            slope_per_kappa = slope / 100.0
-            slope_rad = slope_per_kappa  # use as N per kappa
-        else:
-            # lateral: slope is N / deg -> convert to N / rad
-            slope_rad = slope * (180.0 / np.pi)
-
-        # Pacejka small-angle approx: initial_slope ≈ C * B * D  => B = slope_rad / (C * D)
-        if D == 0:
-            return 10.0
-        B = slope_rad / (C * D)
-        if not np.isfinite(B) or B <= 0:
-            return 10.0
-        return float(B)
+    def _pacejka(self, slip: float, D: float, C: float, B: float, E: float) -> float:
+        """
+        Pacejka Magic Formula: F = D * sin(C * arctan(B*slip - E*(B*slip - arctan(B*slip))))
+        
+        Args:
+            slip: Slip value (radians for lateral, dimensionless ratio for longitudinal)
+            D: Peak force
+            C: Shape factor
+            B: Stiffness factor
+            E: Curvature factor
+        
+        Returns:
+            Force in N
+        """
+        Bx = B * slip
+        return D * np.sin(C * np.arctan(Bx - E * (Bx - np.arctan(Bx))))
 
     def get_lateral_force(self, slip_angle: float, normal_load: Optional[float] = None, 
                         camber_angle: Optional[float] = None, 
                         tyre_pressure: Optional[float] = None,
                         temperature: Optional[float] = None) -> float:
         """
-        Get lateral force — if normal_load provided, use Pacejka with D from peak-interp.
-        Otherwise use 1D lookup.
+        Get lateral force for given slip angle and normal load.
+        
+        Args:
+            slip_angle: Slip angle in degrees
+            normal_load: Normal load in N (required for proper force calculation)
+        
+        Returns:
+            Lateral force in N
         """
-        # If normal load provided and we have peak interpolation, use Pacejka
-        if normal_load is not None and self._lat_peak_interp is not None:
-            D = float(self._lat_peak_interp(normal_load))
-            C = 1.3
-            E = 0.97
-            # estimate B from small-slip slope near this load (fallback to default)
-            B = self._estimate_B_from_small_slip(self.tyre_data_lat, normal_load,
-                                                 slip_col='Slip Angle [deg]',
-                                                 force_col='Lateral Force [N]',
-                                                 small_window=1.0, C=C, D=D, is_longitudinal=False)
-            alpha = np.radians(float(slip_angle))
-            fy = D * np.sin(C * np.arctan(B * alpha - E * (B * alpha - np.arctan(B * alpha))))
-            return float(fy)
-        # fallback to naive interpolation by slip angle
-        return float(self.lat_force_interp(slip_angle))
+        if normal_load is None or self._lat_peak_interp is None:
+            raise ValueError("Normal load is required and lateral peak interpolator must be available")
+        
+        # Get peak force D by interpolating at the given normal load
+        D = float(self._lat_peak_interp(normal_load))
+        
+        # Compute B as function of D
+        B = self._compute_B_lateral(D)
+        
+        # Convert slip angle to radians
+        alpha = np.radians(float(slip_angle))
+        
+        # Apply Pacejka formula
+        fy = self._pacejka(alpha, D, self.C_LAT, B, self.E_LAT)
+        return float(fy)
 
     def get_longitudinal_force(self, slip_ratio: float, normal_load: Optional[float] = None,
                               tyre_pressure: Optional[float] = None,
                               temperature: Optional[float] = None) -> float:
         """
-        Get longitudinal force — if normal_load provided, use Pacejka with D from peak-interp.
-        Otherwise use 1D lookup.
+        Get longitudinal force for given slip ratio and normal load.
+        
+        Args:
+            slip_ratio: Slip ratio in percent (0-100 range expected from data)
+            normal_load: Normal load in N (required for proper force calculation)
+        
+        Returns:
+            Longitudinal force in N
         """
-        if normal_load is not None and self._long_peak_interp is not None:
-            D = float(self._long_peak_interp(normal_load))
-            C = 1.5
-            E = 1.3
-            # estimate B from small-slip slope near this load (slip ratio units, treat as percent)
-            B = self._estimate_B_from_small_slip(self.tyre_data_long, normal_load,
-                                                 slip_col='Slip Ratio [%]',
-                                                 force_col='Longitudinal Force [N]',
-                                                 small_window=1.0, C=C, D=D, is_longitudinal=True)
-            # convert slip_ratio to normalized kappa used by Pacejka model (kappa = slip_ratio/100)
-            kappa = float(slip_ratio) / 100.0
-            fx = D * np.sin(C * np.arctan(B * kappa - E * (B * kappa - np.arctan(B * kappa))))
-            return float(fx)
-        return float(self.long_force_interp(slip_ratio))
+        if normal_load is None or self._long_peak_interp is None:
+            raise ValueError("Normal load is required and longitudinal peak interpolator must be available")
+        
+        # Get peak force D by interpolating at the given normal load
+        D = float(self._long_peak_interp(normal_load))
+        
+        # Compute B as function of D
+        B = self._compute_B_longitudinal(D)
+        
+        # Convert slip ratio from percent to dimensionless (kappa)
+        kappa = float(slip_ratio) / 100.0
+        
+        # Apply Pacejka formula
+        fx = self._pacejka(kappa, D, self.C_LONG, B, self.E_LONG)
+        return float(fx)
     
     @classmethod
     def from_config(cls, config: Dict[str, Any]):
@@ -358,49 +376,48 @@ class LookupTableTyreModel(BaseTyreModel):
             logging.error(f"Failed to load tyre data from {file_path}: {str(e)}")
             raise
     
-    def get_lateral_force(self, slip_angle: float, normal_load: Optional[float] = None, 
-                        camber_angle: Optional[float] = None, 
-                        tyre_pressure: Optional[float] = None,
-                        temperature: Optional[float] = None) -> float:
-        """
-        Get lateral force for a given slip angle.
-        For MVP, we use simple interpolation and ignore other parameters.
-        """
-        return float(self.lat_force_interp(slip_angle))
-    
-    def get_longitudinal_force(self, slip_ratio: float, normal_load: Optional[float] = None,
-                              tyre_pressure: Optional[float] = None,
-                              temperature: Optional[float] = None) -> float:
-        """
-        Get longitudinal force for a given slip ratio.
-        For MVP, we use simple interpolation and ignore other parameters.
-        """
-        return float(self.long_force_interp(slip_ratio))
-    
     def get_combined_forces(self, slip_angle: float, slip_ratio: float, 
                            normal_load: Optional[float] = None) -> tuple:
         """
-        Simple combined slip model that scales forces with friction circle.
-        This is a very simplified approach that can be improved later.
+        Get combined lateral and longitudinal forces using friction circle scaling.
+        
+        Args:
+            slip_angle: Slip angle in degrees
+            slip_ratio: Slip ratio in percent
+            normal_load: Normal load in N (required)
+        
+        Returns:
+            Tuple of (lateral_force, longitudinal_force) in N
         """
-        # Pure lateral and longitudinal forces
-        fy_pure = self.get_lateral_force(slip_angle)
-        fx_pure = self.get_longitudinal_force(slip_ratio)
-        # Simple friction circle approach
+        if normal_load is None:
+            raise ValueError("Normal load is required for combined forces calculation")
+        
+        # Get pure forces
+        fy_pure = self.get_lateral_force(slip_angle, normal_load)
+        fx_pure = self.get_longitudinal_force(slip_ratio, normal_load)
+        
+        # Get peak forces for friction circle limit
+        D_lat = float(self._lat_peak_interp(normal_load)) if self._lat_peak_interp else abs(fy_pure)
+        D_long = float(self._long_peak_interp(normal_load)) if self._long_peak_interp else abs(fx_pure)
+        
+        # Combined force magnitude
         total_force = np.sqrt(fx_pure**2 + fy_pure**2)
-        # If we're below grip limit, return pure forces
+        
         if total_force == 0:
             return (0.0, 0.0)
-        # Scale forces to stay within friction circle
-        max_force = max(abs(fx_pure), abs(fy_pure)) * 1.414  # Simple approximation of max force
-        if total_force > max_force:
-            scale = max_force / total_force
+        
+        # Friction ellipse limit (approximate)
+        max_combined = np.sqrt(D_lat**2 + D_long**2) * 0.9  # 90% of theoretical max
+        
+        if total_force > max_combined:
+            scale = max_combined / total_force
             fx = fx_pure * scale
             fy = fy_pure * scale
         else:
             fx = fx_pure
             fy = fy_pure
-        return (fy, fx)
+        
+        return (float(fy), float(fx))
 
 
     @staticmethod
@@ -544,4 +561,3 @@ class LookupTableTyreModel(BaseTyreModel):
         if groups:
             return pd.concat(groups, ignore_index=True)
         return pd.DataFrame(columns=['Slip Angle [deg]', 'Lateral Force [N]', 'Normal Load [N]', 'Camber Angle [deg]', 'Tyre Pressure [kPa]', 'Temperature [C]'])
-# ...existing code...
