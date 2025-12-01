@@ -298,7 +298,7 @@ class Vehicle:
                 optimal_gear = gear_ratio
         return optimal_gear
         
-from .Tyres.baseTyre import create_tyre_model
+from vehicle.Tyres.baseTyre import create_tyre_model
 from .Powertrain.basePowertrain import create_powertrain_model
 import json
 import os
