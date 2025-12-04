@@ -15,14 +15,14 @@ from track.track import Track, load_track
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def run_range_test(vehicle, power_limit_kw, energy_capacity_kwh, dt=0.05):
+def run_range_test(vehicle, power_limit_kw, energy_target_kwh, dt=0.05):
     """
     Simulate a straight line run with a power limit until energy is depleted.
     
     Args:
         vehicle: Vehicle object
         power_limit_kw: Maximum power output allowed (kW)
-        energy_capacity_kwh: Total energy available (kWh)
+        energy_target_kwh: Total energy available (kWh)
         dt: Time step (s)
         
     Returns:
@@ -56,7 +56,7 @@ def run_range_test(vehicle, power_limit_kw, energy_capacity_kwh, dt=0.05):
         v_calc = max(v, 0.1) # Avoid zero division
         
         # Check Energy Status
-        if energy_used_kwh >= energy_capacity_kwh:
+        if energy_used_kwh >= energy_target_kwh:
             coasting = True
             
         # Gear Selection
@@ -203,16 +203,16 @@ def main():
     logger.info(f"Vehicle loaded: {vehicle.params.name}")
     
     # Simulation Parameters
-    energy_capacity_kwh = 0.5 # Example: 0.5 kWh battery/fuel equivalent
-    power_limits = [10, 20, 30, 40, 50, 60] # kW
+    energy_target_kwh = 0.5 # Example: 0.5 kWh battery/fuel equivalent
+    power_limits = [10, 20, 30, 40, 50] # kW
     
     results = []
     
-    logger.info(f"Starting Range Test Sweep with Energy Capacity: {energy_capacity_kwh} kWh")
+    logger.info(f"Starting Range Test Sweep with Energy Capacity: {energy_target_kwh} kWh")
     
     for p_lim in power_limits:
         logger.info(f"Testing Power Limit: {p_lim} kW")
-        dist, time, log = run_range_test(vehicle, p_lim, energy_capacity_kwh)
+        dist, time, log = run_range_test(vehicle, p_lim, energy_target_kwh)
         results.append({
             'power_limit': p_lim,
             'distance': dist,
@@ -229,7 +229,7 @@ def main():
     axs[0, 0].plot(power_limits, dists, 'o-', color='blue')
     axs[0, 0].set_xlabel('Power Limit (kW)')
     axs[0, 0].set_ylabel('Total Distance (m)')
-    axs[0, 0].set_title(f'Range vs Power Limit (Energy: {energy_capacity_kwh} kWh)')
+    axs[0, 0].set_title(f'Range vs Power Limit (Energy: {energy_target_kwh} kWh)')
     axs[0, 0].grid(True)
     
     # 2. Velocity Profiles
