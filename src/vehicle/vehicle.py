@@ -132,18 +132,65 @@ class Vehicle:
         """
         return self.params.mass * 9.81 / 4.0
         
-    def compute_tyre_forces(self, slip_angle_front: float, slip_angle_rear: float):
+    def compute_tyre_forces(self, slip_angle_front: float, slip_angle_rear: float, g_lat: float = 0.0):
         """
-        Compute lateral tire forces using the tire model.
+        Compute lateral tire forces using the tire model, accounting for lateral load transfer.
         Args:
             slip_angle_front: Front tire slip angle in degrees
             slip_angle_rear: Rear tire slip angle in degrees
+            g_lat: Lateral acceleration in m/s^2 (used for load transfer)
         Returns:
             (f_front, f_rear): Lateral forces in N
         """
-        tyre_normal_load = self.compute_static_normal_load()
-        f_front = self.tyre_model.get_lateral_force(slip_angle_front, normal_load=tyre_normal_load) * 2
-        f_rear = self.tyre_model.get_lateral_force(slip_angle_rear, normal_load=tyre_normal_load) * 2
+        # Physical constants
+        g = 9.81
+        mass = self.params.mass
+        weight = mass * g
+        
+        # Weight distribution
+        # cog_longitudinal_pos is fraction of wheelbase from front axle
+        cog_pos = self.params.cog_longitudinal_pos
+        w_front = weight * (1.0 - cog_pos)
+        w_rear = weight * cog_pos
+        
+        # Static wheel loads (per side)
+        fz_fl_static = w_front / 2.0
+        fz_fr_static = w_front / 2.0
+        fz_rl_static = w_rear / 2.0
+        fz_rr_static = w_rear / 2.0
+        
+        # Lateral Load Transfer
+        # Total Load Transfer = Mass * ay * h_cg / Track_Width
+        # We distribute load transfer based on static weight distribution (simplified LLTD)
+        
+        ay = abs(g_lat) # lateral acceleration magnitude
+        h_cg = self.params.cog_z # height of center of gravity
+        t_f = self.params.front_track_width # front track width
+        t_r = self.params.rear_track_width # rear track width
+        
+        # Load transfer per axle (Total load transferred from inside to outside)
+        delta_fz_f = (mass * ay * h_cg / t_f) * (w_front / weight)
+        delta_fz_r = (mass * ay * h_cg / t_r) * (w_rear / weight)
+        
+        # Apply load transfer (Outside +, Inside -)
+        # We calculate force for both sides and sum them
+        fz_fl = max(0.0, fz_fl_static - delta_fz_f)
+        fz_fr = max(0.0, fz_fr_static + delta_fz_f)
+        
+        fz_rl = max(0.0, fz_rl_static - delta_fz_r)
+        fz_rr = max(0.0, fz_rr_static + delta_fz_r)
+        
+        # Compute lateral forces
+        # Front
+        fy_fl = self.tyre_model.get_lateral_force(slip_angle_front, normal_load=fz_fl)
+        fy_fr = self.tyre_model.get_lateral_force(slip_angle_front, normal_load=fz_fr)
+        f_front = fy_fl + fy_fr
+        
+        # Rear
+        fy_rl = self.tyre_model.get_lateral_force(slip_angle_rear, normal_load=fz_rl)
+        fy_rr = self.tyre_model.get_lateral_force(slip_angle_rear, normal_load=fz_rr)
+        f_rear = fy_rl + fy_rr
+        
         return f_front, f_rear
     
     def compute_yaw_moment(self, f_front: float, f_rear: float, steer_angle: float) -> float:
