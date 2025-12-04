@@ -1,6 +1,7 @@
 # This script takes an input of an inner circle diameter, outer circle diameter, and track width
 # and generates a skidpad track layout in the format of cartesian coordinates.
 # The output is a txt file compatible with the track loader used in the simulator.
+# NOTE: This skidpad doesn't seem to converge very well with the sim....The sim seems better suited to non-consistent corners
 
 import numpy as np
 import os
