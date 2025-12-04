@@ -17,23 +17,27 @@ def optimise_speed_at_points(track_points, vehicle, config):
         point_speeds: List of maximum speeds for each point (m/s)
     """
     point_speeds = []
-    for point in track_points:
-        curvature = point.curvature
-        result = find_vehicle_state_at_point(curvature, vehicle)
-        base_mu = getattr(vehicle.params, 'base_mu')
-        if result['success']:
-            logger.info(f"Optimized v_car: {result['v_car']:.2f} m/s for curvature={curvature:.4f}")
-            point_speeds.append(result['v_car'])
+    for idx, point in enumerate(track_points):
+        if idx == 0:
+            point_speeds.append(0.01)
+            continue
         else:
-            logger.warning(f"Could not find equilibrium state for curvature={curvature:.4f}")
-            logger.warning(f"This is point at coordinates x={point.x}, y={point.y}, z={point.z}")
-            g = 9.81
-            if abs(curvature) > 1e-6:
-                v_fallback = np.sqrt(base_mu * g / abs(curvature))
+            curvature = point.curvature
+            result = find_vehicle_state_at_point(curvature, vehicle)
+            base_mu = getattr(vehicle.params, 'base_mu')
+            if result['success']:
+                logger.info(f"Optimized v_car: {result['v_car']:.2f} m/s for curvature={curvature:.4f}")
+                point_speeds.append(result['v_car'])
             else:
-                v_fallback = 200.0
-            logger.warning(f"Fallback: using v_fallback={v_fallback:.2f} m/s based on base_mu={base_mu}")
-            point_speeds.append(v_fallback)
+                logger.warning(f"Could not find equilibrium state for curvature={curvature:.4f}")
+                logger.warning(f"This is point at coordinates x={point.x}, y={point.y}, z={point.z}")
+                g = 9.81
+                if abs(curvature) > 1e-6:
+                    v_fallback = np.sqrt(base_mu * g / abs(curvature))
+                else:
+                    v_fallback = 200.0
+                logger.warning(f"Fallback: using v_fallback={v_fallback:.2f} m/s based on base_mu={base_mu}")
+                point_speeds.append(v_fallback)
     return point_speeds
 
 def forward_pass(track, vehicle, point_speeds):
