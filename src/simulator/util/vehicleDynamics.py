@@ -103,7 +103,9 @@ def evaluate_vehicle_state(v_car: float, a_steer: float, a_sideslip: float, curv
     """
     slip_angle_front = a_steer - a_sideslip
     slip_angle_rear = -a_sideslip
-    f_front, f_rear = vehicle.compute_tyre_forces(slip_angle_front, slip_angle_rear)
+    g_lat_est = (v_car**2) * curvature
+    
+    f_front, f_rear = vehicle.compute_tyre_forces(slip_angle_front, slip_angle_rear, g_lat=g_lat_est)
     m_z = vehicle.compute_yaw_moment(f_front, f_rear, a_steer)
     g_lat = vehicle.compute_lateral_acceleration(f_front, f_rear, v_car)
     is_valid = abs(m_z) < 50.0
