@@ -53,6 +53,7 @@ We will use conda to setup your environment.
 - Make sure your VS Code has your desired repo open.
 - In your terminal, ensure conda is installed correctly by typing `conda`, you should see some commands from conda appear.
 - type ```conda create -n test_env python=3.13.0 anaconda```, this creates a new virtual environment. (Note that test_env is your environment name, up to you to name it)
+- To see what envs you have in your machine, type `conda info --envs`, you can also see where the interpreter path here.
 - Once the environment is created, type ```conda activate test_env``` to activate the environment.
 - In visual studio code, use the shortcut `ctrl + shift + p` and select option "Python: Select Interpreter"
 - Select your aforenamed environment
@@ -72,6 +73,9 @@ Note: If at any point in time, VS Code doesn't seem to have what I stated above,
 - Refer to `config.json`, this is where we choose the datasets we want to use for the lap time sim. 
 - Refer to `datasets/vehicle/parameters.json`
 - Datasets are found in the `datasets` folder. Datasets include Powertrain, Tyre, FSUK track data, etc.
+
+#### Lap time sim structure
+
 
 ## 📬 Questions?
 
