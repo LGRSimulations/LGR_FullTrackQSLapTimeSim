@@ -1,6 +1,7 @@
 import numpy as np
 import logging
 from scipy.optimize import root
+from scipy.constants import g
 
 logger = logging.getLogger(__name__)
 
@@ -149,7 +150,6 @@ def find_vehicle_state_at_point(curvature: float, vehicle):
     a = L - b         # front axle
     
     # Lateral forces
-    g = 9.81
     Fz_f = m * g * (b / L)
     Fz_r = m * g * (a / L)
 
@@ -214,7 +214,7 @@ def find_vehicle_state_at_point(curvature: float, vehicle):
             return [res_lat, res_yaw]
 
         # Use Scipy's root finder (hybr or lm)
-        sol = root(residuals, [guess_delta, guess_beta], method='hybr', tol=1e-4)
+        sol = root(residuals, [guess_delta, guess_beta], method='lm', tol=1e-4)
         
         # Check if a solution exists
         if sol.success:
