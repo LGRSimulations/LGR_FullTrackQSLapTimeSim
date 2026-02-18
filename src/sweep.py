@@ -12,10 +12,11 @@ config = load_config(config_path)
 def main():
     # Load command line arguments
     import argparse
-    parser = argparse.ArgumentParser(description='Run lap time simulation with optional parameter sweeps. \n Example usage: python sweep.py mass 250,350 --steps 10')
+    parser = argparse.ArgumentParser(description='Run lap time simulation with optional parameter sweeps. \n Example usage: python sweep.py mass 250,350 --steps 10 --output results.csv')
     parser.add_argument('param', type=str, help='Parameter name to sweep (e.g. "mass")')
     parser.add_argument('values', type=str, help='Comma-separated values for the parameter range (e.g. "250,350")')
     parser.add_argument('--steps', type=int, default=5, help='Number of steps in the parameter sweep (default: 5)')
+    parser.add_argument('--output', type=str, default=None, help='Optional path to save results as CSV')
     args = parser.parse_args()
 
     # Import modules
@@ -67,13 +68,29 @@ def main():
                 print(f"Warning: Vehicle has no parameter named {args.param}")
             sim_result = run_lap_time_simulation(track, vehicle, config, display=False)
             results.append((val, sim_result.lap_time))
+        print("-----------------------")
         print("Parameter sweep results:")
         for val, lap_time in results:
             print(f"{args.param} = {val:.2f}, Lap Time = {lap_time:.2f} s")
+        # print max and min lap times
+        lap_times = [r[1] for r in results]
+        print("-----------------------")
+        print(f"Best lap time: {min(lap_times):.2f} s at {args.param} = {results[np.argmin(lap_times)][0]:.2f}")
+        print(f"Worst lap time: {max(lap_times):.2f} s at {args.param} = {results[np.argmax(lap_times)][0]:.2f}")
+
+        if args.output:
+            import csv
+            with open(args.output, 'w', newline='') as csvfile:
+                writer = csv.writer(csvfile)
+                writer.writerow([args.param, 'Lap Time (s)'])
+                for val, lap_time in results:
+                    writer.writerow([val, lap_time])
+            print("-----------------------")
+            print(f"Results saved to {args.output}")
 
     except Exception as e:
         print("Error during simulation:", e)
-        return 0 # unix exit code for success
+        return 1 # unix exit code for error
 
 if __name__ == "__main__":
     exit(main())
