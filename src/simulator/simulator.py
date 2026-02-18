@@ -7,7 +7,7 @@ from .util.calcSpeedProfile import compute_speed_profile
 
 logger = logging.getLogger(__name__)
 
-def run_lap_time_simulation(track, vehicle, config) -> None:
+def run_lap_time_simulation(track, vehicle, config, display=True):
     """Initialize and run a lap time simulation for the whole track."""
     logger.info("Starting lap time simulation...")
     # Run the lap time sim, given the track and vehicle
@@ -48,4 +48,6 @@ def run_lap_time_simulation(track, vehicle, config) -> None:
         long_force_per_tyre=long_force_per_tyre,
         lat_force_per_tyre=lat_force_per_tyre,
     )
-    plot_lap_time_results(results)
+    if display:
+        plot_lap_time_results(results)
+    return results

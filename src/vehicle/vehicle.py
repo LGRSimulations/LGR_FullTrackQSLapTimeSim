@@ -358,3 +358,11 @@ def create_vehicle(config) -> Vehicle:
     tyre_model = create_tyre_model(config.get('tyre_model', {}))
     loaded_vehicle = Vehicle(params, power_unit, tyre_model, config)
     return loaded_vehicle
+
+def change_parameter(vehicle: Vehicle, param_name: str, new_value):
+    """Change a parameter of the vehicle."""
+    if hasattr(vehicle.params, param_name):
+        setattr(vehicle.params, param_name, new_value)
+        logger.info(f"Changed vehicle parameter {param_name} to {new_value}")
+    else:
+        logger.warning(f"Vehicle has no parameter named {param_name}")
