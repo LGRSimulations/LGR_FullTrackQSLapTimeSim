@@ -16,23 +16,30 @@ A more in-depth description of the simulator can be found on the [wiki](https://
 There's a few steps to get setup. Follow them in order and you should be fine.
 
 ### Prerequisites
-1. Download git
+In order to work with the software in this repo as painlessly as possible, the following steps will set up Windows Subsystem for Linux (WSL) so you can run development tools in a Linux environment, and then install packages within that environment.
 
-Download [git](https://git-scm.com/) for your operating system 
-This is the industry-standard Version Control software. There are others but git is the most popular. Ensure you click the option that adds to PATH!!!
+1. Download your desired IDE (Integrated Development Environment)
 
-2. Download your desired virtual environment manager
+I use [Visual Studio Code](https://code.visualstudio.com/), VS Code has everything you need really, and works fantastically with WS
 
-I have been recommending using Conda, specifically [miniconda](https://www.anaconda.com/download/success), select the RIGHT option where it says miniconda.
+2. In VS code, download the python extension (select 3.13.0 if given the choice)
 
-3. Download your desired IDE (Integrated Development Environment)
+3. (WINDOWS-ONLY) Install WSL using the [guide](https://learn.microsoft.com/en-us/windows/wsl/install), and reboot your pc.
 
-I use [Visual Studio Code](https://code.visualstudio.com/), VS Code has everything you need really.
+The Ubuntu option is recommended for ease of use.
 
-4. In VS code, download the python extension (select 3.13.0 if given the choice)
+4. Download git
+
+Download [git](https://git-scm.com/) for your operating system, which should be as simple as `sudo apt install git`.
+
+4. Download uv
+uv is a package manger for python, it simplifies running the code, and the python package dependencies.
+
+run the following to install it: `curl -LsSf https://astral.sh/uv/install.sh | sh`
+
 
 ### Setting up your environment
-The following instructions are if you use Visual Studio Code, and miniconda.
+The following instructions are if you use Visual Studio Code.
 
 1. Clone the repository 
 
@@ -48,25 +55,11 @@ OR
 
 2. Setup your environment
 
-We will use conda to setup your environment. 
-
-- Make sure your VS Code has your desired repo open.
-- In your terminal, ensure conda is installed correctly by typing `conda`, you should see some commands from conda appear.
-- type ```conda create -n test_env python=3.13.0 anaconda```, this creates a new virtual environment. (Note that test_env is your environment name, up to you to name it)
-- To see what envs you have in your machine, type `conda info --envs`, you can also see where the interpreter path here.
-- Once the environment is created, type ```conda activate test_env``` to activate the environment.
-- In visual studio code, use the shortcut `ctrl + shift + p` and select option "Python: Select Interpreter"
-- Select your aforenamed environment
-- Voila, you have set up your virtual environment for development!
-
-Note: If at any point in time, VS Code doesn't seem to have what I stated above, close all VS code windows, and try again. You might face the issue where VS Code's terminal isn't recognising Conda. In that case, type `cmd` in your windows search bar and use the command prompt to perform all of the above instead.
+Run `uv sync` in the terminal.
 
 ### Running the lap time sim
 
-- In your terminal (ensuring you're in the desired Virtual Env), type `pip install -r requirements.txt`. This downloads all the required libraries & packages
-- In your explorer (top left of VS Code) find the `src/main.py` file
-- Run the main.py file.
-- Let the simulator do its magic, and you should get some pretty plots after!
+- In your terminal (ensuring you're in the desired Virtual Env, which can be done with `uv sync`), type `python src/main.py`. This runs the simulator and you should see some pretty graphs.
 
 #### Configure the simulator 
 
