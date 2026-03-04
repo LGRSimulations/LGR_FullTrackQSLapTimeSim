@@ -120,15 +120,64 @@ def evaluate_vehicle_state(v_car: float, a_steer: float, a_sideslip: float, curv
 
 def find_vehicle_state_at_point(curvature: float, vehicle):
     """
-    Finds the steady-state vehicle limits using the Bisection Method on speed and 
-    Root Finding on steering/sideslip, as defined in the Quasi-static Steady State Lap Time Simulation.
+    Find the maximum feasible steady-state cornering state at a single track point.
+
+    This routine solves a quasi-static bicycle-model equilibrium for a given track
+    curvature by:
+    1) Bracketing vehicle speed with bisection.
+    2) Solving steering angle and sideslip angle at each speed candidate using
+       a nonlinear root solve.
+    3) Keeping the highest speed that satisfies force/moment equilibrium and
+       basic state sanity checks.
+
+    Equilibrium equations solved at each bisection speed `v_mid`:
+    - Lateral force balance:
+      `m * v_mid^2 * K = Fy_f + Fy_r`
+    - Yaw moment balance about CoG:
+      `a * Fy_f = b * Fy_r`
+
+    Slip-angle model (small-angle bicycle form):
+    - `alpha_f = delta - beta - a*K`
+    - `alpha_r = -beta + b*K`
+
+    Where:
+    - `K` is track curvature [1/m]
+    - `delta` is steering angle [rad] inside the solver
+    - `beta` is vehicle sideslip [rad] inside the solver
+    - `a`, `b` are CoG-to-axle distances [m]
+
+    Notes:
+    - Tyre model API expects slip angles in degrees, so `alpha_f/alpha_r` are
+      converted before force lookup.
+    - A root-solver success flag alone is not sufficient; residual magnitudes are
+      also checked before accepting a state.
+    - For near-straight segments (`|curvature| < 1e-4`), the function returns a
+      fixed high-speed placeholder with zero steer/sideslip.
+
+    Args:
+        curvature: Local track curvature in 1/m. Sign indicates turn direction.
+        vehicle: Vehicle model instance. Must expose:
+            - `params` with at least `mass`, `wheelbase`, `front_track_width`,
+              `cog_z`, and `cog_longitudinal_pos`
+            - `compute_tyre_forces(front_slip_deg, rear_slip_deg)` returning
+              axle lateral forces in N.
+
+    Returns:
+        dict:
+            - `success` (bool): True if at least one feasible equilibrium was found.
+            - `v_car` (float): Maximum feasible speed at this curvature [m/s].
+            - `a_steer` (float): Steering angle at `v_car` [deg].
+            - `a_sideslip` (float): Vehicle sideslip angle at `v_car` [deg].
+
+        If no feasible equilibrium is found, returns `success=False` with zeros
+        for the state values.
     """
     
     # Handle straight sections (avoid division by zero)
     if abs(curvature) < 1e-4:
         return {
             'success': True,
-            'v_car': 200.0, 
+            'v_car': 200.0,
             'a_steer': 0.0,
             'a_sideslip': 0.0
         }
@@ -140,19 +189,14 @@ def find_vehicle_state_at_point(curvature: float, vehicle):
     L = getattr(p, 'wheelbase', 1.53)
     t = getattr(p, 'front_track_width', 1.20)
     h = getattr(p, 'cog_z', 0.28)
-    mu = getattr(p, 'base_mu', 1.7)
     
     # Weight distribution (approximated if not explicit)
-    wd_f = getattr(p, 'weight_dist_front', 0.46) 
+    wd_f = getattr(p, 'cog_longitudinal_pos', 0.46) 
     
     # Calculate axle distances
     b = L * wd_f      # rear axle
     a = L - b         # front axle
     
-    # Lateral forces
-    Fz_f = m * g * (b / L)
-    Fz_r = m * g * (a / L)
-
     # Track params
     K = curvature
     R = 1.0 / abs(K)
@@ -162,11 +206,8 @@ def find_vehicle_state_at_point(curvature: float, vehicle):
     # Rollover limit
     v_rollover = np.sqrt((t / (2 * h)) * g * R)
     
-    # Friction circle limit
-    v_friction = np.sqrt((mu * g) / abs(K))
-    
-    # The max speed is the minimum of constraints
-    v_bound = min(v_rollover, v_friction)
+    # Use rollover as hard cap.
+    v_bound = v_rollover
     
     # Bicycle model: delta approx L * K
     guess_delta = np.arctan(L * K)
@@ -201,8 +242,8 @@ def find_vehicle_state_at_point(curvature: float, vehicle):
             # Rear: alpha_r = -beta + bK
             alpha_r = -beta + (b * K)
             
-            # Calculate Lateral Forces
-            Fy_f, Fy_r = vehicle.compute_tyre_forces(alpha_f, alpha_r)
+            # Tyre model expects degrees.
+            Fy_f, Fy_r = vehicle.compute_tyre_forces(np.degrees(alpha_f), np.degrees(alpha_r))
             
             # Equations to solve - Step 4.iii 
             # Lateral Force Balance: m*v^2*K - (Fy_f + Fy_r) = 0
@@ -216,13 +257,18 @@ def find_vehicle_state_at_point(curvature: float, vehicle):
         # Use Scipy's root finder (hybr or lm)
         sol = root(residuals, [guess_delta, guess_beta], method='lm', tol=1e-4)
         
-        # Check if a solution exists
+        # Check if a physically valid solution exists
         if sol.success:
             
             delta_sol, beta_sol = sol.x
+            res_lat, res_yaw = residuals(sol.x)
+            # Keep checks scale-aware.
+            lat_scale = max(1.0, abs(m * (v_mid**2) * K))
+            yaw_scale = max(1.0, lat_scale * max(a, b))
+            residual_ok = (abs(res_lat) <= 1e-2 * lat_scale) and (abs(res_yaw) <= 1e-2 * yaw_scale)
             
             # Basic check (e.g. < 45 degrees)
-            if abs(delta_sol) < 0.8 and abs(beta_sol) < 0.8:
+            if residual_ok and abs(delta_sol) < 0.8 and abs(beta_sol) < 0.8:
                 # speed is feasible.
                 # Update bounds to search upper half
                 v_low = v_mid
