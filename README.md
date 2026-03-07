@@ -69,6 +69,59 @@ Run `uv sync` in the terminal.
 
 #### Lap time sim structure
 
+### Running The Parameter Sweeper – sweep.py
+
+Run a lap time simulation while sweeping a single vehicle parameter over a range of values.
+
+#### Usage
+
+From the project root:
+
+``` bash
+python src/sweep.py <param> <values> [--steps N]
+```
+
+#### Arguments
+
+- `<param>`
+  Name of the vehicle parameter to sweep (must exist in vehicle.params).
+
+- `<values>`  
+  Comma-separated values:
+  - Range → generates evenly spaced values between min,max  
+    Example: 250,350
+
+- `--steps N` (optional)  
+  Number of points in the sweep (default: 5).
+
+
+#### Examples
+
+Sweep from 250 to 350 with default steps (5) to data.csv
+```bash
+python src/sweep.py mass 250,350 --output data.csv
+```
+
+Sweep with custom steps
+```bash
+python src/sweep.py mass 250,350 --steps 10
+```
+
+#### Output
+
+For each parameter value:
+- Loads track from config.json
+- Creates vehicle from config
+- Runs run_lap_time_simulation
+- Prints lap time results in the format:
+```
+mass = 250.00, Lap Time = 72.31 s
+```
+#### Notes
+
+- The parameter must exist in vehicle.params
+- Track path and vehicle configuration are read from config.json
+
 
 ## 📬 Questions?
 
