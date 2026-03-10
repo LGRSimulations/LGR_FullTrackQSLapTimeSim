@@ -39,10 +39,12 @@ def optimise_speed_at_points(track_points, vehicle, config):
 def forward_pass(track, vehicle, point_speeds):
     """
     Forward pass: acceleration-limited speed profile using powertrain model.
-    Propagates speeds forward using available engine forces minus drag.
+    Propagates speeds forward using available engine forces, capped by tyre
+    longitudinal grip at a fixed wheel-slip operating point, minus drag.
     At each segment:
     - Select optimal gear for current speed
     - Compute available traction force from powertrain (F_x = T_wheel / r_wheel)
+    - Cap traction by tyre longitudinal force at peak slip ratio
     - Subtract aerodynamic drag
     - Update speed via kinematics: v_pred = sqrt(v_prev^2 + 2 * a_lon * ds)
     Uses all track points.
@@ -58,7 +60,26 @@ def forward_pass(track, vehicle, point_speeds):
         v_prev = speeds[i-1]
         v_calc = max(v_prev, 1.0)
         gear_ratio = vehicle.select_optimal_gear(v_calc)
-        f_x = vehicle.compute_longitudinal_force(v_calc, gear_ratio, throttle=1.0)
+
+        # Powertrain-limited wheel force at the contact patch.
+        rpm = vehicle.speed_to_rpm(v_calc, gear_ratio)
+        wheel_torque = vehicle.compute_wheel_torque(rpm, gear_ratio, throttle=1.0)
+        f_traction_powertrain = wheel_torque / vehicle.params.wheel_radius
+
+        # Tyre-limited wheel force at a fixed peak slip ratio.
+        normal_load_per_tyre = vehicle.compute_static_normal_load()
+        peak_slip_ratio = 0.1 
+        f_drive_per_tyre = vehicle.tyre_model.get_longitudinal_force(
+            slip_ratio=peak_slip_ratio,
+            normal_load=normal_load_per_tyre
+        )
+        f_traction_tyre_limit = abs(f_drive_per_tyre) * 4.0
+
+        # Net longitudinal force after tyre slip limit and drag.
+        f_traction = min(f_traction_powertrain, f_traction_tyre_limit)
+        f_drag = vehicle.compute_aero_drag(v_calc)
+        f_x = f_traction - f_drag
+
         a_lon = f_x / vehicle.params.mass
         v_pred_squared = v_prev**2 + 2 * a_lon * ds
         if v_pred_squared < 0:
