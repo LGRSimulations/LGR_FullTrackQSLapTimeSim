@@ -68,7 +68,7 @@ def forward_pass(track, vehicle, point_speeds):
 
         # Tyre-limited wheel force at a fixed peak slip ratio.
         normal_load_per_tyre = vehicle.compute_static_normal_load()
-        peak_slip_ratio = 0.1 
+        peak_slip_ratio = 12.0 
         f_drive_per_tyre = vehicle.tyre_model.get_longitudinal_force(
             slip_ratio=peak_slip_ratio,
             normal_load=normal_load_per_tyre
