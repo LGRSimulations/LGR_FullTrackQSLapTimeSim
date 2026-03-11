@@ -39,10 +39,12 @@ def optimise_speed_at_points(track_points, vehicle, config):
 def forward_pass(track, vehicle, point_speeds):
     """
     Forward pass: acceleration-limited speed profile using powertrain model.
-    Propagates speeds forward using available engine forces minus drag.
+    Propagates speeds forward using available engine forces, capped by tyre
+    longitudinal grip at a fixed wheel-slip operating point, minus drag.
     At each segment:
     - Select optimal gear for current speed
     - Compute available traction force from powertrain (F_x = T_wheel / r_wheel)
+    - Cap traction by tyre longitudinal force at peak slip ratio
     - Subtract aerodynamic drag
     - Update speed via kinematics: v_pred = sqrt(v_prev^2 + 2 * a_lon * ds)
     Uses all track points.
@@ -58,7 +60,26 @@ def forward_pass(track, vehicle, point_speeds):
         v_prev = speeds[i-1]
         v_calc = max(v_prev, 1.0)
         gear_ratio = vehicle.select_optimal_gear(v_calc)
-        f_x = vehicle.compute_longitudinal_force(v_calc, gear_ratio, throttle=1.0)
+
+        # Powertrain-limited wheel force at the contact patch.
+        rpm = vehicle.speed_to_rpm(v_calc, gear_ratio)
+        wheel_torque = vehicle.compute_wheel_torque(rpm, gear_ratio, throttle=1.0)
+        f_traction_powertrain = wheel_torque / vehicle.params.wheel_radius
+
+        # Tyre-limited wheel force at a fixed peak slip ratio.
+        normal_load_per_tyre = vehicle.compute_static_normal_load()
+        peak_slip_ratio = 12.0 
+        f_drive_per_tyre = vehicle.tyre_model.get_longitudinal_force(
+            slip_ratio=peak_slip_ratio,
+            normal_load=normal_load_per_tyre
+        )
+        f_traction_tyre_limit = abs(f_drive_per_tyre) * 4.0
+
+        # Net longitudinal force after tyre slip limit and drag.
+        f_traction = min(f_traction_powertrain, f_traction_tyre_limit)
+        f_drag = vehicle.compute_aero_drag(v_calc)
+        f_x = f_traction - f_drag
+
         a_lon = f_x / vehicle.params.mass
         v_pred_squared = v_prev**2 + 2 * a_lon * ds
         if v_pred_squared < 0:
@@ -71,10 +92,14 @@ def forward_pass(track, vehicle, point_speeds):
 
 def backward_pass(track, vehicle, point_speeds):
     """
-    Backward pass: braking-limited speed profile using tyre model.
+    Backward pass: braking-limited speed profile using tyre model with friction circle.
     Propagates speeds backward from end to start. At each segment:
-    - Compute maximum braking force from tyre longitudinal grip (using DX_LUT)
-    - Calculate maximum deceleration: a_brake = f_brake / mass
+    - Compute peak longitudinal deceleration from tyre grip (a_limit = F_brake / mass)
+    - Compute lateral acceleration demand at this point: a_lat = v^2 * curvature
+    - Apply friction circle to find available longitudinal deceleration:
+        a_long_available = sqrt(max(a_limit^2 - a_lat^2, 0))
+      This ensures combined lateral + longitudinal demand never exceeds tyre capacity.
+    - Add aerodynamic drag contribution
     - Work backwards: v_i = sqrt(v_{i+1}^2 + 2 * a_brake * ds)
     - Enforce v_i <= point_speeds[i] (corner limit)
     Uses all track points.
@@ -95,10 +120,23 @@ def backward_pass(track, vehicle, point_speeds):
             normal_load=normal_load_per_tyre
         )
         f_brake_total = abs(f_brake_per_tyre) * 4
-        v_avg = v_next
-        f_drag = vehicle.compute_aero_drag(v_avg)
-        f_brake_total_with_drag = f_brake_total + f_drag
-        a_brake = f_brake_total_with_drag / vehicle.params.mass
+
+        # Peak longitudinal deceleration available from tyres (m/s^2)
+        a_limit = f_brake_total / vehicle.params.mass
+
+        # Lateral acceleration demanded at this point by the corner geometry (m/s^2)
+        curvature = abs(track.points[i].curvature)
+        a_lat = v_next**2 * curvature
+
+        # Friction circle: longitudinal budget is reduced by lateral demand.
+        # a_long^2 + a_lat^2 <= a_limit^2  =>  a_long = sqrt(a_limit^2 - a_lat^2)
+        a_lat_clamped = min(a_lat, a_limit)  # cannot exceed total limit
+        a_brake = np.sqrt(max(a_limit**2 - a_lat_clamped**2, 0.0))
+
+        # Add aerodynamic drag (acts as free braking, outside friction circle)
+        f_drag = vehicle.compute_aero_drag(v_next)
+        a_brake += f_drag / vehicle.params.mass
+
         v_brake_squared = v_next**2 + 2 * a_brake * ds
         if v_brake_squared < 0:
             v_brake = v_next
