@@ -27,7 +27,7 @@ class vehicle_parameters:
     final_drive_ratio: float  # dimensionless (final drive gear ratio)
     gear_ratios: list  # dimensionless (gear ratios for each gear)
     transmission_efficiency: float  # dimensionless (0-1, mechanical efficiency)
-    roll_stiffness: float  # Nm/deg
+    roll_stiffness: float  # Nm/rad
     suspension_stiffness: float  # N/m
     damping_coefficient: float  # Ns/m
 

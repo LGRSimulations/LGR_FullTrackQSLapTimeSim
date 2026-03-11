@@ -15,7 +15,7 @@
         "front_track_width": 1.26,
         "rear_track_width": 1.23, 
         "cog_z": 0.48,
-        "cog_longitudinal_pos": 0.5,
+        "cog_longitudinal_pos": 0.516,
         "max_cog_z": 0.6
     },
     "vehicle_dynamics": {
