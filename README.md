@@ -71,7 +71,7 @@ Run `uv sync` in the terminal.
 
 ### Running The Parameter Sweeper – sweep.py
 
-Run a lap time simulation while sweeping a single vehicle parameter over a range of values.
+Run a lap time simulation while sweeping a single vehicle parameter over values.
 
 #### Usage
 
@@ -84,12 +84,20 @@ python src/sweep.py <param> <values> [--steps N]
 #### Arguments
 
 - `<param>`
-  Name of the vehicle parameter to sweep (must exist in vehicle.params).
+  Name of the vehicle parameter to sweep.
+  - You can use either the internal attribute name (for example `aero_centre_of_pressure`) or the JSON key (for example `aero_cp`).
 
 - `<values>`  
-  Comma-separated values:
-  - Range → generates evenly spaced values between min,max  
-    Example: 250,350
+  Format depends on parameter type:
+  - Numeric scalar: `min,max` for range sweep (uses `--steps`) or explicit comma list.
+    Example: `250,350`
+  - String: comma-separated explicit values.
+    Example: `F25_IC_Car,F26_IC_Car`
+  - List (for example `gear_ratios`):
+    - Single list: comma-separated items
+      Example: `2.75,2.0,1.667,1.304,1.208`
+    - Multiple candidate lists: separate lists with `;`, and wrap each list in `[...]`
+      Example: `[2.75,2.0,1.667,1.304,1.208];[3.2,2.3,1.9,1.5,1.35]`
 
 - `--steps N` (optional)  
   Number of points in the sweep (default: 5).
@@ -105,6 +113,16 @@ python src/sweep.py mass 250,350 --output data.csv
 Sweep with custom steps
 ```bash
 python src/sweep.py mass 250,350 --steps 10
+```
+
+Sweep using JSON key alias
+```bash
+python src/sweep.py aero_cp 0.8,1.2 --steps 5
+```
+
+Sweep multiple gear ratio sets
+```bash
+python src/sweep.py gear_ratios "[2.75,2.0,1.667,1.304,1.208];[3.2,2.3,1.9,1.5,1.35]"
 ```
 
 #### Output
