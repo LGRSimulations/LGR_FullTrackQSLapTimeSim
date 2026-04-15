@@ -63,7 +63,7 @@ def plot_lap_time_results(results):
     scatter_g = ax3.scatter(g_lat_channel, g_long_channel, c=v_car_kph[1:], cmap='viridis', s=20)
     ax3.set_xlabel('Lateral Acceleration (g)')
     ax3.set_ylabel('Longitudinal Acceleration (g)')
-    ax3.set_title('G-G-V Diagram')
+    ax3.set_title('G-G-V Diagram', fontsize=18)
     cbar_g = fig2.colorbar(scatter_g, ax=ax3)
     cbar_g.set_label('Speed (kph)')
     ax3.grid(True, which='both', linestyle='--', alpha=0.7)
