@@ -45,9 +45,9 @@ def plot_ggv_diagram(final_speeds, track, vehicle, mass):
 
     ax.axhline(0, color='white', linewidth=0.5, linestyle='--')
     ax.axvline(0, color='white', linewidth=0.5, linestyle='--')
-    ax.set_xlabel('Lateral Acceleration (g)')
-    ax.set_ylabel('Longitudinal Acceleration (g)')
-    ax.set_title('G-G-V Diagram')
+    ax.set_xlabel('Lateral Acceleration (g)', fontsize=17)
+    ax.set_ylabel('Longitudinal Acceleration (g)', fontsize=17)
+    ax.set_title('G-G-V Diagram', fontsize=20, fontweight='bold')
     ax.legend()
     plt.tight_layout()
 
