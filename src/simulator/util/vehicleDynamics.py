@@ -118,7 +118,7 @@ def evaluate_vehicle_state(v_car: float, a_steer: float, a_sideslip: float, curv
         'f_rear': f_rear
     }
 
-def find_vehicle_state_at_point(curvature: float, vehicle):
+def find_vehicle_state_at_point(curvature: float, vehicle, normal_load_per_tyre: float = None):
     """
     Find the maximum feasible steady-state cornering state at a single track point.
 
@@ -243,7 +243,15 @@ def find_vehicle_state_at_point(curvature: float, vehicle):
             alpha_r = -beta + (b * K)
             
             # Tyre model expects degrees.
-            Fy_f, Fy_r = vehicle.compute_tyre_forces(np.degrees(alpha_f), np.degrees(alpha_r))
+            if normal_load_per_tyre is None:
+                Fy_f, Fy_r = vehicle.compute_tyre_forces(np.degrees(alpha_f), np.degrees(alpha_r))
+            else:
+                Fy_f, Fy_r = vehicle.compute_tyre_forces(
+                    np.degrees(alpha_f),
+                    np.degrees(alpha_r),
+                    normal_load_front=normal_load_per_tyre,
+                    normal_load_rear=normal_load_per_tyre,
+                )
             
             # Equations to solve - Step 4.iii 
             # Lateral Force Balance: m*v^2*K - (Fy_f + Fy_r) = 0

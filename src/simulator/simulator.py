@@ -11,14 +11,14 @@ def run_lap_time_simulation(track, vehicle, config, display=True):
     """Initialize and run a lap time simulation for the whole track."""
     logger.info("Starting lap time simulation...")
     # Run the lap time sim, given the track and vehicle
-    final_speeds, corner_speeds = compute_speed_profile(track, vehicle, config)
+    final_speeds, corner_speeds, diagnostics = compute_speed_profile(track, vehicle, config)
 
     # Compute lap time and g-forces based on final speeds
     lap_time = 0.0
     g_lat_channel = []
     g_long_channel = []
-    normal_load_per_tyre = []
-    long_force_per_tyre = []
+    normal_load_per_tyre = diagnostics.get('forward_normal_load_per_tyre', [])
+    long_force_per_tyre = diagnostics.get('forward_net_long_force', [])
     lat_force_per_tyre = []
     for i in range(1, len(track.points)):
         ds = track.points[i].distance - track.points[i-1].distance
@@ -47,6 +47,7 @@ def run_lap_time_simulation(track, vehicle, config, display=True):
         normal_load_per_tyre=normal_load_per_tyre,
         long_force_per_tyre=long_force_per_tyre,
         lat_force_per_tyre=lat_force_per_tyre,
+        diagnostics=diagnostics,
     )
     if display:
         plot_lap_time_results(results)

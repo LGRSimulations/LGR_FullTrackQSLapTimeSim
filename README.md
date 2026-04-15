@@ -140,6 +140,49 @@ mass = 250.00, Lap Time = 72.31 s
 - The parameter must exist in vehicle.params
 - Track path and vehicle configuration are read from config.json
 
+### Running A/B Diagnostics (Baseline vs B1)
+
+Run the focused A/B diagnostic matrix to compare baseline behavior against B1 (dynamic normal-load coupling).
+
+From the project root:
+
+```bash
+python src/ab_testing/run_ab_suite.py --output-dir ab_test_outputs/full_v1
+```
+
+#### What it runs
+
+- Tracks: `FSUK`, `SkidpadF26`, `StraightLineTrack`
+- Variants: `baseline`, `b1`
+- Parameters (focused 8):
+  - `downforce_coefficient`
+  - `aero_cp`
+  - `cog_z`
+  - `front_track_width`
+  - `rear_track_width`
+  - `roll_stiffness`
+  - `max_roll_angle_deg`
+  - `base_mu`
+- Levels per parameter: `low`, `nominal`, `high` (default ±20%)
+
+#### Outputs
+
+- `ab_runs.csv`: run-level records (status, lap time, fallback rate, limiter mode breakdown)
+- `ab_sensitivity.csv`: per-track/variant sensitivity summary and stale flags
+- `ab_summary.md`: human-readable diagnostic summary
+
+#### Optional flags
+
+```bash
+python src/ab_testing/run_ab_suite.py --tracks FSUK,SkidpadF26 --stale-threshold 0.05 --output-dir ab_test_outputs/custom
+```
+
+Where:
+
+- `--tracks` selects a comma-separated subset of known tracks
+- `--stale-threshold` sets stale sensitivity cutoff in seconds
+- `--output-dir` selects artifact destination
+
 
 ## 📬 Questions?
 

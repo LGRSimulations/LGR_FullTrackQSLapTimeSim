@@ -132,18 +132,24 @@ class Vehicle:
         """
         return self.params.mass * 9.81 / 4.0
         
-    def compute_tyre_forces(self, slip_angle_front: float, slip_angle_rear: float):
+    def compute_tyre_forces(self, slip_angle_front: float, slip_angle_rear: float,
+                            normal_load_front: float = None, normal_load_rear: float = None):
         """
         Compute lateral tire forces using the tire model.
         Args:
             slip_angle_front: Front tire slip angle in degrees
             slip_angle_rear: Rear tire slip angle in degrees
+            normal_load_front: Optional front tyre normal load per tyre in N
+            normal_load_rear: Optional rear tyre normal load per tyre in N
         Returns:
             (f_front, f_rear): Lateral forces in N
         """
-        tyre_normal_load = self.compute_static_normal_load()
-        f_front = self.tyre_model.get_lateral_force(slip_angle_front, normal_load=tyre_normal_load) * 2
-        f_rear = self.tyre_model.get_lateral_force(slip_angle_rear, normal_load=tyre_normal_load) * 2
+        if normal_load_front is None:
+            normal_load_front = self.compute_static_normal_load()
+        if normal_load_rear is None:
+            normal_load_rear = self.compute_static_normal_load()
+        f_front = self.tyre_model.get_lateral_force(slip_angle_front, normal_load=normal_load_front) * 2
+        f_rear = self.tyre_model.get_lateral_force(slip_angle_rear, normal_load=normal_load_rear) * 2
         return f_front, f_rear
     
     def compute_yaw_moment(self, f_front: float, f_rear: float, steer_angle: float) -> float:
