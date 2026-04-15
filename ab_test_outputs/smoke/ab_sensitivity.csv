@@ -1,0 +1,17 @@
+track,variant,parameter,delta_lap_time_s,stale,samples
+FSUK,baseline,downforce_coefficient,0.0,True,3
+FSUK,baseline,aero_cp,0.0,True,3
+FSUK,baseline,cog_z,7.366046754459376,False,3
+FSUK,baseline,front_track_width,7.404912297657226,False,3
+FSUK,baseline,rear_track_width,0.0,True,3
+FSUK,baseline,roll_stiffness,0.0,True,3
+FSUK,baseline,max_roll_angle_deg,0.0,True,3
+FSUK,baseline,base_mu,0.09174029139443007,False,3
+FSUK,b1,downforce_coefficient,0.0009012608107781261,True,3
+FSUK,b1,aero_cp,0.0,True,3
+FSUK,b1,cog_z,7.250020295562521,False,3
+FSUK,b1,front_track_width,7.600397685556771,False,3
+FSUK,b1,rear_track_width,0.0,True,3
+FSUK,b1,roll_stiffness,0.0,True,3
+FSUK,b1,max_roll_angle_deg,0.0,True,3
+FSUK,b1,base_mu,0.09174029139443007,False,3
