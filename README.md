@@ -15,6 +15,8 @@ A more in-depth description of the simulator can be found on the [wiki](https://
 ## Setup
 This project is managed with `uv`. The easiest way to run the simulator and scripts is through `uv run python <path-to-script>` so everyone uses the same dependency environment.
 
+Most day-to-day simulation changes should be made in `config.json` and `parameters.json`.
+
 ### Prerequisites
 
 1. Install Python
@@ -133,7 +135,7 @@ This runs the simulator and generates the plots/results for the track selected i
 #### Configure the simulator 
 
 - Refer to `config.json`, this is where we choose the datasets we want to use for the lap time sim. 
-- Refer to `datasets/vehicle/parameters.json`
+- Refer to `parameters.json`
 - Datasets are found in the `datasets` folder. Datasets include Powertrain, Tyre, FSUK track data, etc.
 
 #### Lap time sim structure
