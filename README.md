@@ -13,53 +13,70 @@ This simulator is a Quasi-static, steady-state lap time sim. Fancy words. What d
 A more in-depth description of the simulator can be found on the [wiki](https://github.com/LGRSimulations/LGR_FullTrackQSLapTimeSim/wiki/Description-of-Simulator)
 
 ## Setup
-There's a few steps to get setup. Follow them in order and you should be fine.
+This project is managed with `uv`. The easiest way to run the simulator and scripts is through `uv run ...` so everyone uses the same dependency environment.
 
 ### Prerequisites
-In order to work with the software in this repo as painlessly as possible, the following steps will set up Windows Subsystem for Linux (WSL) so you can run development tools in a Linux environment, and then install packages within that environment.
 
-1. Download your desired IDE (Integrated Development Environment)
+1. Install Python
 
-I use [Visual Studio Code](https://code.visualstudio.com/), VS Code has everything you need really, and works fantastically with WS
+- Use a Python version compatible with `pyproject.toml` (`requires-python`).
+- You can install Python from [python.org](https://www.python.org/downloads/) or let `uv` manage Python versions.
 
-2. In VS code, download the python extension (select 3.13.0 if given the choice)
+2. Install Git
 
-3. (WINDOWS-ONLY) Install WSL using the [guide](https://learn.microsoft.com/en-us/windows/wsl/install), and reboot your pc.
+- Download from [git-scm.com](https://git-scm.com/).
 
-The Ubuntu option is recommended for ease of use.
+3. Install uv
 
-4. Download git
+- Official docs: [docs.astral.sh/uv](https://docs.astral.sh/uv/)
 
-Download [git](https://git-scm.com/) for your operating system, which should be as simple as `sudo apt install git`.
+Windows (PowerShell):
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
 
-4. Download uv
-uv is a package manger for python, it simplifies running the code, and the python package dependencies.
+macOS / Linux:
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
 
-run the following to install it: `curl -LsSf https://astral.sh/uv/install.sh | sh`
+4. (Recommended) VS Code + Python extension
 
+- [Visual Studio Code](https://code.visualstudio.com/)
+- Python extension (`ms-python.python`)
 
-### Setting up your environment
-The following instructions are if you use Visual Studio Code.
+### Clone and bootstrap
 
-1. Clone the repository 
+From your terminal:
 
-- In VS Code, click on source control on the left hand side of your screen. Then insert the following link to clone it when it prompts you to do so.
-```https://github.com/LGRSimulations/LGR_FullTrackQSLapTimeSim.git```
-- Navigate to the folder that you desire your code to be located.
+```bash
+git clone https://github.com/LGRSimulations/LGR_FullTrackQSLapTimeSim.git
+cd LGR_FullTrackQSLapTimeSim
+uv sync
+```
 
-OR 
-
-- In your terminal (top bar of VS Code), navigate to where you want your code to be located, then type the following:
-
-``` git clone https://github.com/LGRSimulations/LGR_FullTrackQSLapTimeSim.git```
-
-2. Setup your environment
-
-Run `uv sync` in the terminal.
+Notes:
+- `uv sync` creates/updates `.venv` and installs all dependencies.
+- You can run scripts without activating the environment by using `uv run ...`.
+- If you want to activate manually:
+  - Windows PowerShell: `.\.venv\Scripts\Activate.ps1`
+  - macOS/Linux: `source .venv/bin/activate`
 
 ### Running the lap time sim
 
-- In your terminal (ensuring you're in the desired Virtual Env, which can be done with `uv sync`), type `python src/main.py`. This runs the simulator and you should see some pretty graphs.
+- Preferred:
+
+```bash
+uv run python src/main.py
+```
+
+- Alternative after activating `.venv`:
+
+```bash
+python src/main.py
+```
+
+This runs the simulator and generates the plots/results for the track selected in `config.json`.
 
 #### Configure the simulator 
 
@@ -69,7 +86,7 @@ Run `uv sync` in the terminal.
 
 #### Lap time sim structure
 
-### Running The Parameter Sweeper – sweep.py
+### Running the Parameter Sweeper - `sweep.py`
 
 Run a lap time simulation while sweeping a single vehicle parameter over values.
 
@@ -78,7 +95,7 @@ Run a lap time simulation while sweeping a single vehicle parameter over values.
 From the project root:
 
 ``` bash
-python src/sweep.py <param> <values> [--steps N]
+uv run python src/sweep.py <param> <values> [--steps N]
 ```
 
 #### Arguments
@@ -107,22 +124,22 @@ python src/sweep.py <param> <values> [--steps N]
 
 Sweep from 250 to 350 with default steps (5) to data.csv
 ```bash
-python src/sweep.py mass 250,350 --output data.csv
+uv run python src/sweep.py mass 250,350 --output data.csv
 ```
 
 Sweep with custom steps
 ```bash
-python src/sweep.py mass 250,350 --steps 10
+uv run python src/sweep.py mass 250,350 --steps 10
 ```
 
 Sweep using JSON key alias
 ```bash
-python src/sweep.py aero_cp 0.8,1.2 --steps 5
+uv run python src/sweep.py aero_cp 0.8,1.2 --steps 5
 ```
 
 Sweep multiple gear ratio sets
 ```bash
-python src/sweep.py gear_ratios "[2.75,2.0,1.667,1.304,1.208];[3.2,2.3,1.9,1.5,1.35]"
+uv run python src/sweep.py gear_ratios "[2.75,2.0,1.667,1.304,1.208];[3.2,2.3,1.9,1.5,1.35]"
 ```
 
 #### Output
@@ -147,7 +164,7 @@ Run the focused A/B diagnostic matrix to compare baseline behavior against B1 (d
 From the project root:
 
 ```bash
-python src/ab_testing/run_ab_suite.py --output-dir ab_test_outputs/full_v1
+uv run python src/ab_testing/run_ab_suite.py --output-dir ab_test_outputs/full_v1
 ```
 
 #### What it runs
@@ -174,7 +191,7 @@ python src/ab_testing/run_ab_suite.py --output-dir ab_test_outputs/full_v1
 #### Optional flags
 
 ```bash
-python src/ab_testing/run_ab_suite.py --tracks FSUK,SkidpadF26 --stale-threshold 0.05 --output-dir ab_test_outputs/custom
+uv run python src/ab_testing/run_ab_suite.py --tracks FSUK,SkidpadF26 --stale-threshold 0.05 --output-dir ab_test_outputs/custom
 ```
 
 Where:
@@ -182,6 +199,45 @@ Where:
 - `--tracks` selects a comma-separated subset of known tracks
 - `--stale-threshold` sets stale sensitivity cutoff in seconds
 - `--output-dir` selects artifact destination
+
+### Running Tyre Model Verification
+
+Use this script to compare TTC tyre data against the current model and produce CSV/PNG/HTML artifacts.
+
+Default run (recommended for CI and sharing):
+
+```bash
+uv run python validationScripts/compareTyreModel.py
+```
+
+Run with interactive visual windows:
+
+```bash
+uv run python validationScripts/compareTyreModel.py --visualise
+```
+
+Run validation gate with explicit threshold:
+
+```bash
+uv run python validationScripts/compareTyreModel.py --validate --rmse-threshold-pct 12
+```
+
+Main outputs are written to:
+- `artifacts/tyre_validation/tyre_model_verification.csv`
+- `artifacts/tyre_validation/tyre_model_verification.html`
+- `artifacts/tyre_validation/*.png`
+
+### Command Quick Reference
+
+From the project root:
+
+```bash
+uv sync
+uv run python src/main.py
+uv run python src/sweep.py mass 250,350 --steps 5
+uv run python src/ab_testing/run_ab_suite.py --output-dir ab_test_outputs/full_v1
+uv run python validationScripts/compareTyreModel.py
+```
 
 
 ## 📬 Questions?
