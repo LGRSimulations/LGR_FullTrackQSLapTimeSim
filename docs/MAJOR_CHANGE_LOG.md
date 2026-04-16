@@ -204,6 +204,63 @@ Scope: fallback physical constraints, solver failure attribution, A/B rollover-m
 ## Reproducibility Notes (Optional)
 - uv run python -m unittest tests.test_solver_contracts tests.test_tyre_force_contracts tests.test_tyre_peak_load_clamp_contracts
 - uv run python src/diagnostics/gg_rollover_suite.py --track datasets/tracks/FSUK.txt --output-dir artifacts/diagnostics/gg_rollover_suite
+
+---
+
+Timestamp: 2026-04-16T20:55:00Z
+Owner: Copilot + Project Team
+Change ID: remove-non-rollover-mode-v1
+Scope: solver realism guardrail, diagnostics consistency, test/docs alignment
+
+## 1) Problem
+
+### High-Level
+- The codebase still allowed an explicit non-rollover solve mode, which can produce physically optimistic behavior and mixed-context diagnostics.
+- This made it too easy to run comparisons against an intentionally unrealistic mode and misread regressions.
+
+### Low-Level
+- Solver and diagnostics paths still accepted or emitted rollover-off context.
+- One solver contract test also forced rollover-off, keeping the non-physical path alive in routine checks.
+
+## 2) Diagnosis
+- Evidence used:
+	- Search over solver, diagnostics, A/B, tests, and docs for rollover toggles and rollover_off labels.
+- Root cause:
+	- The rollout originally kept rollover-off for troubleshooting, but that branch remained available in normal workflows.
+- Alternatives ruled out:
+	- Keeping a hidden toggle still leaves accidental misuse risk and inconsistent artifacts.
+
+## 3) Solution and Implementation
+- Engineering intent:
+	- Make rollover-constrained operation the only valid runtime path for baseline simulation and diagnostics.
+- What changed:
+	- Removed rollover toggle usage from corner solver call path; rollover cap is now always enforced in corner speed bounding.
+	- Updated G-G and constant-radius diagnostics to single rollover-constrained mode.
+	- Updated A/B suite output context to always report rollover_on/true.
+	- Updated solver contract setup and docs references accordingly.
+- Why this is physically reasonable:
+	- Enforcing rollover-constrained bounds prevents non-physical cornering envelopes from entering speed profile decisions.
+- Verification added:
+	- Targeted solver contract run completed; known existing base_mu sensitivity contract still fails (unchanged by this change).
+
+## 4) Impact and Explanation
+- Physics correctness impact:
+	- Eliminates a non-physical execution mode from regular workflow.
+- Lap-time trustworthiness impact:
+	- Reduces risk of optimistic results caused by disabled rollover constraints.
+- Diagnostics stability impact:
+	- Artifacts now reflect one consistent physical operating mode.
+- Limitations and next step:
+	- Historical docs/log entries still mention rollover_off for past context, but runtime path no longer supports it.
+
+## Validation Gates (Required)
+- Tyre invariants: NOT RUN in this change
+- RMSE thresholds: NOT RUN in this change
+- Fallback-rate thresholds: NOT RUN in this change
+- Solver contract suite: PARTIAL (2 pass, 1 known failing contract: base_mu sensitivity)
+
+## Reproducibility Notes (Optional)
+- uv run python -m unittest tests.test_solver_contracts -v
 - uv run python -c "import sys,json; sys.path.insert(0,'src'); from track.track import load_track; from vehicle.vehicle import create_vehicle; from simulator.simulator import run_lap_time_simulation; from collections import Counter; cfg=json.load(open('config.json')); cfg['track']={'file_path':'datasets/tracks/FSUK.txt'}; v=create_vehicle(cfg); tr=load_track('datasets/tracks/FSUK.txt',cfg.get('debug_mode',False)); res=run_lap_time_simulation(tr,v,cfg,display=False); print(dict(Counter(res.diagnostics.get('corner_failure_reason',[]))))"
 - uv run python src/ab_testing/run_ab_suite.py --tracks StraightLineTrack --variants baseline --fallback-threshold 0.15 --output-dir ab_test_outputs/smoke_rollover_flag_quick
 

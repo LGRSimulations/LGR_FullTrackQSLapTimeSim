@@ -124,7 +124,6 @@ def find_vehicle_state_at_point(
     vehicle,
     normal_load_per_tyre: float = None,
     straight_line_speed_cap: float = 200.0,
-    use_rollover_speed_cap: bool = True,
     initial_guess: Optional[Dict[str, float]] = None,
     v_upper_bound_mps: Optional[float] = None,
     max_bisection_iters: int = 30,
@@ -220,11 +219,8 @@ def find_vehicle_state_at_point(
     # Rollover limit
     v_rollover = np.sqrt((t / (2 * h)) * g * R)
     
-    # Use rollover as hard cap unless explicitly disabled for diagnostics.
-    if use_rollover_speed_cap:
-        v_bound = v_rollover
-    else:
-        v_bound = 200.0
+    # Always enforce rollover cap to keep cornering bounds physically realistic.
+    v_bound = min(v_rollover, float(straight_line_speed_cap))
 
     if v_upper_bound_mps is not None and np.isfinite(v_upper_bound_mps):
         v_bound = min(float(v_bound), float(v_upper_bound_mps))
