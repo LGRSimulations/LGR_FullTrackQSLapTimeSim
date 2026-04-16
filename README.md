@@ -13,7 +13,7 @@ This simulator is a Quasi-static, steady-state lap time sim. Fancy words. What d
 A more in-depth description of the simulator can be found on the [wiki](https://github.com/LGRSimulations/LGR_FullTrackQSLapTimeSim/wiki/Description-of-Simulator)
 
 ## Setup
-This project is managed with `uv`. The easiest way to run the simulator and scripts is through `uv run ...` so everyone uses the same dependency environment.
+This project is managed with `uv`. The easiest way to run the simulator and scripts is through `uv run python <path-to-script>` so everyone uses the same dependency environment.
 
 ### Prerequisites
 
@@ -61,6 +61,58 @@ Notes:
 - If you want to activate manually:
   - Windows PowerShell: `.\.venv\Scripts\Activate.ps1`
   - macOS/Linux: `source .venv/bin/activate`
+
+### Repository script layout
+
+The repository has been cleaned up so user-facing scripts live under a single `tools/` directory:
+
+- `tools/analysis/` for analysis and validation utilities
+- `tools/sweeps/` for one-off test sweeps
+- `tools/tracks/` for track-generation scripts
+
+### Root run commands
+
+You can run these from the repository root after `uv sync`:
+
+- Simulator: `uv run python src/main.py`
+- Parameter sweep: `uv run python src/sweep.py <param> <values> [--steps N]`
+- A/B diagnostics: `uv run python src/ab_testing/run_ab_suite.py [flags]`
+- Tyre verification (CSV/PNG/HTML): `uv run python tools/analysis/compare_tyre_model.py`
+- Tyre verification with visual windows: `uv run python tools/analysis/compare_tyre_model.py --visualise`
+- Corner archetypes analysis: `uv run python tools/analysis/corner_archetypes.py`
+- Lift/coast sweep: `uv run python tools/sweeps/lift_coast_test.py`
+- Straight-line traction test: `uv run python tools/sweeps/straight_line_test.py`
+- Skidpad track generator: `uv run python tools/tracks/skidpad_creator.py`
+- Straight track generator: `uv run python tools/tracks/straight_line_creator.py`
+
+### Quick Start Cheat Sheet
+
+Preferred workflow: use `uv`.
+
+Run from repository root:
+
+```bash
+uv sync
+
+# Main simulator
+uv run python src/main.py
+
+# Parameter sweep
+uv run python src/sweep.py mass 250,350 --steps 5
+
+# A/B diagnostics
+uv run python src/ab_testing/run_ab_suite.py --output-dir ab_test_outputs/full_v1
+
+# Tyre model verification
+uv run python tools/analysis/compare_tyre_model.py
+
+# Additional tools
+uv run python tools/analysis/corner_archetypes.py
+uv run python tools/sweeps/lift_coast_test.py
+uv run python tools/sweeps/straight_line_test.py
+uv run python tools/tracks/skidpad_creator.py
+uv run python tools/tracks/straight_line_creator.py
+```
 
 ### Running the lap time sim
 
@@ -122,9 +174,9 @@ uv run python src/sweep.py <param> <values> [--steps N]
 
 #### Examples
 
-Sweep from 250 to 350 with default steps (5) to data.csv
+Sweep from 250 to 350 with default steps (5) to artifacts/sweeps/mass_sweep.csv
 ```bash
-uv run python src/sweep.py mass 250,350 --output data.csv
+uv run python src/sweep.py mass 250,350 --output artifacts/sweeps/mass_sweep.csv
 ```
 
 Sweep with custom steps
@@ -152,6 +204,7 @@ For each parameter value:
 ```
 mass = 250.00, Lap Time = 72.31 s
 ```
+- If `--output` is omitted, the CSV is written to `artifacts/sweeps/data.csv`.
 #### Notes
 
 - The parameter must exist in vehicle.params
@@ -207,19 +260,19 @@ Use this script to compare TTC tyre data against the current model and produce C
 Default run (recommended for CI and sharing):
 
 ```bash
-uv run python validationScripts/compareTyreModel.py
+uv run python tools/analysis/compare_tyre_model.py
 ```
 
 Run with interactive visual windows:
 
 ```bash
-uv run python validationScripts/compareTyreModel.py --visualise
+uv run python tools/analysis/compare_tyre_model.py --visualise
 ```
 
 Run validation gate with explicit threshold:
 
 ```bash
-uv run python validationScripts/compareTyreModel.py --validate --rmse-threshold-pct 12
+uv run python tools/analysis/compare_tyre_model.py --validate --rmse-threshold-pct 12
 ```
 
 Main outputs are written to:
@@ -236,7 +289,7 @@ uv sync
 uv run python src/main.py
 uv run python src/sweep.py mass 250,350 --steps 5
 uv run python src/ab_testing/run_ab_suite.py --output-dir ab_test_outputs/full_v1
-uv run python validationScripts/compareTyreModel.py
+uv run python tools/analysis/compare_tyre_model.py
 ```
 
 
