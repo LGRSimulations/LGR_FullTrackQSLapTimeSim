@@ -118,7 +118,13 @@ def evaluate_vehicle_state(v_car: float, a_steer: float, a_sideslip: float, curv
         'f_rear': f_rear
     }
 
-def find_vehicle_state_at_point(curvature: float, vehicle):
+def find_vehicle_state_at_point(
+    curvature: float,
+    vehicle,
+    normal_load_per_tyre: float = None,
+    straight_line_speed_cap: float = 200.0,
+    use_rollover_speed_cap: bool = True,
+):
     """
     Find the maximum feasible steady-state cornering state at a single track point.
 
@@ -177,7 +183,7 @@ def find_vehicle_state_at_point(curvature: float, vehicle):
     if abs(curvature) < 1e-4:
         return {
             'success': True,
-            'v_car': 200.0,
+            'v_car': float(straight_line_speed_cap),
             'a_steer': 0.0,
             'a_sideslip': 0.0
         }
@@ -206,8 +212,11 @@ def find_vehicle_state_at_point(curvature: float, vehicle):
     # Rollover limit
     v_rollover = np.sqrt((t / (2 * h)) * g * R)
     
-    # Use rollover as hard cap.
-    v_bound = v_rollover
+    # Use rollover as hard cap unless explicitly disabled for diagnostics.
+    if use_rollover_speed_cap:
+        v_bound = v_rollover
+    else:
+        v_bound = 200.0
     
     # Bicycle model: delta approx L * K
     guess_delta = np.arctan(L * K)
@@ -243,7 +252,15 @@ def find_vehicle_state_at_point(curvature: float, vehicle):
             alpha_r = -beta + (b * K)
             
             # Tyre model expects degrees.
-            Fy_f, Fy_r = vehicle.compute_tyre_forces(np.degrees(alpha_f), np.degrees(alpha_r))
+            if normal_load_per_tyre is None:
+                Fy_f, Fy_r = vehicle.compute_tyre_forces(np.degrees(alpha_f), np.degrees(alpha_r))
+            else:
+                Fy_f, Fy_r = vehicle.compute_tyre_forces(
+                    np.degrees(alpha_f),
+                    np.degrees(alpha_r),
+                    normal_load_front=normal_load_per_tyre,
+                    normal_load_rear=normal_load_per_tyre,
+                )
             
             # Equations to solve - Step 4.iii 
             # Lateral Force Balance: m*v^2*K - (Fy_f + Fy_r) = 0

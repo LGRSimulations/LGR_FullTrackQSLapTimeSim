@@ -5,8 +5,11 @@ import logging
 import json
 import matplotlib.pyplot as plt
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
+
 # Add src to path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
+sys.path.append(os.path.join(REPO_ROOT, "src"))
 
 from vehicle.vehicle import create_vehicle
 from track.track import Track, load_track
@@ -201,7 +204,7 @@ def traction_limited_forward_pass(track, vehicle, point_speeds, reaction_time, s
 
 def main():
     # Load Config
-    config_path = os.path.join(os.path.dirname(__file__), '..', 'config.json')
+    config_path = os.path.join(REPO_ROOT, "config.json")
     with open(config_path, 'r') as f:
         config = json.load(f)
     
@@ -209,7 +212,7 @@ def main():
     vehicle = create_vehicle(config)
     
     # Load Track
-    track_path = os.path.join(os.path.dirname(__file__), '..', config['track']['file_path'])
+    track_path = os.path.join(REPO_ROOT, config['track']['file_path'])
     track = load_track(track_path, debug_mode=False)
     
     logger.info(f"Track loaded: {len(track.points)} points")

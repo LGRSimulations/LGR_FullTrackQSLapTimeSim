@@ -118,6 +118,7 @@ class Vehicle:
         self.power_unit = power_unit
         self.tyre_model = tyre_model
         self.config = config
+        self.base_mu_reference = max(float(parameters.base_mu), 1e-6)
         
         # Calculate derived parameters
         self.weight = parameters.mass * 9.81  # N
@@ -132,18 +133,25 @@ class Vehicle:
         """
         return self.params.mass * 9.81 / 4.0
         
-    def compute_tyre_forces(self, slip_angle_front: float, slip_angle_rear: float):
+    def compute_tyre_forces(self, slip_angle_front: float, slip_angle_rear: float,
+                            normal_load_front: float = None, normal_load_rear: float = None):
         """
         Compute lateral tire forces using the tire model.
         Args:
             slip_angle_front: Front tire slip angle in degrees
             slip_angle_rear: Rear tire slip angle in degrees
+            normal_load_front: Optional front tyre normal load per tyre in N
+            normal_load_rear: Optional rear tyre normal load per tyre in N
         Returns:
             (f_front, f_rear): Lateral forces in N
         """
-        tyre_normal_load = self.compute_static_normal_load()
-        f_front = self.tyre_model.get_lateral_force(slip_angle_front, normal_load=tyre_normal_load) * 2
-        f_rear = self.tyre_model.get_lateral_force(slip_angle_rear, normal_load=tyre_normal_load) * 2
+        if normal_load_front is None:
+            normal_load_front = self.compute_static_normal_load()
+        if normal_load_rear is None:
+            normal_load_rear = self.compute_static_normal_load()
+        mu_scale = float(self.params.base_mu) / self.base_mu_reference
+        f_front = self.tyre_model.get_lateral_force(slip_angle_front, normal_load=normal_load_front) * 2 * mu_scale
+        f_rear = self.tyre_model.get_lateral_force(slip_angle_rear, normal_load=normal_load_rear) * 2 * mu_scale
         return f_front, f_rear
     
     def compute_yaw_moment(self, f_front: float, f_rear: float, steer_angle: float) -> float:
@@ -351,10 +359,12 @@ def load_vehicle_parameters(file_path: str) -> vehicle_parameters:
 def create_vehicle(config) -> Vehicle:
     """Create vehicle from configuration file."""
     # Get vehicle parameters file_path from config
-    params_filepath = config.get('vehicle_parameters', 'datasets/vehicle/parameters.json')
+    params_filepath = config.get('vehicle_parameters', 'parameters.json')
     # Load parameters from file
     params = load_vehicle_parameters(params_filepath)
     power_unit = create_powertrain_model(config.get('powertrain', {}))
-    tyre_model = create_tyre_model(config.get('tyre_model', {}))
+    tyre_config = dict(config.get('tyre_model', {}))
+    tyre_config.setdefault('base_mu', params.base_mu)
+    tyre_model = create_tyre_model(tyre_config)
     loaded_vehicle = Vehicle(params, power_unit, tyre_model, config)
     return loaded_vehicle

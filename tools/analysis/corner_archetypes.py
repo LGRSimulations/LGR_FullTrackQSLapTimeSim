@@ -37,8 +37,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
+
 # Add src directory to path for imports
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
+sys.path.insert(0, os.path.join(REPO_ROOT, "src"))
 
 from track.track import Track, TrackPoint
 from vehicle.vehicle import create_vehicle
@@ -1034,7 +1037,7 @@ def main():
     logger.info("="*60)
     
     # Load configuration
-    config_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../config.json'))
+    config_path = os.path.join(REPO_ROOT, "config.json")
     logger.info(f"Loading config from: {config_path}")
     config = load_config(config_path)
     
