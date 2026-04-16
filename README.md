@@ -306,6 +306,12 @@ Main outputs are written to:
 - `artifacts/tyre_validation/tyre_model_verification.html`
 - `artifacts/tyre_validation/*.png`
 
+### First-Principles Migration Plan
+
+Use the milestone checklist for physics-first simulator hardening:
+
+- `docs/FIRST_PRINCIPLES_MIGRATION_CHECKLIST.md`
+
 ### Command Quick Reference
 
 From the project root:
