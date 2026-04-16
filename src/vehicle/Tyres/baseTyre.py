@@ -108,6 +108,7 @@ class LookupTableTyreModel(BaseTyreModel):
     E_LONG = 0.1     # Curvature factor for longitudinal
     B_LAT = 8.6      # Default lateral stiffness factor
     B_LONG = 12.0    # Default longitudinal stiffness factor
+    MIN_NORMAL_LOAD_N = 1e-9
     
     def __init__(self, tyre_data_lat: pd.DataFrame, tyre_data_long: pd.DataFrame, base_mu: float = 1.0):
         """
@@ -324,6 +325,9 @@ class LookupTableTyreModel(BaseTyreModel):
         Bx = B * slip
         return D * np.sin(C * np.arctan(Bx - E * (Bx - np.arctan(Bx))))
 
+    def _is_zero_or_negative_load(self, normal_load: float) -> bool:
+        return float(normal_load) <= self.MIN_NORMAL_LOAD_N
+
     def get_lateral_force(self, slip_angle: float, normal_load: Optional[float] = None, 
                         camber_angle: Optional[float] = None, 
                         tyre_pressure: Optional[float] = None,
@@ -340,9 +344,12 @@ class LookupTableTyreModel(BaseTyreModel):
         """
         if normal_load is None or self._lat_peak_interp is None:
             raise ValueError("Normal load is required and lateral peak interpolator must be available")
+
+        if self._is_zero_or_negative_load(normal_load):
+            return 0.0
         
         # Get peak force D by interpolating at the given normal load
-        D = float(self._lat_peak_interp(normal_load)) * self.base_mu
+        D = max(0.0, float(self._lat_peak_interp(normal_load)) * self.base_mu)
         
         # Compute B as function of D
         B = self._compute_B_lateral(D)
@@ -371,9 +378,12 @@ class LookupTableTyreModel(BaseTyreModel):
         """
         if normal_load is None or self._long_peak_interp is None:
             raise ValueError("Normal load is required and longitudinal peak interpolator must be available")
+
+        if self._is_zero_or_negative_load(normal_load):
+            return 0.0
         
         # Get peak force D by interpolating at the given normal load
-        D = float(self._long_peak_interp(normal_load)) * self.base_mu
+        D = max(0.0, float(self._long_peak_interp(normal_load)) * self.base_mu)
         
         # Compute B as function of D
         B = self._compute_B_longitudinal(D)
@@ -501,14 +511,17 @@ class LookupTableTyreModel(BaseTyreModel):
         """
         if normal_load is None:
             raise ValueError("Normal load is required for combined forces calculation")
+
+        if self._is_zero_or_negative_load(normal_load):
+            return (0.0, 0.0)
         
         # Get pure forces
         fy_pure = self.get_lateral_force(slip_angle, normal_load)
         fx_pure = self.get_longitudinal_force(slip_ratio, normal_load)
         
         # Get peak forces for friction circle limit
-        D_lat = (float(self._lat_peak_interp(normal_load)) * self.base_mu) if self._lat_peak_interp else abs(fy_pure)
-        D_long = (float(self._long_peak_interp(normal_load)) * self.base_mu) if self._long_peak_interp else abs(fx_pure)
+        D_lat = max(0.0, (float(self._lat_peak_interp(normal_load)) * self.base_mu)) if self._lat_peak_interp else abs(fy_pure)
+        D_long = max(0.0, (float(self._long_peak_interp(normal_load)) * self.base_mu)) if self._long_peak_interp else abs(fx_pure)
         
         # Combined force magnitude
         total_force = np.sqrt(fx_pure**2 + fy_pure**2)
