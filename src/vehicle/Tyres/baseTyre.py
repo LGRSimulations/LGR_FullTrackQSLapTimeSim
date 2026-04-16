@@ -106,7 +106,7 @@ class LookupTableTyreModel(BaseTyreModel):
     E_LAT = 0.3     # Curvature factor for lateral
     E_LONG = 0.1    # Curvature factor for longitudinal
     
-    def __init__(self, tyre_data_lat: pd.DataFrame, tyre_data_long: pd.DataFrame):
+    def __init__(self, tyre_data_lat: pd.DataFrame, tyre_data_long: pd.DataFrame, base_mu: float = 1.0):
         """
         Initialize lookup table tyre model.
         
@@ -117,6 +117,7 @@ class LookupTableTyreModel(BaseTyreModel):
         super().__init__()
         self.tyre_data_lat = tyre_data_lat
         self.tyre_data_long = tyre_data_long
+        self.base_mu = float(base_mu)
 
         # Build peak-vs-load interpolators (used by Pacejka D = peak)
         self._build_peak_interps()
@@ -236,7 +237,7 @@ class LookupTableTyreModel(BaseTyreModel):
             raise ValueError("Normal load is required and lateral peak interpolator must be available")
         
         # Get peak force D by interpolating at the given normal load
-        D = float(self._lat_peak_interp(normal_load))
+        D = float(self._lat_peak_interp(normal_load)) * self.base_mu
         
         # Compute B as function of D
         B = self._compute_B_lateral(D)
@@ -265,7 +266,7 @@ class LookupTableTyreModel(BaseTyreModel):
             raise ValueError("Normal load is required and longitudinal peak interpolator must be available")
         
         # Get peak force D by interpolating at the given normal load
-        D = float(self._long_peak_interp(normal_load))
+        D = float(self._long_peak_interp(normal_load)) * self.base_mu
         
         # Compute B as function of D
         B = self._compute_B_longitudinal(D)
@@ -312,7 +313,7 @@ class LookupTableTyreModel(BaseTyreModel):
                         raise FileNotFoundError(f"Longitudinal tyre data file not found: {full_long}")
                     tyre_data_long = cls._parse_longitudinal_file(full_long)
 
-                return cls(tyre_data_lat, tyre_data_long)
+                return cls(tyre_data_lat, tyre_data_long, base_mu=config.get('base_mu', 1.0))
 
         except Exception as e:
             import logging
@@ -369,7 +370,7 @@ class LookupTableTyreModel(BaseTyreModel):
                 raise ValueError(f"Unsupported file format: {file_path}")
                 
             # Return the model
-            return cls(tyre_data_lat, tyre_data_long)
+            return cls(tyre_data_lat, tyre_data_long, base_mu=config.get('base_mu', 1.0))
             
         except Exception as e:
             import logging

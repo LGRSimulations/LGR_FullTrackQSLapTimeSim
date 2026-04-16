@@ -118,6 +118,7 @@ class Vehicle:
         self.power_unit = power_unit
         self.tyre_model = tyre_model
         self.config = config
+        self.base_mu_reference = max(float(parameters.base_mu), 1e-6)
         
         # Calculate derived parameters
         self.weight = parameters.mass * 9.81  # N
@@ -148,8 +149,9 @@ class Vehicle:
             normal_load_front = self.compute_static_normal_load()
         if normal_load_rear is None:
             normal_load_rear = self.compute_static_normal_load()
-        f_front = self.tyre_model.get_lateral_force(slip_angle_front, normal_load=normal_load_front) * 2
-        f_rear = self.tyre_model.get_lateral_force(slip_angle_rear, normal_load=normal_load_rear) * 2
+        mu_scale = float(self.params.base_mu) / self.base_mu_reference
+        f_front = self.tyre_model.get_lateral_force(slip_angle_front, normal_load=normal_load_front) * 2 * mu_scale
+        f_rear = self.tyre_model.get_lateral_force(slip_angle_rear, normal_load=normal_load_rear) * 2 * mu_scale
         return f_front, f_rear
     
     def compute_yaw_moment(self, f_front: float, f_rear: float, steer_angle: float) -> float:
@@ -361,6 +363,8 @@ def create_vehicle(config) -> Vehicle:
     # Load parameters from file
     params = load_vehicle_parameters(params_filepath)
     power_unit = create_powertrain_model(config.get('powertrain', {}))
-    tyre_model = create_tyre_model(config.get('tyre_model', {}))
+    tyre_config = dict(config.get('tyre_model', {}))
+    tyre_config.setdefault('base_mu', params.base_mu)
+    tyre_model = create_tyre_model(tyre_config)
     loaded_vehicle = Vehicle(params, power_unit, tyre_model, config)
     return loaded_vehicle
