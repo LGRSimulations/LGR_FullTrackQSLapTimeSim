@@ -265,24 +265,28 @@ def plot_3d_channel(output_path, title, model, group_rows, force_col, slip_col, 
 
 def run_zero_force_checks(model):
     vehicle_normal_load = 320.0 * 9.81 / 4.0
+    zero_tol = 1e-6
     zero_tests = [
-        ("Lateral force at 0 slip angle, 0 normal load", lambda: model.get_lateral_force(0, normal_load=0)),
-        ("Lateral force at 0 slip angle, 200N normal load", lambda: model.get_lateral_force(0, normal_load=200)),
-        (f"Lateral force at 0 slip angle, vehicle normal load ({vehicle_normal_load:.1f}N)", lambda: model.get_lateral_force(0, normal_load=vehicle_normal_load)),
-        ("Longitudinal force at 0 slip ratio, 0 normal load", lambda: model.get_longitudinal_force(0, normal_load=0)),
-        ("Longitudinal force at 0 slip ratio, 200N normal load", lambda: model.get_longitudinal_force(0, normal_load=200)),
-        (f"Longitudinal force at 0 slip ratio, vehicle normal load ({vehicle_normal_load:.1f}N)", lambda: model.get_longitudinal_force(0, normal_load=vehicle_normal_load)),
-        ("Lateral force at 10 deg slip angle, 0 normal load", lambda: model.get_lateral_force(10, normal_load=0)),
-        ("Longitudinal force at 10% slip ratio, 0 normal load", lambda: model.get_longitudinal_force(10, normal_load=0)),
+        ("Lateral force at 0 slip angle, 0 normal load", lambda: model.get_lateral_force(0, normal_load=0), True, zero_tol),
+        ("Lateral force at 0 slip angle, 200N normal load", lambda: model.get_lateral_force(0, normal_load=200), True, zero_tol),
+        (f"Lateral force at 0 slip angle, vehicle normal load ({vehicle_normal_load:.1f}N)", lambda: model.get_lateral_force(0, normal_load=vehicle_normal_load), True, zero_tol),
+        ("Longitudinal force at 0 slip ratio, 0 normal load", lambda: model.get_longitudinal_force(0, normal_load=0), True, zero_tol),
+        ("Longitudinal force at 0 slip ratio, 200N normal load", lambda: model.get_longitudinal_force(0, normal_load=200), True, zero_tol),
+        (f"Longitudinal force at 0 slip ratio, vehicle normal load ({vehicle_normal_load:.1f}N)", lambda: model.get_longitudinal_force(0, normal_load=vehicle_normal_load), True, zero_tol),
+        ("Lateral force at 10 deg slip angle, 0 normal load", lambda: model.get_lateral_force(10, normal_load=0), True, zero_tol),
+        ("Longitudinal force at 10% slip ratio, 0 normal load", lambda: model.get_longitudinal_force(10, normal_load=0), True, zero_tol),
     ]
 
     lines = []
     rows = []
-    for desc, func in zero_tests:
+    for desc, func, expect_zero, tol in zero_tests:
         try:
             value = float(func())
-            line = f"  {desc}: {value:.4f}"
-            rows.append({"description": desc, "value": value, "error": "", "status": "OK"})
+            status = "OK"
+            if expect_zero and abs(value) > tol:
+                status = "FAIL"
+            line = f"  {desc}: {value:.4f} [{status}]"
+            rows.append({"description": desc, "value": value, "error": "", "status": status})
         except Exception as exc:
             line = f"  {desc}: ERROR {type(exc).__name__}: {exc}"
             rows.append({"description": desc, "value": None, "error": f"{type(exc).__name__}: {exc}", "status": "ERROR"})
