@@ -179,6 +179,47 @@ def _compute_normal_loads_for_longitudinal(vehicle, v_car, a_long, config):
     }
 
 
+def _compute_total_force_caps(vehicle, front_load, rear_load, config, peak_slip_ratio):
+    """Compute pure-slip total longitudinal and lateral tyre force caps."""
+    solver_cfg = config.get('solver', {}) if isinstance(config, dict) else {}
+    lateral_cap_slip_angle = float(solver_cfg.get('lateral_combined_slip_angle_deg', 10.0))
+
+    mu_scale = float(vehicle.params.base_mu) / max(getattr(vehicle, 'base_mu_reference', 1.0), 1e-6)
+
+    # Longitudinal pure cap from front/rear tyres at requested peak slip ratio.
+    f_long_front = abs(vehicle.tyre_model.get_longitudinal_force(
+        slip_ratio=peak_slip_ratio,
+        normal_load=front_load,
+    ) * mu_scale) * 2.0
+    f_long_rear = abs(vehicle.tyre_model.get_longitudinal_force(
+        slip_ratio=peak_slip_ratio,
+        normal_load=rear_load,
+    ) * mu_scale) * 2.0
+    fx_cap_total = f_long_front + f_long_rear
+
+    # Lateral pure cap proxy using fixed representative slip angle.
+    f_lat_front = abs(vehicle.tyre_model.get_lateral_force(
+        slip_angle=lateral_cap_slip_angle,
+        normal_load=front_load,
+    ) * mu_scale) * 2.0
+    f_lat_rear = abs(vehicle.tyre_model.get_lateral_force(
+        slip_angle=lateral_cap_slip_angle,
+        normal_load=rear_load,
+    ) * mu_scale) * 2.0
+    fy_cap_total = f_lat_front + f_lat_rear
+
+    return float(fx_cap_total), float(fy_cap_total)
+
+
+def _longitudinal_budget_scale_from_lateral_demand(fy_demand_total, fy_cap_total):
+    """Friction-ellipse budget scale for longitudinal authority under lateral demand."""
+    if fy_cap_total <= 1e-9:
+        return 0.0
+    ratio = float(fy_demand_total) / float(fy_cap_total)
+    ratio = min(max(ratio, 0.0), 1.0)
+    return float(np.sqrt(max(0.0, 1.0 - ratio * ratio)))
+
+
 def _compute_corner_normal_load_per_tyre(vehicle, v_car, config):
     """Cornering solve normal load proxy (baseline static, B1 includes aero load)."""
     base = vehicle.compute_static_normal_load()
@@ -323,6 +364,8 @@ def forward_pass(track, vehicle, point_speeds, config):
     limiting_modes = ['initial'] * n_points
     powertrain_forces = [0.0] * n_points
     tyre_limit_forces = [0.0] * n_points
+    tyre_lateral_caps = [0.0] * n_points
+    combined_budget_scale = [1.0] * n_points
     net_long_forces = [0.0] * n_points
     normal_load_per_tyre = [vehicle.compute_static_normal_load()] * n_points
     peak_slip_ratio = float(config.get('ab_testing', {}).get('peak_slip_ratio_accel', 12.0))
@@ -352,17 +395,18 @@ def forward_pass(track, vehicle, point_speeds, config):
         rear_load = load_state['rear_per_tyre']
         normal_load_per_tyre[i] = load_state['mean_per_tyre']
 
-        # Tyre-limited wheel force at fixed peak slip ratio with variant-aware normal load.
-        mu_scale = float(vehicle.params.base_mu) / max(getattr(vehicle, 'base_mu_reference', 1.0), 1e-6)
-        f_drive_front = vehicle.tyre_model.get_longitudinal_force(
-            slip_ratio=peak_slip_ratio,
-            normal_load=front_load
-        ) * mu_scale
-        f_drive_per_tyre = vehicle.tyre_model.get_longitudinal_force(
-            slip_ratio=peak_slip_ratio,
-            normal_load=rear_load
-        ) * mu_scale
-        f_traction_tyre_limit = abs(f_drive_front) * 2.0 + abs(f_drive_per_tyre) * 2.0
+        fx_cap_total, fy_cap_total = _compute_total_force_caps(
+            vehicle=vehicle,
+            front_load=front_load,
+            rear_load=rear_load,
+            config=config,
+            peak_slip_ratio=peak_slip_ratio,
+        )
+
+        curvature = abs(track.points[i].curvature)
+        fy_demand_total = vehicle.params.mass * (v_calc**2) * curvature
+        budget_scale = _longitudinal_budget_scale_from_lateral_demand(fy_demand_total, fy_cap_total)
+        f_traction_tyre_limit = fx_cap_total * budget_scale
 
         # Net longitudinal force after tyre slip limit and drag.
         f_traction = min(f_traction_powertrain, f_traction_tyre_limit)
@@ -371,6 +415,8 @@ def forward_pass(track, vehicle, point_speeds, config):
 
         powertrain_forces[i] = f_traction_powertrain
         tyre_limit_forces[i] = f_traction_tyre_limit
+        tyre_lateral_caps[i] = fy_cap_total
+        combined_budget_scale[i] = budget_scale
         net_long_forces[i] = f_x
         if f_traction_powertrain < f_traction_tyre_limit:
             limiting_modes[i] = 'power_limited'
@@ -391,6 +437,8 @@ def forward_pass(track, vehicle, point_speeds, config):
         'forward_limiting_mode': limiting_modes,
         'forward_powertrain_force': powertrain_forces,
         'forward_tyre_force_limit': tyre_limit_forces,
+        'forward_tyre_lateral_cap': tyre_lateral_caps,
+        'forward_combined_budget_scale': combined_budget_scale,
         'forward_net_long_force': net_long_forces,
         'forward_normal_load_per_tyre': normal_load_per_tyre,
     }
@@ -416,6 +464,8 @@ def backward_pass(track, vehicle, point_speeds, config):
     limiting_modes = ['terminal'] * n_points
     brake_force_limits = [0.0] * n_points
     brake_decel_limits = [0.0] * n_points
+    brake_lateral_caps = [0.0] * n_points
+    brake_combined_budget_scale = [1.0] * n_points
     normal_load_per_tyre = [vehicle.compute_static_normal_load()] * n_points
     peak_slip_ratio = float(config.get('ab_testing', {}).get('peak_slip_ratio_brake', 12.0))
 
@@ -434,23 +484,24 @@ def backward_pass(track, vehicle, point_speeds, config):
         rear_load = load_state['rear_per_tyre']
         normal_load_per_tyre[i] = load_state['mean_per_tyre']
 
-        mu_scale = float(vehicle.params.base_mu) / max(getattr(vehicle, 'base_mu_reference', 1.0), 1e-6)
-        f_brake_front = vehicle.tyre_model.get_longitudinal_force(
-            slip_ratio=-peak_slip_ratio,
-            normal_load=front_load
-        ) * mu_scale
-        f_brake_rear = vehicle.tyre_model.get_longitudinal_force(
-            slip_ratio=-peak_slip_ratio,
-            normal_load=rear_load
-        ) * mu_scale
-        f_brake_total = abs(f_brake_front) * 2 + abs(f_brake_rear) * 2
-
-        # Peak longitudinal deceleration available from tyres (m/s^2)
-        a_limit = f_brake_total / vehicle.params.mass
+        fx_cap_total, fy_cap_total = _compute_total_force_caps(
+            vehicle=vehicle,
+            front_load=front_load,
+            rear_load=rear_load,
+            config=config,
+            peak_slip_ratio=-peak_slip_ratio,
+        )
 
         # Lateral acceleration demanded at this point by the corner geometry (m/s^2)
         curvature = abs(track.points[i].curvature)
         a_lat = v_next**2 * curvature
+
+        fy_demand_total = vehicle.params.mass * a_lat
+        budget_scale = _longitudinal_budget_scale_from_lateral_demand(fy_demand_total, fy_cap_total)
+        f_brake_total = fx_cap_total * budget_scale
+
+        # Peak longitudinal deceleration available from tyres (m/s^2)
+        a_limit = f_brake_total / vehicle.params.mass
 
         # Friction circle: longitudinal budget is reduced by lateral demand.
         # a_long^2 + a_lat^2 <= a_limit^2  =>  a_long = sqrt(a_limit^2 - a_lat^2)
@@ -462,6 +513,8 @@ def backward_pass(track, vehicle, point_speeds, config):
         a_brake += f_drag / vehicle.params.mass
         brake_force_limits[i] = f_brake_total
         brake_decel_limits[i] = a_brake
+        brake_lateral_caps[i] = fy_cap_total
+        brake_combined_budget_scale[i] = budget_scale
         if a_lat_clamped >= a_limit * 0.99:
             limiting_modes[i] = 'lateral_saturated'
         else:
@@ -480,6 +533,8 @@ def backward_pass(track, vehicle, point_speeds, config):
         'backward_limiting_mode': limiting_modes,
         'backward_brake_force_limit': brake_force_limits,
         'backward_brake_decel_limit': brake_decel_limits,
+        'backward_tyre_lateral_cap': brake_lateral_caps,
+        'backward_combined_budget_scale': brake_combined_budget_scale,
         'backward_normal_load_per_tyre': normal_load_per_tyre,
     }
     return speeds, diagnostics

@@ -206,3 +206,67 @@ Scope: fallback physical constraints, solver failure attribution, A/B rollover-m
 - uv run python src/diagnostics/gg_rollover_suite.py --track datasets/tracks/FSUK.txt --output-dir artifacts/diagnostics/gg_rollover_suite
 - uv run python -c "import sys,json; sys.path.insert(0,'src'); from track.track import load_track; from vehicle.vehicle import create_vehicle; from simulator.simulator import run_lap_time_simulation; from collections import Counter; cfg=json.load(open('config.json')); cfg['track']={'file_path':'datasets/tracks/FSUK.txt'}; v=create_vehicle(cfg); tr=load_track('datasets/tracks/FSUK.txt',cfg.get('debug_mode',False)); res=run_lap_time_simulation(tr,v,cfg,display=False); print(dict(Counter(res.diagnostics.get('corner_failure_reason',[]))))"
 - uv run python src/ab_testing/run_ab_suite.py --tracks StraightLineTrack --variants baseline --fallback-threshold 0.15 --output-dir ab_test_outputs/smoke_rollover_flag_quick
+
+---
+
+Timestamp: 2026-04-16T20:05:00Z
+Owner: Copilot + Project Team
+Change ID: combined-force-budgeting-propagation-v1
+Scope: forward/backward speed propagation realism under combined lateral + longitudinal demand
+
+## 1) Problem
+
+### High-Level
+- Combined-g values were still too optimistic even after fallback and retry-tier improvements.
+- This suggested that solver robustness alone was not enough; force budgeting in propagation was still too generous.
+
+### Low-Level
+- Forward and backward passes used strong pure longitudinal capacity while lateral demand was present.
+- Without consistent friction-ellipse budgeting through propagation, the model could overstate usable longitudinal authority in corners.
+
+## 2) Diagnosis
+- Evidence used:
+	- FSUK rollover diagnostics showing high combined-g values.
+	- Inspection of forward/backward force-cap logic in speed propagation path.
+- Root cause:
+	- Longitudinal force caps were not consistently reduced by lateral demand in both propagation passes.
+- Alternatives ruled out:
+	- Remaining fallback points were localized and low-count, so they were not the only source of high combined-g.
+
+## 3) Solution and Implementation
+- Engineering intent:
+	- Enforce a consistent combined-force budget so acceleration/braking authority reduces as lateral demand rises.
+- What changed:
+	- Added total pure-slip force-cap helper for longitudinal and lateral channels.
+	- Added friction-ellipse budget scale from lateral demand ratio.
+	- Applied that scale to longitudinal traction in forward pass and braking authority in backward pass.
+	- Exposed new diagnostics channels for lateral caps and combined-budget scales.
+- Why this is physically reasonable:
+	- Tyres cannot deliver independent peak Fx and peak Fy simultaneously.
+	- A friction-ellipse style budget enforces this coupling in a physically interpretable way.
+- Verification added:
+	- Existing contract suite rerun.
+	- FSUK rollover diagnostics rerun after propagation update.
+
+## 4) Impact and Explanation
+- Physics correctness impact:
+	- Improves consistency between tyre force limits and speed-profile propagation under combined loading.
+- Lap-time trustworthiness impact:
+	- Reduces optimistic acceleration/braking in cornered states.
+- Diagnostics stability impact:
+	- Added telemetry to track when and how longitudinal authority was reduced by lateral demand.
+- Limitations and next step:
+	- Current representative lateral slip-angle cap is still a simplified proxy.
+	- Next step is parameter-activation audit and per-parameter influence checks to ensure all root JSON parameters affect the expected physics pathways.
+
+## Validation Gates (Required)
+- Tyre invariants: PASS
+- RMSE thresholds: PASS (no tyre fit changes in this step)
+- Fallback-rate thresholds:
+	- FSUK (rollover_on): PASS (0.0155 under current gate definition)
+	- SkidpadF26: PASS (from previous baseline sweep)
+	- StraightLineTrack: PASS (from previous baseline sweep)
+
+## Reproducibility Notes (Optional)
+- uv run python -m unittest tests.test_solver_contracts tests.test_tyre_force_contracts tests.test_tyre_peak_load_clamp_contracts
+- uv run python src/diagnostics/gg_rollover_suite.py --track datasets/tracks/FSUK.txt --output-dir artifacts/diagnostics/gg_rollover_suite
