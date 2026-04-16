@@ -47,7 +47,7 @@ def limiter_fractions(modes):
     return {k: v / total for k, v in counts.items()}
 
 
-def run_suite(output_dir, include_tracks, stale_threshold):
+def run_suite(output_dir, include_tracks, stale_threshold, variant_names, fallback_threshold):
     from track.track import load_track
     from vehicle.vehicle import create_vehicle
     from simulator.simulator import run_lap_time_simulation
@@ -55,10 +55,7 @@ def run_suite(output_dir, include_tracks, stale_threshold):
     config_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "config.json"))
     base_config = load_config(config_path)
 
-    variant_map = {
-        "baseline": "baseline",
-        "b1": "b1",
-    }
+    variant_map = {name: name for name in variant_names}
 
     track_map = {
         "FSUK": "datasets/tracks/FSUK.txt",
@@ -115,6 +112,7 @@ def run_suite(output_dir, include_tracks, stale_threshold):
                         "backward_dominant_mode": "",
                         "forward_mode_breakdown": "",
                         "backward_mode_breakdown": "",
+                        "fallback_gate_pass": "",
                     }
 
                     try:
@@ -132,6 +130,7 @@ def run_suite(output_dir, include_tracks, stale_threshold):
 
                         row["lap_time_s"] = float(sim_result.lap_time)
                         row["fallback_rate"] = float(fallback_rate)
+                        row["fallback_gate_pass"] = bool(fallback_rate <= fallback_threshold)
                         row["forward_mode_breakdown"] = json.dumps(forward_breakdown, sort_keys=True)
                         row["backward_mode_breakdown"] = json.dumps(backward_breakdown, sort_keys=True)
                         row["forward_dominant_mode"] = max(forward_breakdown, key=forward_breakdown.get) if forward_breakdown else ""
@@ -184,6 +183,12 @@ def run_suite(output_dir, include_tracks, stale_threshold):
     invalid_count = sum(1 for r in rows if r["status"] == "invalid")
     total_count = len(rows)
     stale_counts = Counter((r["track"], r["variant"]) for r in sens_rows if r["stale"])
+    valid_rows = [r for r in rows if r["status"] == "valid" and r["fallback_rate"] != ""]
+    fallback_fail_counts = Counter(
+        (r["track"], r["variant"])
+        for r in valid_rows
+        if float(r["fallback_rate"]) > float(fallback_threshold)
+    )
 
     md_path = os.path.join(output_dir, "ab_summary.md")
     with open(md_path, "w", encoding="utf-8") as f:
@@ -192,8 +197,9 @@ def run_suite(output_dir, include_tracks, stale_threshold):
         f.write(f"- Total runs: {total_count}\n")
         f.write(f"- Invalid runs: {invalid_count}\n")
         f.write(f"- Tracks: {', '.join(include_tracks)}\n")
-        f.write("- Variants: baseline, b1\n")
+        f.write(f"- Variants: {', '.join(variant_names)}\n")
         f.write("- Focused parameters: downforce_coefficient, aero_cp, cog_z, front_track_width, rear_track_width, roll_stiffness, max_roll_angle_deg, base_mu\n\n")
+        f.write(f"- Fallback-rate gate: pass when fallback_rate <= {fallback_threshold:.3f}\n\n")
 
         f.write("## Invalid Run Breakdown\n\n")
         if invalid_count == 0:
@@ -206,8 +212,14 @@ def run_suite(output_dir, include_tracks, stale_threshold):
 
         f.write("## Stale Metric Count by Track/Variant\n\n")
         for track_name in include_tracks:
-            for variant_name in ["baseline", "b1"]:
+            for variant_name in variant_names:
                 f.write(f"- {track_name} / {variant_name}: {stale_counts.get((track_name, variant_name), 0)} stale parameters\n")
+        f.write("\n")
+
+        f.write("## Fallback-Rate Gate Failures by Track/Variant\n\n")
+        for track_name in include_tracks:
+            for variant_name in variant_names:
+                f.write(f"- {track_name} / {variant_name}: {fallback_fail_counts.get((track_name, variant_name), 0)} runs above threshold\n")
         f.write("\n")
 
         f.write("## Top Sensitivity Movers\n\n")
@@ -229,15 +241,26 @@ def main():
         default="FSUK,SkidpadF26,StraightLineTrack",
         help="Comma-separated track set: FSUK,SkidpadF26,StraightLineTrack",
     )
+    parser.add_argument(
+        "--variants",
+        default="baseline,b1,tyre_peak_load_clamp",
+        help="Comma-separated model variants to compare",
+    )
     parser.add_argument("--stale-threshold", type=float, default=0.05, help="Delta lap-time threshold (s) for stale flag")
+    parser.add_argument("--fallback-threshold", type=float, default=0.15, help="Fallback-rate pass threshold")
     args = parser.parse_args()
 
     include_tracks = [t.strip() for t in args.tracks.split(",") if t.strip()]
+    variant_names = [v.strip() for v in args.variants.split(",") if v.strip()]
+    if not variant_names:
+        raise ValueError("At least one variant is required")
 
     runs_csv, sens_csv, md_path = run_suite(
         output_dir=args.output_dir,
         include_tracks=include_tracks,
         stale_threshold=args.stale_threshold,
+        variant_names=variant_names,
+        fallback_threshold=args.fallback_threshold,
     )
 
     print("A/B suite complete")
