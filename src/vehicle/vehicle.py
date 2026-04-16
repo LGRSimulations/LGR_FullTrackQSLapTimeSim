@@ -365,6 +365,8 @@ def create_vehicle(config) -> Vehicle:
     power_unit = create_powertrain_model(config.get('powertrain', {}))
     tyre_config = dict(config.get('tyre_model', {}))
     tyre_config.setdefault('base_mu', params.base_mu)
+    model_variant = str(config.get('ab_testing', {}).get('model_variant', config.get('model_variant', 'baseline'))).strip().lower()
+    tyre_config.setdefault('model_variant', model_variant)
     tyre_model = create_tyre_model(tyre_config)
     loaded_vehicle = Vehicle(params, power_unit, tyre_model, config)
     return loaded_vehicle

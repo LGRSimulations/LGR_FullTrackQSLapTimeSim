@@ -64,6 +64,20 @@ Notes:
   - Windows PowerShell: `.\.venv\Scripts\Activate.ps1`
   - macOS/Linux: `source .venv/bin/activate`
 
+### Change Documentation Standard
+
+Major engineering updates are logged in:
+- `docs/MAJOR_CHANGE_LOG.md`
+
+Use this template for every major change:
+- `docs/CHANGE_ENTRY_TEMPLATE.md`
+
+Each entry must include:
+1. Problem (high-level and low-level)
+2. Diagnosis
+3. Solution and implementation
+4. Impact and explanation
+
 ### Repository script layout
 
 The repository has been cleaned up so user-facing scripts live under a single `tools/` directory:
@@ -214,7 +228,7 @@ mass = 250.00, Lap Time = 72.31 s
 
 ### Running A/B Diagnostics (Baseline vs B1)
 
-Run the focused A/B diagnostic matrix to compare baseline behavior against B1 (dynamic normal-load coupling).
+Run the focused A/B diagnostic matrix to compare baseline behavior against candidate model variants (including tyre changes).
 
 From the project root:
 
@@ -225,7 +239,7 @@ uv run python src/ab_testing/run_ab_suite.py --output-dir ab_test_outputs/full_v
 #### What it runs
 
 - Tracks: `FSUK`, `SkidpadF26`, `StraightLineTrack`
-- Variants: `baseline`, `b1`
+- Variants: configurable via `--variants` (default: `baseline,b1,tyre_peak_load_clamp`)
 - Parameters (focused 8):
   - `downforce_coefficient`
   - `aero_cp`
@@ -239,19 +253,21 @@ uv run python src/ab_testing/run_ab_suite.py --output-dir ab_test_outputs/full_v
 
 #### Outputs
 
-- `ab_runs.csv`: run-level records (status, lap time, fallback rate, limiter mode breakdown)
+- `ab_runs.csv`: run-level records (status, lap time, fallback rate, fallback gate pass/fail, limiter mode breakdown)
 - `ab_sensitivity.csv`: per-track/variant sensitivity summary and stale flags
 - `ab_summary.md`: human-readable diagnostic summary
 
 #### Optional flags
 
 ```bash
-uv run python src/ab_testing/run_ab_suite.py --tracks FSUK,SkidpadF26 --stale-threshold 0.05 --output-dir ab_test_outputs/custom
+uv run python src/ab_testing/run_ab_suite.py --tracks FSUK,SkidpadF26 --variants baseline,tyre_peak_load_clamp --fallback-threshold 0.15 --stale-threshold 0.05 --output-dir ab_test_outputs/custom
 ```
 
 Where:
 
 - `--tracks` selects a comma-separated subset of known tracks
+- `--variants` selects one or more model variants for quick A/B comparisons
+- `--fallback-threshold` sets pass/fail cutoff for `fallback_rate`
 - `--stale-threshold` sets stale sensitivity cutoff in seconds
 - `--output-dir` selects artifact destination
 
@@ -275,6 +291,13 @@ Run validation gate with explicit threshold:
 
 ```bash
 uv run python tools/analysis/compare_tyre_model.py --validate --rmse-threshold-pct 12
+
+Run baseline vs tyre-clamp variant quickly with strict gates:
+
+```bash
+uv run python tools/analysis/compare_tyre_model.py --validate --model-variant baseline --rmse-threshold-pct 12 --max-high-load-growth-ratio 1.35
+uv run python tools/analysis/compare_tyre_model.py --validate --model-variant tyre_peak_load_clamp --rmse-threshold-pct 12 --max-high-load-growth-ratio 1.05
+```
 ```
 
 Main outputs are written to:
