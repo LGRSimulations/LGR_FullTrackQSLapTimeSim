@@ -359,7 +359,7 @@ def load_vehicle_parameters(file_path: str) -> vehicle_parameters:
 def create_vehicle(config) -> Vehicle:
     """Create vehicle from configuration file."""
     # Get vehicle parameters file_path from config
-    params_filepath = config.get('vehicle_parameters', 'datasets/vehicle/parameters.json')
+    params_filepath = config.get('vehicle_parameters', 'parameters.json')
     # Load parameters from file
     params = load_vehicle_parameters(params_filepath)
     power_unit = create_powertrain_model(config.get('powertrain', {}))

@@ -17,7 +17,7 @@ def _build_param_alias_map() -> dict[str, str]:
     """Build aliases from raw parameter JSON keys to vehicle.params attribute names."""
     alias_map: dict[str, str] = {}
 
-    params_path = config.get("vehicle_parameters", "datasets/vehicle/parameters.json")
+    params_path = config.get("vehicle_parameters", "parameters.json")
     if not os.path.isabs(params_path):
         params_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", params_path))
 
