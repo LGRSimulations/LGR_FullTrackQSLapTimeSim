@@ -3,6 +3,7 @@ import numpy as np
 import os
 import json
 from scipy.interpolate import interp1d
+from scipy.optimize import least_squares
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional
 import re
@@ -103,10 +104,13 @@ class LookupTableTyreModel(BaseTyreModel):
     # Pacejka shape factors (can be tuned)
     C_LAT = 1.3      # Shape factor for lateral
     C_LONG = 1.65    # Shape factor for longitudinal
-    E_LAT = 0.3     # Curvature factor for lateral
-    E_LONG = 0.1    # Curvature factor for longitudinal
+    E_LAT = 0.3      # Curvature factor for lateral
+    E_LONG = 0.1     # Curvature factor for longitudinal
+    B_LAT = 8.6      # Default lateral stiffness factor
+    B_LONG = 12.0    # Default longitudinal stiffness factor
+    MIN_NORMAL_LOAD_N = 1e-9
     
-    def __init__(self, tyre_data_lat: pd.DataFrame, tyre_data_long: pd.DataFrame):
+    def __init__(self, tyre_data_lat: pd.DataFrame, tyre_data_long: pd.DataFrame, base_mu: float = 1.0):
         """
         Initialize lookup table tyre model.
         
@@ -117,9 +121,105 @@ class LookupTableTyreModel(BaseTyreModel):
         super().__init__()
         self.tyre_data_lat = tyre_data_lat
         self.tyre_data_long = tyre_data_long
+        self.base_mu = float(base_mu)
+        self._longitudinal_slip_data_is_ratio = True
+        self._lat_shape = (self.B_LAT, self.C_LAT, self.E_LAT)
+        self._long_shape = (self.B_LONG, self.C_LONG, self.E_LONG)
 
         # Build peak-vs-load interpolators (used by Pacejka D = peak)
         self._build_peak_interps()
+        self._detect_longitudinal_slip_units()
+        self._fit_magic_formula_shapes()
+
+    def _detect_longitudinal_slip_units(self):
+        """
+        Detect longitudinal slip units in the parsed dataset.
+        Heuristic: if max(|slip|) <= 2, data is likely dimensionless ratio.
+        """
+        try:
+            s = pd.to_numeric(self.tyre_data_long.get('Slip Ratio [%]'), errors='coerce').dropna()
+            if s.empty:
+                self._longitudinal_slip_data_is_ratio = True
+                return
+            self._longitudinal_slip_data_is_ratio = float(s.abs().max()) <= 2.0
+        except Exception:
+            self._longitudinal_slip_data_is_ratio = True
+
+    @staticmethod
+    def _mf_unit_curve(slip: np.ndarray, B: float, C: float, E: float) -> np.ndarray:
+        """Unit-amplitude Magic Formula curve."""
+        bx = B * slip
+        return np.sin(C * np.arctan(bx - E * (bx - np.arctan(bx))))
+
+    def _fit_shape_params(self, slips: np.ndarray, forces: np.ndarray, loads: np.ndarray, peak_interp, defaults):
+        """
+        Fit global (B, C, E) for a pure-slip MF curve with load-dependent D(load).
+        """
+        try:
+            d_vals = np.asarray(peak_interp(loads), dtype=float)
+            d_vals = np.maximum(np.abs(d_vals), 1e-6)
+            y = np.asarray(forces, dtype=float) / d_vals
+
+            valid = np.isfinite(slips) & np.isfinite(y)
+            x = slips[valid]
+            y = y[valid]
+            if x.size < 50:
+                return defaults
+
+            # Keep optimizer robust to noisy tails.
+            y = np.clip(y, -1.5, 1.5)
+
+            def residuals(p):
+                b, c, e = p
+                return self._mf_unit_curve(x, b, c, e) - y
+
+            p0 = np.asarray(defaults, dtype=float)
+            lb = np.array([0.1, 0.5, -2.0], dtype=float)
+            ub = np.array([40.0, 3.0, 2.0], dtype=float)
+            res = least_squares(residuals, p0, bounds=(lb, ub), max_nfev=2000)
+            if not res.success:
+                return defaults
+            fitted = tuple(float(v) for v in res.x)
+            if any(not np.isfinite(v) for v in fitted):
+                return defaults
+            return fitted
+        except Exception:
+            return defaults
+
+    def _fit_magic_formula_shapes(self):
+        """Fit MF shape parameters against parsed lateral/longitudinal TTC-derived data."""
+        # Lateral fit
+        lat = self.tyre_data_lat.dropna(subset=['Slip Angle [deg]', 'Lateral Force [N]', 'Normal Load [N]'])
+        if (not lat.empty) and (self._lat_peak_interp is not None):
+            lat_slip = np.radians(pd.to_numeric(lat['Slip Angle [deg]'], errors='coerce').to_numpy(dtype=float))
+            lat_force = pd.to_numeric(lat['Lateral Force [N]'], errors='coerce').to_numpy(dtype=float)
+            lat_load = pd.to_numeric(lat['Normal Load [N]'], errors='coerce').to_numpy(dtype=float)
+            self._lat_shape = self._fit_shape_params(
+                slips=lat_slip,
+                forces=lat_force,
+                loads=lat_load,
+                peak_interp=self._lat_peak_interp,
+                defaults=self._lat_shape,
+            )
+
+        # Longitudinal fit
+        lon = self.tyre_data_long.dropna(subset=['Slip Ratio [%]', 'Longitudinal Force [N]', 'Normal Load [N]'])
+        if (not lon.empty) and (self._long_peak_interp is not None):
+            raw_slip = pd.to_numeric(lon['Slip Ratio [%]'], errors='coerce').to_numpy(dtype=float)
+            if self._longitudinal_slip_data_is_ratio:
+                lon_slip = raw_slip
+            else:
+                lon_slip = raw_slip / 100.0
+
+            lon_force = pd.to_numeric(lon['Longitudinal Force [N]'], errors='coerce').to_numpy(dtype=float)
+            lon_load = pd.to_numeric(lon['Normal Load [N]'], errors='coerce').to_numpy(dtype=float)
+            self._long_shape = self._fit_shape_params(
+                slips=lon_slip,
+                forces=lon_force,
+                loads=lon_load,
+                peak_interp=self._long_peak_interp,
+                defaults=self._long_shape,
+            )
 
     def _build_peak_interps(self):
         """Build peak force vs normal-load interpolators for lateral and longitudinal."""
@@ -186,20 +286,27 @@ class LookupTableTyreModel(BaseTyreModel):
         B controls how quickly the curve rises. Higher B = steeper initial slope.
         """
         if D <= 0:
-            return 10.0  # default fallback
-        # B scales inversely with D to keep consistent initial slope behavior
-        # Tuned so that peak occurs around 6-8 degrees slip angle
-        return 0.15 * 180.0 / np.pi  # ~8.6, gives peak around 6-7 deg
+            return self.B_LAT
+        return float(self._lat_shape[0])
 
     def _compute_B_longitudinal(self, D: float) -> float:
         """
         Compute B (stiffness factor) for longitudinal force as a function of peak force D.
         """
         if D <= 0:
-            return 10.0  # default fallback
-        # For longitudinal, peak typically occurs around 10-15% slip ratio
-        # With slip ratio in [0,1] (kappa), B ~ 10-15 gives peak around 0.1-0.15
-        return 12.0
+            return self.B_LONG
+        return float(self._long_shape[0])
+
+    def _coerce_slip_ratio_to_kappa(self, slip_ratio: float) -> float:
+        """
+        Convert caller input to dimensionless slip ratio kappa.
+        - If |slip_ratio| > 2, interpret as percent (legacy behavior).
+        - Otherwise, interpret as already dimensionless ratio.
+        """
+        sr = float(slip_ratio)
+        if abs(sr) > 2.0:
+            return sr / 100.0
+        return sr
 
     def _pacejka(self, slip: float, D: float, C: float, B: float, E: float) -> float:
         """
@@ -218,6 +325,9 @@ class LookupTableTyreModel(BaseTyreModel):
         Bx = B * slip
         return D * np.sin(C * np.arctan(Bx - E * (Bx - np.arctan(Bx))))
 
+    def _is_zero_or_negative_load(self, normal_load: float) -> bool:
+        return float(normal_load) <= self.MIN_NORMAL_LOAD_N
+
     def get_lateral_force(self, slip_angle: float, normal_load: Optional[float] = None, 
                         camber_angle: Optional[float] = None, 
                         tyre_pressure: Optional[float] = None,
@@ -234,9 +344,12 @@ class LookupTableTyreModel(BaseTyreModel):
         """
         if normal_load is None or self._lat_peak_interp is None:
             raise ValueError("Normal load is required and lateral peak interpolator must be available")
+
+        if self._is_zero_or_negative_load(normal_load):
+            return 0.0
         
         # Get peak force D by interpolating at the given normal load
-        D = float(self._lat_peak_interp(normal_load))
+        D = max(0.0, float(self._lat_peak_interp(normal_load)) * self.base_mu)
         
         # Compute B as function of D
         B = self._compute_B_lateral(D)
@@ -245,7 +358,9 @@ class LookupTableTyreModel(BaseTyreModel):
         alpha = np.radians(float(slip_angle))
         
         # Apply Pacejka formula
-        fy = self._pacejka(alpha, D, self.C_LAT, B, self.E_LAT)
+        c_lat = float(self._lat_shape[1])
+        e_lat = float(self._lat_shape[2])
+        fy = self._pacejka(alpha, D, c_lat, B, e_lat)
         return float(fy)
 
     def get_longitudinal_force(self, slip_ratio: float, normal_load: Optional[float] = None,
@@ -263,18 +378,23 @@ class LookupTableTyreModel(BaseTyreModel):
         """
         if normal_load is None or self._long_peak_interp is None:
             raise ValueError("Normal load is required and longitudinal peak interpolator must be available")
+
+        if self._is_zero_or_negative_load(normal_load):
+            return 0.0
         
         # Get peak force D by interpolating at the given normal load
-        D = float(self._long_peak_interp(normal_load))
+        D = max(0.0, float(self._long_peak_interp(normal_load)) * self.base_mu)
         
         # Compute B as function of D
         B = self._compute_B_longitudinal(D)
-        
-        # Convert slip ratio from percent to dimensionless (kappa)
-        kappa = float(slip_ratio) / 100.0
+
+        # Convert caller input to dimensionless slip ratio (supports percent and ratio inputs)
+        kappa = self._coerce_slip_ratio_to_kappa(slip_ratio)
         
         # Apply Pacejka formula
-        fx = self._pacejka(kappa, D, self.C_LONG, B, self.E_LONG)
+        c_long = float(self._long_shape[1])
+        e_long = float(self._long_shape[2])
+        fx = self._pacejka(kappa, D, c_long, B, e_long)
         return float(fx)
     
     @classmethod
@@ -312,7 +432,7 @@ class LookupTableTyreModel(BaseTyreModel):
                         raise FileNotFoundError(f"Longitudinal tyre data file not found: {full_long}")
                     tyre_data_long = cls._parse_longitudinal_file(full_long)
 
-                return cls(tyre_data_lat, tyre_data_long)
+                return cls(tyre_data_lat, tyre_data_long, base_mu=config.get('base_mu', 1.0))
 
         except Exception as e:
             import logging
@@ -369,7 +489,7 @@ class LookupTableTyreModel(BaseTyreModel):
                 raise ValueError(f"Unsupported file format: {file_path}")
                 
             # Return the model
-            return cls(tyre_data_lat, tyre_data_long)
+            return cls(tyre_data_lat, tyre_data_long, base_mu=config.get('base_mu', 1.0))
             
         except Exception as e:
             import logging
@@ -391,14 +511,17 @@ class LookupTableTyreModel(BaseTyreModel):
         """
         if normal_load is None:
             raise ValueError("Normal load is required for combined forces calculation")
+
+        if self._is_zero_or_negative_load(normal_load):
+            return (0.0, 0.0)
         
         # Get pure forces
         fy_pure = self.get_lateral_force(slip_angle, normal_load)
         fx_pure = self.get_longitudinal_force(slip_ratio, normal_load)
         
         # Get peak forces for friction circle limit
-        D_lat = float(self._lat_peak_interp(normal_load)) if self._lat_peak_interp else abs(fy_pure)
-        D_long = float(self._long_peak_interp(normal_load)) if self._long_peak_interp else abs(fx_pure)
+        D_lat = max(0.0, (float(self._lat_peak_interp(normal_load)) * self.base_mu)) if self._lat_peak_interp else abs(fy_pure)
+        D_long = max(0.0, (float(self._long_peak_interp(normal_load)) * self.base_mu)) if self._long_peak_interp else abs(fx_pure)
         
         # Combined force magnitude
         total_force = np.sqrt(fx_pure**2 + fy_pure**2)
@@ -574,13 +697,6 @@ def create_tyre_model(config: Dict[str, Any]) -> BaseTyreModel:
     """
     tyre_model_type = config.get('type', 'lookup').lower()
     if tyre_model_type == 'lookup':
-        full_lat_path = config.get('file_path_lateral').lower()
-        full_long_path = config.get('file_path_longit').lower()
-        tyre_data_lat = LookupTableTyreModel._parse_lateral_file(full_lat_path)
-        tyre_data_long = LookupTableTyreModel._parse_longitudinal_file(full_long_path)
-
-        tyre = LookupTableTyreModel(tyre_data_lat, tyre_data_long)
-
-        return tyre
+        return LookupTableTyreModel.from_config(config)
     else:
         raise ValueError(f"Unsupported tyre model type: {tyre_model_type}")
