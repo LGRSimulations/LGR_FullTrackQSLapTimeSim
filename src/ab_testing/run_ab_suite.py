@@ -91,6 +91,8 @@ def run_suite(output_dir, include_tracks, stale_threshold, variant_names, fallba
                 for level_name, level_value in level_values(nominal, pct=0.2):
                     run_config = copy.deepcopy(config_for_nominal)
                     run_config.setdefault("ab_testing", {})["model_variant"] = variant_value
+                    use_rollover_speed_cap = bool(run_config.get("solver", {}).get("use_rollover_speed_cap", True))
+                    rollover_mode = "rollover_on" if use_rollover_speed_cap else "rollover_off"
                     vehicle = create_vehicle(run_config)
                     setattr(vehicle.params, attr_name, level_value)
 
@@ -100,6 +102,8 @@ def run_suite(output_dir, include_tracks, stale_threshold, variant_names, fallba
                         "track_path": track_path,
                         "variant": variant_name,
                         "model_variant": variant_value,
+                        "rollover_mode": rollover_mode,
+                        "use_rollover_speed_cap": use_rollover_speed_cap,
                         "parameter": param,
                         "parameter_attr": attr_name,
                         "level": level_name,
@@ -189,6 +193,7 @@ def run_suite(output_dir, include_tracks, stale_threshold, variant_names, fallba
         for r in valid_rows
         if float(r["fallback_rate"]) > float(fallback_threshold)
     )
+    rollover_modes_present = sorted({r.get("rollover_mode", "") for r in rows if r.get("rollover_mode", "")})
 
     md_path = os.path.join(output_dir, "ab_summary.md")
     with open(md_path, "w", encoding="utf-8") as f:
@@ -198,6 +203,8 @@ def run_suite(output_dir, include_tracks, stale_threshold, variant_names, fallba
         f.write(f"- Invalid runs: {invalid_count}\n")
         f.write(f"- Tracks: {', '.join(include_tracks)}\n")
         f.write(f"- Variants: {', '.join(variant_names)}\n")
+        if rollover_modes_present:
+            f.write(f"- Rollover modes in this run: {', '.join(rollover_modes_present)}\n")
         f.write("- Focused parameters: downforce_coefficient, aero_cp, cog_z, front_track_width, rear_track_width, roll_stiffness, max_roll_angle_deg, base_mu\n\n")
         f.write(f"- Fallback-rate gate: pass when fallback_rate <= {fallback_threshold:.3f}\n\n")
 

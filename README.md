@@ -254,6 +254,7 @@ uv run python src/ab_testing/run_ab_suite.py --output-dir ab_test_outputs/full_v
 #### Outputs
 
 - `ab_runs.csv`: run-level records (status, lap time, fallback rate, fallback gate pass/fail, limiter mode breakdown)
+  - Includes explicit rollover context columns: `rollover_mode` and `use_rollover_speed_cap`
 - `ab_sensitivity.csv`: per-track/variant sensitivity summary and stale flags
 - `ab_summary.md`: human-readable diagnostic summary
 

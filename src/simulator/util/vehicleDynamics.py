@@ -2,6 +2,7 @@ import numpy as np
 import logging
 from scipy.optimize import root
 from scipy.constants import g
+from typing import Optional, Dict
 
 logger = logging.getLogger(__name__)
 
@@ -124,6 +125,9 @@ def find_vehicle_state_at_point(
     normal_load_per_tyre: float = None,
     straight_line_speed_cap: float = 200.0,
     use_rollover_speed_cap: bool = True,
+    initial_guess: Optional[Dict[str, float]] = None,
+    v_upper_bound_mps: Optional[float] = None,
+    max_bisection_iters: int = 30,
 ):
     """
     Find the maximum feasible steady-state cornering state at a single track point.
@@ -181,11 +185,15 @@ def find_vehicle_state_at_point(
     
     # Handle straight sections (avoid division by zero)
     if abs(curvature) < 1e-4:
+        v_straight = float(straight_line_speed_cap)
+        if v_upper_bound_mps is not None and np.isfinite(v_upper_bound_mps):
+            v_straight = min(v_straight, float(v_upper_bound_mps))
         return {
             'success': True,
-            'v_car': float(straight_line_speed_cap),
+            'v_car': max(0.0, v_straight),
             'a_steer': 0.0,
-            'a_sideslip': 0.0
+            'a_sideslip': 0.0,
+            'failure_reason': 'none',
         }
     
 
@@ -217,10 +225,29 @@ def find_vehicle_state_at_point(
         v_bound = v_rollover
     else:
         v_bound = 200.0
+
+    if v_upper_bound_mps is not None and np.isfinite(v_upper_bound_mps):
+        v_bound = min(float(v_bound), float(v_upper_bound_mps))
+    v_bound = max(0.0, float(v_bound))
+    if v_bound <= 0.0:
+        return {
+            'success': False,
+            'v_car': 0.0,
+            'a_steer': 0.0,
+            'a_sideslip': 0.0,
+            'failure_reason': 'invalid_speed_bound',
+        }
     
     # Bicycle model: delta approx L * K
     guess_delta = np.arctan(L * K)
     guess_beta = 0.0
+    if isinstance(initial_guess, dict):
+        try:
+            guess_delta = np.radians(float(initial_guess.get('a_steer', np.degrees(guess_delta))))
+            guess_beta = np.radians(float(initial_guess.get('a_sideslip', 0.0)))
+        except (TypeError, ValueError):
+            guess_delta = np.arctan(L * K)
+            guess_beta = 0.0
 
     # step 3: Bisection bounds
     v_low = 0.0
@@ -231,11 +258,13 @@ def find_vehicle_state_at_point(
         'success': False,
         'v_car': 0.0,
         'a_steer': 0.0,
-        'a_sideslip': 0.0
+        'a_sideslip': 0.0,
+        'failure_reason': 'no_feasible_solution',
     }
+    last_failure_reason = 'no_feasible_solution'
 
     # Bisection search 
-    for _ in range(30):
+    for _ in range(max(1, int(max_bisection_iters))):
         v_mid = (v_low + v_high) / 2.0
         
         # --- Step 4: Solver (Inner Loop: Root finding for delta, beta) ---
@@ -295,7 +324,8 @@ def find_vehicle_state_at_point(
                     'success': True,
                     'v_car': v_mid,
                     'a_steer': np.degrees(delta_sol),
-                    'a_sideslip': np.degrees(beta_sol)
+                    'a_sideslip': np.degrees(beta_sol),
+                    'failure_reason': 'none',
                 }
                 
                 # Use this solution as the guess for the next higher speed (Step 4 note)
@@ -304,8 +334,16 @@ def find_vehicle_state_at_point(
             else:
                 # Converged to bs
                 v_high = v_mid
+                if not residual_ok:
+                    last_failure_reason = 'residual_not_met'
+                else:
+                    last_failure_reason = 'state_bounds_exceeded'
         else:
             # Solver failed to find equilibrium, car cannot corner at this speed
             v_high = v_mid
+            last_failure_reason = 'root_failed'
+
+    if not final_result['success']:
+        final_result['failure_reason'] = last_failure_reason
 
     return final_result

@@ -32,6 +32,106 @@ def _get_use_rollover_speed_cap(config):
     return bool(solver_cfg.get('use_rollover_speed_cap', True))
 
 
+def _compute_rollover_speed_cap(curvature, vehicle):
+    if abs(curvature) < 1e-9:
+        return np.inf
+    g = 9.81
+    track = max(float(getattr(vehicle.params, 'front_track_width', 1.2)), 1e-6)
+    cog_z = max(float(getattr(vehicle.params, 'cog_z', 0.28)), 1e-6)
+    radius = 1.0 / abs(curvature)
+    return float(np.sqrt((track / (2.0 * cog_z)) * g * radius))
+
+
+def _compute_tyre_lateral_speed_cap(curvature, vehicle, normal_load_per_tyre, config):
+    """Estimate lateral speed cap from tyre lateral force envelope."""
+    if abs(curvature) < 1e-9:
+        return np.inf
+    try:
+        slip_angle_cap = float(config.get('solver', {}).get('tyre_lateral_cap_slip_angle_deg', 10.0))
+    except (TypeError, ValueError, AttributeError):
+        slip_angle_cap = 10.0
+
+    try:
+        mu_scale = float(vehicle.params.base_mu) / max(getattr(vehicle, 'base_mu_reference', 1.0), 1e-6)
+        fy_per_tyre = abs(vehicle.tyre_model.get_lateral_force(slip_angle_cap, normal_load=normal_load_per_tyre)) * mu_scale
+        a_lat_cap = (fy_per_tyre * 4.0) / max(float(vehicle.params.mass), 1e-6)
+        if a_lat_cap <= 0.0 or (not np.isfinite(a_lat_cap)):
+            return np.inf
+        return float(np.sqrt(a_lat_cap / abs(curvature)))
+    except Exception:
+        return np.inf
+
+
+def _compute_constrained_fallback_speed(curvature, base_mu, physical_cap_speed, previous_speed, config):
+    g = 9.81
+    if abs(curvature) > 1e-6:
+        v_mu = float(np.sqrt(max(base_mu, 0.0) * g / abs(curvature)))
+    else:
+        v_mu = float(physical_cap_speed)
+
+    solver_cfg = config.get('solver', {}) if isinstance(config, dict) else {}
+    continuity_factor = float(solver_cfg.get('fallback_continuity_cap_factor', 1.08))
+    min_continuity_cap = float(solver_cfg.get('fallback_min_speed_cap_mps', 3.0))
+
+    if previous_speed is None or (not np.isfinite(previous_speed)):
+        continuity_cap = np.inf
+    else:
+        continuity_cap = max(min_continuity_cap, float(previous_speed) * continuity_factor)
+
+    return float(min(v_mu, float(physical_cap_speed), continuity_cap))
+
+
+def _build_retry_tiers(previous_solution, straight_speed_cap, use_rollover_speed_cap, rollover_cap):
+    """Build solve-attempt tiers from aggressive to conservative."""
+    base_cap = float(straight_speed_cap)
+    if use_rollover_speed_cap and np.isfinite(rollover_cap):
+        base_cap = min(base_cap, float(rollover_cap))
+
+    prev_speed = None
+    if isinstance(previous_solution, dict):
+        try:
+            prev_speed = float(previous_solution.get('v_car', np.nan))
+        except (TypeError, ValueError):
+            prev_speed = None
+    if prev_speed is not None and not np.isfinite(prev_speed):
+        prev_speed = None
+
+    tiers = [
+        {
+            'name': 'base',
+            'initial_guess': None,
+            'v_upper_bound_mps': base_cap,
+        }
+    ]
+
+    if previous_solution is not None:
+        warm_cap = base_cap
+        if prev_speed is not None:
+            warm_cap = min(base_cap, max(5.0, prev_speed * 1.20))
+        tiers.append(
+            {
+                'name': 'warm_start',
+                'initial_guess': {
+                    'a_steer': float(previous_solution.get('a_steer', 0.0)),
+                    'a_sideslip': float(previous_solution.get('a_sideslip', 0.0)),
+                },
+                'v_upper_bound_mps': warm_cap,
+            }
+        )
+
+    conservative_cap = base_cap * 0.90
+    if prev_speed is not None:
+        conservative_cap = min(conservative_cap, max(5.0, prev_speed * 0.95))
+    tiers.append(
+        {
+            'name': 'conservative_bound',
+            'initial_guess': previous_solution if isinstance(previous_solution, dict) else None,
+            'v_upper_bound_mps': max(5.0, conservative_cap),
+        }
+    )
+    return tiers
+
+
 def _compute_normal_loads_for_longitudinal(vehicle, v_car, a_long, config):
     """
     Compute per-tyre normal loads for front and rear axles.
@@ -106,18 +206,50 @@ def optimise_speed_at_points(track_points, vehicle, config):
     solver_success = []
     fallback_used = []
     fallback_speed = []
+    retry_count = []
+    solve_method = []
+    physical_cap_speed = []
+    failure_reason = []
+    tier_failure_reasons = []
     straight_speed_cap = _get_straight_speed_cap(config)
     use_rollover_speed_cap = _get_use_rollover_speed_cap(config)
+    previous_solution = None
     for point in track_points:
         curvature = point.curvature
         corner_load_per_tyre = _compute_corner_normal_load_per_tyre(vehicle, 20.0, config)
-        result = find_vehicle_state_at_point(
-            curvature,
-            vehicle,
-            normal_load_per_tyre=corner_load_per_tyre,
-            straight_line_speed_cap=straight_speed_cap,
-            use_rollover_speed_cap=use_rollover_speed_cap,
-        )
+        rollover_cap = _compute_rollover_speed_cap(curvature, vehicle)
+        tyre_lateral_cap = _compute_tyre_lateral_speed_cap(curvature, vehicle, corner_load_per_tyre, config)
+        cap = float(straight_speed_cap)
+        if use_rollover_speed_cap and np.isfinite(rollover_cap):
+            cap = min(cap, float(rollover_cap))
+        if np.isfinite(tyre_lateral_cap):
+            cap = min(cap, float(tyre_lateral_cap))
+        cap = max(0.0, float(cap))
+        physical_cap_speed.append(float(cap))
+
+        tiers = _build_retry_tiers(previous_solution, straight_speed_cap, use_rollover_speed_cap, rollover_cap)
+        result = {'success': False, 'v_car': 0.0, 'a_steer': 0.0, 'a_sideslip': 0.0}
+        used_method = 'none'
+        attempts = 0
+        per_tier_fail_reasons = []
+        for tier in tiers:
+            attempts += 1
+            tier_result = find_vehicle_state_at_point(
+                curvature,
+                vehicle,
+                normal_load_per_tyre=corner_load_per_tyre,
+                straight_line_speed_cap=straight_speed_cap,
+                use_rollover_speed_cap=use_rollover_speed_cap,
+                initial_guess=tier.get('initial_guess'),
+                v_upper_bound_mps=tier.get('v_upper_bound_mps'),
+            )
+            if tier_result.get('success'):
+                result = tier_result
+                used_method = tier['name']
+                break
+            tier_reason = str(tier_result.get('failure_reason', 'unknown'))
+            per_tier_fail_reasons.append(f"{tier['name']}:{tier_reason}")
+
         base_mu = getattr(vehicle.params, 'base_mu')
         if result['success']:
             logger.info(f"Optimized v_car: {result['v_car']:.2f} m/s for curvature={curvature:.4f}")
@@ -125,24 +257,50 @@ def optimise_speed_at_points(track_points, vehicle, config):
             solver_success.append(True)
             fallback_used.append(False)
             fallback_speed.append(0.0)
+            retry_count.append(max(0, attempts - 1))
+            solve_method.append(used_method)
+            failure_reason.append('none')
+            tier_failure_reasons.append(';'.join(per_tier_fail_reasons))
+            previous_solution = {
+                'v_car': float(result['v_car']),
+                'a_steer': float(result['a_steer']),
+                'a_sideslip': float(result['a_sideslip']),
+            }
         else:
             logger.warning(f"Could not find equilibrium state for curvature={curvature:.4f}")
             logger.warning(f"This is point at coordinates x={point.x}, y={point.y}, z={point.z}")
-            g = 9.81
-            if abs(curvature) > 1e-6:
-                v_fallback = np.sqrt(base_mu * g / abs(curvature))
-            else:
-                v_fallback = 200.0
+            previous_speed = point_speeds[-1] if point_speeds else None
+            v_fallback = _compute_constrained_fallback_speed(
+                curvature=curvature,
+                base_mu=base_mu,
+                physical_cap_speed=cap,
+                previous_speed=previous_speed,
+                config=config,
+            )
             logger.warning(f"Fallback: using v_fallback={v_fallback:.2f} m/s based on base_mu={base_mu}")
             point_speeds.append(v_fallback)
             solver_success.append(False)
             fallback_used.append(True)
             fallback_speed.append(v_fallback)
+            retry_count.append(attempts)
+            solve_method.append('fallback')
+            if per_tier_fail_reasons:
+                final_reason = per_tier_fail_reasons[-1].split(':', 1)[-1]
+            else:
+                final_reason = str(result.get('failure_reason', 'unknown'))
+            failure_reason.append(final_reason)
+            tier_failure_reasons.append(';'.join(per_tier_fail_reasons))
+            previous_solution = None
 
     diagnostics = {
         'corner_solver_success': solver_success,
         'corner_fallback_used': fallback_used,
         'corner_fallback_speed': fallback_speed,
+        'corner_retry_count': retry_count,
+        'corner_solve_method': solve_method,
+        'corner_physical_cap_speed': physical_cap_speed,
+        'corner_failure_reason': failure_reason,
+        'corner_tier_failure_reasons': tier_failure_reasons,
     }
     return point_speeds, diagnostics
 
