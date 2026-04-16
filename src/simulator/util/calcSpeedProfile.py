@@ -27,11 +27,6 @@ def _get_straight_speed_cap(config):
         return 200.0
 
 
-def _get_use_rollover_speed_cap(config):
-    solver_cfg = config.get('solver', {}) if isinstance(config, dict) else {}
-    return bool(solver_cfg.get('use_rollover_speed_cap', True))
-
-
 def _compute_rollover_speed_cap(curvature, vehicle):
     if abs(curvature) < 1e-9:
         return np.inf
@@ -81,10 +76,10 @@ def _compute_constrained_fallback_speed(curvature, base_mu, physical_cap_speed, 
     return float(min(v_mu, float(physical_cap_speed), continuity_cap))
 
 
-def _build_retry_tiers(previous_solution, straight_speed_cap, use_rollover_speed_cap, rollover_cap):
+def _build_retry_tiers(previous_solution, straight_speed_cap, rollover_cap):
     """Build solve-attempt tiers from aggressive to conservative."""
     base_cap = float(straight_speed_cap)
-    if use_rollover_speed_cap and np.isfinite(rollover_cap):
+    if np.isfinite(rollover_cap):
         base_cap = min(base_cap, float(rollover_cap))
 
     prev_speed = None
@@ -253,7 +248,6 @@ def optimise_speed_at_points(track_points, vehicle, config):
     failure_reason = []
     tier_failure_reasons = []
     straight_speed_cap = _get_straight_speed_cap(config)
-    use_rollover_speed_cap = _get_use_rollover_speed_cap(config)
     previous_solution = None
     for point in track_points:
         curvature = point.curvature
@@ -261,14 +255,14 @@ def optimise_speed_at_points(track_points, vehicle, config):
         rollover_cap = _compute_rollover_speed_cap(curvature, vehicle)
         tyre_lateral_cap = _compute_tyre_lateral_speed_cap(curvature, vehicle, corner_load_per_tyre, config)
         cap = float(straight_speed_cap)
-        if use_rollover_speed_cap and np.isfinite(rollover_cap):
+        if np.isfinite(rollover_cap):
             cap = min(cap, float(rollover_cap))
         if np.isfinite(tyre_lateral_cap):
             cap = min(cap, float(tyre_lateral_cap))
         cap = max(0.0, float(cap))
         physical_cap_speed.append(float(cap))
 
-        tiers = _build_retry_tiers(previous_solution, straight_speed_cap, use_rollover_speed_cap, rollover_cap)
+        tiers = _build_retry_tiers(previous_solution, straight_speed_cap, rollover_cap)
         result = {'success': False, 'v_car': 0.0, 'a_steer': 0.0, 'a_sideslip': 0.0}
         used_method = 'none'
         attempts = 0
@@ -280,7 +274,6 @@ def optimise_speed_at_points(track_points, vehicle, config):
                 vehicle,
                 normal_load_per_tyre=corner_load_per_tyre,
                 straight_line_speed_cap=straight_speed_cap,
-                use_rollover_speed_cap=use_rollover_speed_cap,
                 initial_guess=tier.get('initial_guess'),
                 v_upper_bound_mps=tier.get('v_upper_bound_mps'),
             )

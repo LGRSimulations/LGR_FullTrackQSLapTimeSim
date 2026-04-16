@@ -103,7 +103,6 @@ def default_parameter_cases():
 def default_rollover_mode_cases():
     return [
         {"label": "rollover_on", "use_rollover_speed_cap": True},
-        {"label": "rollover_off", "use_rollover_speed_cap": False},
     ]
 
 
@@ -241,7 +240,7 @@ def run_suite(output_dir, radius_cases, parameter_names, stale_threshold, rollov
         f.write("- Parameters: " + ", ".join(parameter_names) + "\n\n")
         f.write("## Notes\n\n")
         f.write("- These are synthetic closed constant-radius tracks built to isolate steady-state solver behavior.\n")
-        f.write("- Compare rollover_on vs rollover_off to separate rollover-cap dominance from core tyre/solver linkage.\n\n")
+        f.write("- Runs are now always rollover-constrained to keep outputs physically realistic.\n\n")
 
         f.write("## Stale Parameter Count\n\n")
         stale_count = Counter((r["rollover_mode"], r["track_label"]) for r in sensitivity_rows if r["stale"])
@@ -251,28 +250,7 @@ def run_suite(output_dir, radius_cases, parameter_names, stale_threshold, rollov
                 f.write(f"- {case['label']}: {stale_count.get((mode['label'], case['label']), 0)} stale parameters\n")
             f.write("\n")
 
-        f.write("## Side-by-Side Sensitivity Shift (rollover_off - rollover_on)\n\n")
-        on_map = {}
-        off_map = {}
-        for row in sensitivity_rows:
-            key = (row["track_label"], row["parameter"])
-            if row["rollover_mode"] == "rollover_on":
-                on_map[key] = row["delta_lap_time_s"]
-            elif row["rollover_mode"] == "rollover_off":
-                off_map[key] = row["delta_lap_time_s"]
-
-        shift_rows = []
-        for key in sorted(set(on_map.keys()) | set(off_map.keys())):
-            on_val = float(on_map.get(key, 0.0))
-            off_val = float(off_map.get(key, 0.0))
-            shift_rows.append((key[0], key[1], off_val - on_val, on_val, off_val))
-
-        for track_label, parameter, shift, on_val, off_val in sorted(shift_rows, key=lambda x: abs(x[2]), reverse=True):
-            f.write(
-                f"- {track_label} / {parameter}: shift={shift:+.6f} (on={on_val:.6f}, off={off_val:.6f})\n"
-            )
-
-        f.write("\n## Top Sensitivity Movers\n\n")
+        f.write("## Top Sensitivity Movers\n\n")
         for row in sorted(sensitivity_rows, key=lambda r: r["delta_lap_time_s"], reverse=True)[:12]:
             f.write(
                 f"- {row['rollover_mode']} / {row['track_label']} / {row['parameter']}: "
@@ -288,7 +266,6 @@ def main():
     parser.add_argument("--stale-threshold", type=float, default=0.05, help="Delta lap-time cutoff for stale sensitivity")
     parser.add_argument("--radii", default="", help="Optional comma-separated radii in meters")
     parser.add_argument("--parameters", default="", help="Optional comma-separated parameter names")
-    parser.add_argument("--rollover-modes", default="", help="Comma-separated modes: rollover_on,rollover_off (default: both)")
     args = parser.parse_args()
 
     if args.radii.strip():
@@ -303,15 +280,7 @@ def main():
     else:
         parameter_names = default_parameter_cases()
 
-    mode_lookup = {m["label"]: m for m in default_rollover_mode_cases()}
-    if args.rollover_modes.strip():
-        rollover_modes = []
-        for mode_name in [v.strip() for v in args.rollover_modes.split(",") if v.strip()]:
-            if mode_name not in mode_lookup:
-                raise ValueError(f"Unknown rollover mode '{mode_name}'. Valid: {', '.join(mode_lookup.keys())}")
-            rollover_modes.append(mode_lookup[mode_name])
-    else:
-        rollover_modes = default_rollover_mode_cases()
+    rollover_modes = default_rollover_mode_cases()
 
     runs_csv, sensitivity_csv, md_path = run_suite(
         output_dir=args.output_dir,

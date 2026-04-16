@@ -91,8 +91,9 @@ def run_suite(output_dir, include_tracks, stale_threshold, variant_names, fallba
                 for level_name, level_value in level_values(nominal, pct=0.2):
                     run_config = copy.deepcopy(config_for_nominal)
                     run_config.setdefault("ab_testing", {})["model_variant"] = variant_value
-                    use_rollover_speed_cap = bool(run_config.get("solver", {}).get("use_rollover_speed_cap", True))
-                    rollover_mode = "rollover_on" if use_rollover_speed_cap else "rollover_off"
+                    use_rollover_speed_cap = True
+                    rollover_mode = "rollover_on"
+                    run_config.setdefault("solver", {})["use_rollover_speed_cap"] = True
                     vehicle = create_vehicle(run_config)
                     setattr(vehicle.params, attr_name, level_value)
 

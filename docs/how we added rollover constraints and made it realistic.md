@@ -53,7 +53,7 @@ This combination is what made G behavior reasonable enough for current use.
 Before merging changes that affect vehicle dynamics:
 1. Confirm tyre invariants still pass.
 2. Confirm tyre RMSE gates still pass.
-3. Compare rollover_on vs rollover_off explicitly.
+3. Confirm diagnostics are running in rollover-constrained mode (`rollover_on`, `use_rollover_speed_cap=true`).
 4. Check fallback rate and failure reasons, not just lap time.
 5. Inspect G-G-V envelope for physically plausible shape and peaks.
 6. Log the change in `docs/MAJOR_CHANGE_LOG.md` using the standard format.
