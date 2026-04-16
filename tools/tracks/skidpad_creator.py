@@ -6,6 +6,9 @@
 import numpy as np
 import os
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
+
 # Constants for Formula Student skidpad (from rules)
 INNER_CIRCLE_DIAMETER = 15.25  # meters
 OUTER_CIRCLE_DIAMETER = 21.25  # meters
@@ -14,7 +17,7 @@ CIRCLE_CENTER_DISTANCE = 18.25  # meters (distance between circle centers)
 
 # Output configuration
 OUTPUT_FILENAME = "SkidpadF26.txt"
-OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "..", "datasets", "Tracks")
+OUTPUT_DIR = os.path.join(REPO_ROOT, "datasets", "tracks")
 POINTS_PER_CIRCLE = 100  # Number of points to generate per circle
 
 

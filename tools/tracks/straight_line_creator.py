@@ -1,6 +1,9 @@
 import numpy as np
 import os
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
+
 """
 Simple straight-line track creator similar to skidpadCreator.py.
 
@@ -12,7 +15,7 @@ writes file in the same "x y z q" format and can visualize it.
 DEFAULT_LENGTH = 500.0          # meters
 DEFAULT_POINTS = 501            # number of centreline points (includes endpoints)
 OUTPUT_FILENAME = "StraightLineTrack.txt"
-OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "..", "datasets", "Tracks")
+OUTPUT_DIR = os.path.join(REPO_ROOT, "datasets", "tracks")
 
 
 def generate_straight_centerline(length: float = DEFAULT_LENGTH,

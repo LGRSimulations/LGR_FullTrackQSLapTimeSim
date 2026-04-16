@@ -5,8 +5,11 @@ import logging
 import json
 import matplotlib.pyplot as plt
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
+
 # Add src to path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
+sys.path.append(os.path.join(REPO_ROOT, "src"))
 
 from vehicle.vehicle import create_vehicle
 from track.track import Track, load_track
@@ -190,7 +193,7 @@ def run_range_test(vehicle, power_limit_kw, energy_target_kwh, dt=0.05):
 
 def main():
     # Load Config
-    config_path = os.path.join(os.path.dirname(__file__), '..', 'config.json')
+    config_path = os.path.join(REPO_ROOT, "config.json")
     if not os.path.exists(config_path):
         # Fallback for different CWD
         config_path = 'config.json'

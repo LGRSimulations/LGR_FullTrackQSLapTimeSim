@@ -2,6 +2,9 @@ import json
 import os
 from typing import Any
 
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+DEFAULT_OUTPUT_PATH = os.path.join(REPO_ROOT, "artifacts", "sweeps", "data.csv")
+
 def load_config(config_path):
     with open(config_path, 'r') as f:
         return json.load(f)
@@ -104,7 +107,7 @@ def main():
     parser.add_argument('param', type=str, help='Parameter name to sweep (e.g. "mass", "aero_cp", "gear_ratios")')
     parser.add_argument('values', type=str, help='Values for sweep. Numeric: "250,350" (+--steps) or explicit list. String: "A,B". List: "2.7,2.0,1.6,1.3,1.2" or "[...];[...]"')
     parser.add_argument('--steps', type=int, default=5, help='Number of steps in the parameter sweep (default: 5)')
-    parser.add_argument('--output', type=str, default=None, help='Optional path to save results as CSV')
+    parser.add_argument('--output', type=str, default=DEFAULT_OUTPUT_PATH, help='Optional path to save results as CSV')
     args = parser.parse_args()
 
     # Import modules
@@ -173,6 +176,7 @@ def main():
         print(f"Worst lap time: {max(lap_times):.2f} s at {canonical_param} = {worst_val}")
 
         if args.output:
+            os.makedirs(os.path.dirname(args.output), exist_ok=True)
             import csv
             with open(args.output, 'w', newline='') as csvfile:
                 writer = csv.writer(csvfile)

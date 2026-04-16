@@ -11,7 +11,8 @@ import numpy as np
 import pandas as pd
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-SRC_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "src"))
+REPO_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
+SRC_ROOT = os.path.join(REPO_ROOT, "src")
 sys.path.insert(0, SRC_ROOT)
 
 from vehicle.Tyres.baseTyre import LookupTableTyreModel
@@ -20,6 +21,7 @@ from vehicle.Tyres.baseTyre import LookupTableTyreModel
 DEFAULT_LAT_CSV = os.path.join(
     SCRIPT_DIR,
     "..",
+    "..",
     "datasets",
     "vehicle",
     "tyre_data",
@@ -27,6 +29,7 @@ DEFAULT_LAT_CSV = os.path.join(
 )
 DEFAULT_LONG_CSV = os.path.join(
     SCRIPT_DIR,
+    "..",
     "..",
     "datasets",
     "vehicle",
@@ -562,7 +565,7 @@ def main():
     parser = argparse.ArgumentParser(description="Compare the current tyre model against TTC-derived data.")
     parser.add_argument("--lateral-csv", default=DEFAULT_LAT_CSV, help="Path to parsed lateral TTC CSV")
     parser.add_argument("--longitudinal-csv", default=DEFAULT_LONG_CSV, help="Path to parsed longitudinal TTC CSV")
-    parser.add_argument("--output-dir", default=os.path.join(SCRIPT_DIR, "..", "artifacts", "tyre_validation"), help="Where to write plots and reports")
+    parser.add_argument("--output-dir", default=os.path.join(REPO_ROOT, "artifacts", "tyre_validation"), help="Where to write plots and reports")
     parser.add_argument("--validate", action="store_true", help="Run pass/fail TTC verification against the current tyre model")
     parser.add_argument("--visualise", action="store_true", help="Generate the legacy TTC vs model visualisations")
     parser.add_argument("--rmse-threshold-pct", type=float, default=12.0, help="Fail validation if any load-bin RMSE exceeds this percent of peak force")
