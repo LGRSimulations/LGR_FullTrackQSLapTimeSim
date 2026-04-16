@@ -17,6 +17,21 @@ def _is_b1_variant(config):
     return variant in {'b1', 'load_transfer', 'dynamic_normal_load'}
 
 
+def _get_straight_speed_cap(config):
+    """Resolve straight-line speed cap (m/s) for near-zero curvature segments."""
+    solver_cfg = config.get('solver', {}) if isinstance(config, dict) else {}
+    cap = solver_cfg.get('straight_line_speed_cap_mps', 200.0)
+    try:
+        return float(cap)
+    except (TypeError, ValueError):
+        return 200.0
+
+
+def _get_use_rollover_speed_cap(config):
+    solver_cfg = config.get('solver', {}) if isinstance(config, dict) else {}
+    return bool(solver_cfg.get('use_rollover_speed_cap', True))
+
+
 def _compute_normal_loads_for_longitudinal(vehicle, v_car, a_long, config):
     """
     Compute per-tyre normal loads for front and rear axles.
@@ -91,10 +106,18 @@ def optimise_speed_at_points(track_points, vehicle, config):
     solver_success = []
     fallback_used = []
     fallback_speed = []
+    straight_speed_cap = _get_straight_speed_cap(config)
+    use_rollover_speed_cap = _get_use_rollover_speed_cap(config)
     for point in track_points:
         curvature = point.curvature
         corner_load_per_tyre = _compute_corner_normal_load_per_tyre(vehicle, 20.0, config)
-        result = find_vehicle_state_at_point(curvature, vehicle, normal_load_per_tyre=corner_load_per_tyre)
+        result = find_vehicle_state_at_point(
+            curvature,
+            vehicle,
+            normal_load_per_tyre=corner_load_per_tyre,
+            straight_line_speed_cap=straight_speed_cap,
+            use_rollover_speed_cap=use_rollover_speed_cap,
+        )
         base_mu = getattr(vehicle.params, 'base_mu')
         if result['success']:
             logger.info(f"Optimized v_car: {result['v_car']:.2f} m/s for curvature={curvature:.4f}")
@@ -172,14 +195,15 @@ def forward_pass(track, vehicle, point_speeds, config):
         normal_load_per_tyre[i] = load_state['mean_per_tyre']
 
         # Tyre-limited wheel force at fixed peak slip ratio with variant-aware normal load.
+        mu_scale = float(vehicle.params.base_mu) / max(getattr(vehicle, 'base_mu_reference', 1.0), 1e-6)
         f_drive_front = vehicle.tyre_model.get_longitudinal_force(
             slip_ratio=peak_slip_ratio,
             normal_load=front_load
-        )
+        ) * mu_scale
         f_drive_per_tyre = vehicle.tyre_model.get_longitudinal_force(
             slip_ratio=peak_slip_ratio,
             normal_load=rear_load
-        )
+        ) * mu_scale
         f_traction_tyre_limit = abs(f_drive_front) * 2.0 + abs(f_drive_per_tyre) * 2.0
 
         # Net longitudinal force after tyre slip limit and drag.
@@ -252,14 +276,15 @@ def backward_pass(track, vehicle, point_speeds, config):
         rear_load = load_state['rear_per_tyre']
         normal_load_per_tyre[i] = load_state['mean_per_tyre']
 
+        mu_scale = float(vehicle.params.base_mu) / max(getattr(vehicle, 'base_mu_reference', 1.0), 1e-6)
         f_brake_front = vehicle.tyre_model.get_longitudinal_force(
             slip_ratio=-peak_slip_ratio,
             normal_load=front_load
-        )
+        ) * mu_scale
         f_brake_rear = vehicle.tyre_model.get_longitudinal_force(
             slip_ratio=-peak_slip_ratio,
             normal_load=rear_load
-        )
+        ) * mu_scale
         f_brake_total = abs(f_brake_front) * 2 + abs(f_brake_rear) * 2
 
         # Peak longitudinal deceleration available from tyres (m/s^2)
