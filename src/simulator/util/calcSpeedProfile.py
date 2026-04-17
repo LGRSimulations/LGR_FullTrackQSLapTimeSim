@@ -12,6 +12,24 @@ def _get_model_variant(config):
     return str(variant).strip().lower()
 
 
+def _get_scenario_context(config):
+    scenario_cfg = config.get('scenario', {}) if isinstance(config, dict) else {}
+    name = str(scenario_cfg.get('name', 'baseline')).strip() or 'baseline'
+    try:
+        grip_scale = float(scenario_cfg.get('grip_scale', 1.0))
+    except (TypeError, ValueError):
+        grip_scale = 1.0
+    try:
+        air_density_scale = float(scenario_cfg.get('air_density_scale', 1.0))
+    except (TypeError, ValueError):
+        air_density_scale = 1.0
+    return {
+        'name': name,
+        'grip_scale': grip_scale,
+        'air_density_scale': air_density_scale,
+    }
+
+
 def _is_b1_variant(config):
     variant = _get_model_variant(config)
     return variant in {'b1', 'load_transfer', 'dynamic_normal_load'}
@@ -635,6 +653,7 @@ def compute_speed_profile(track, vehicle, config):
         **forward_diag,
         **backward_diag,
         'model_variant': _get_model_variant(config),
+        'scenario': _get_scenario_context(config),
     }
     diagnostics['normal_load_non_physical_events_total'] = int(
         diagnostics.get('corner_non_physical_normal_load_events', 0)

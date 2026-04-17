@@ -87,6 +87,13 @@ def run_suite(
     max_out_of_domain_count,
     enforce_milestone4_gates,
     enforce_milestone3_gates,
+    enforce_milestone5_gates,
+    enforce_milestone6_gates,
+    scenario_name,
+    scenario_grip_scale,
+    scenario_air_density_scale,
+    milestone5_max_abs_glat_g,
+    milestone5_max_gtotal_g,
 ):
     from track.track import load_track
     from vehicle.vehicle import create_vehicle
@@ -134,6 +141,11 @@ def run_suite(
                     use_rollover_speed_cap = True
                     rollover_mode = "rollover_on"
                     run_config.setdefault("solver", {})["use_rollover_speed_cap"] = True
+                    run_config["scenario"] = {
+                        "name": scenario_name,
+                        "grip_scale": float(scenario_grip_scale),
+                        "air_density_scale": float(scenario_air_density_scale),
+                    }
                     vehicle = create_vehicle(run_config)
                     setattr(vehicle.params, attr_name, level_value)
 
@@ -143,6 +155,9 @@ def run_suite(
                         "track_path": track_path,
                         "variant": variant_name,
                         "model_variant": variant_value,
+                        "scenario_name": scenario_name,
+                        "scenario_grip_scale": float(scenario_grip_scale),
+                        "scenario_air_density_scale": float(scenario_air_density_scale),
                         "rollover_mode": rollover_mode,
                         "use_rollover_speed_cap": use_rollover_speed_cap,
                         "parameter": param,
@@ -168,6 +183,9 @@ def run_suite(
                         "normal_load_non_physical_forward": "",
                         "normal_load_non_physical_backward": "",
                         "normal_load_gate_pass": "",
+                        "peak_abs_g_lat": "",
+                        "peak_g_total": "",
+                        "milestone5_layerc_pass": "",
                         "corner_residual_lat_abs_p90": "",
                         "corner_residual_lat_abs_max": "",
                         "corner_residual_yaw_abs_p90": "",
@@ -212,6 +230,18 @@ def run_suite(
                         normal_load_non_physical_backward = int(diagnostics.get("backward_non_physical_normal_load_events", 0))
                         normal_load_non_physical_total = int(diagnostics.get("normal_load_non_physical_events_total", normal_load_non_physical_corner + normal_load_non_physical_forward + normal_load_non_physical_backward))
 
+                        g_lat_channel = getattr(sim_result, "g_lat_channel", [])
+                        g_long_channel = getattr(sim_result, "g_long_channel", [])
+                        peak_abs_g_lat = max([abs(float(v)) for v in g_lat_channel], default=0.0)
+                        n_g = min(len(g_lat_channel), len(g_long_channel))
+                        if n_g > 0:
+                            peak_g_total = max(
+                                (float(np.sqrt(float(g_lat_channel[i]) ** 2 + float(g_long_channel[i]) ** 2)) for i in range(n_g)),
+                                default=0.0,
+                            )
+                        else:
+                            peak_g_total = 0.0
+
                         row["lap_time_s"] = float(sim_result.lap_time)
                         row["fallback_rate"] = float(fallback_rate)
                         row["fallback_gate_pass"] = bool(fallback_rate <= fallback_threshold)
@@ -225,6 +255,15 @@ def run_suite(
                         row["normal_load_non_physical_forward"] = normal_load_non_physical_forward
                         row["normal_load_non_physical_backward"] = normal_load_non_physical_backward
                         row["normal_load_gate_pass"] = bool(normal_load_non_physical_total == 0)
+                        row["peak_abs_g_lat"] = float(peak_abs_g_lat)
+                        row["peak_g_total"] = float(peak_g_total)
+                        row["milestone5_layerc_pass"] = bool(
+                            (track_name != "FSUK")
+                            or (
+                                float(peak_abs_g_lat) <= float(milestone5_max_abs_glat_g)
+                                and float(peak_g_total) <= float(milestone5_max_gtotal_g)
+                            )
+                        )
                         row["forward_mode_breakdown"] = json.dumps(forward_breakdown, sort_keys=True)
                         row["backward_mode_breakdown"] = json.dumps(backward_breakdown, sort_keys=True)
                         row["forward_dominant_mode"] = max(forward_breakdown, key=forward_breakdown.get) if forward_breakdown else ""
@@ -316,11 +355,17 @@ def run_suite(
         for r in valid_rows
         if max_out_of_domain_count >= 0 and float(r.get("tyre_out_of_domain_total", 0.0)) > float(max_out_of_domain_count)
     )
+    milestone5_layerc_fail_counts = Counter(
+        (r["track"], r["variant"])
+        for r in valid_rows
+        if (r.get("track") == "FSUK") and (float(r.get("milestone5_layerc_pass", 1.0)) == 0.0)
+    )
     rollover_modes_present = sorted({r.get("rollover_mode", "") for r in rows if r.get("rollover_mode", "")})
 
     residual_summary = {}
     tyre_domain_summary = {}
     milestone3_gate_summary = {}
+    milestone6_gate_summary = {}
     for track_name in include_tracks:
         for variant_name in variant_names:
             subset = [
@@ -371,6 +416,19 @@ def run_suite(
                 "base_mu_delta": base_mu_delta,
                 "base_mu_gate_enforced": bool(base_mu_gate_enforced),
             }
+            milestone6_gate_summary[(track_name, variant_name)] = {
+                "scenario_context_present": all(
+                    str(r.get("scenario_name", "")).strip() != ""
+                    and r.get("scenario_grip_scale", "") != ""
+                    and r.get("scenario_air_density_scale", "") != ""
+                    for r in subset
+                ),
+                "scenario_scales_positive": all(
+                    float(r.get("scenario_grip_scale", 0.0)) > 0.0
+                    and float(r.get("scenario_air_density_scale", 0.0)) > 0.0
+                    for r in subset
+                ),
+            }
 
     md_path = os.path.join(output_dir, "ab_summary.md")
     with open(md_path, "w", encoding="utf-8") as f:
@@ -392,6 +450,18 @@ def run_suite(
             f.write("- Milestone 3 gates: enabled (normal-load physics + sensitivity sign checks)\n")
         else:
             f.write("- Milestone 3 gates: disabled\n")
+        if enforce_milestone5_gates:
+            f.write("- Milestone 5 Layer C gate: enabled (FSUK peak |g_lat| and g_total limits)\n")
+            f.write(
+                f"- Milestone 5 Layer C thresholds: peak |g_lat| <= {float(milestone5_max_abs_glat_g)}, peak g_total <= {float(milestone5_max_gtotal_g)}\n"
+            )
+        else:
+            f.write("- Milestone 5 Layer C gate: disabled\n")
+        if enforce_milestone6_gates:
+            f.write("- Milestone 6 scenario-separation gate: enabled (explicit scenario context + positive multipliers)\n")
+        else:
+            f.write("- Milestone 6 scenario-separation gate: disabled\n")
+        f.write(f"- Scenario context: name={scenario_name}, grip_scale={float(scenario_grip_scale)}, air_density_scale={float(scenario_air_density_scale)}\n")
         if max_out_of_domain_count >= 0:
             f.write(f"- Tyre-domain gate: pass when tyre_out_of_domain_total <= {int(max_out_of_domain_count)}\n")
             f.write(f"- Tyre-domain gate failures (runs): {sum(tyre_domain_fail_counts.values())}\n")
@@ -447,6 +517,26 @@ def run_suite(
                 )
         f.write("\n")
 
+        f.write("## Milestone 5 Layer C Gate Failures by Track/Variant\n\n")
+        if not enforce_milestone5_gates:
+            f.write("Milestone 5 Layer C gate disabled.\n")
+        else:
+            for track_name in include_tracks:
+                for variant_name in variant_names:
+                    f.write(f"- {track_name} / {variant_name}: layerc_gate_fails={milestone5_layerc_fail_counts.get((track_name, variant_name), 0)}\n")
+        f.write("\n")
+
+        f.write("## Milestone 6 Scenario Separation Status by Track/Variant\n\n")
+        for track_name in include_tracks:
+            for variant_name in variant_names:
+                stats = milestone6_gate_summary[(track_name, variant_name)]
+                f.write(
+                    f"- {track_name} / {variant_name}: "
+                    f"scenario_context_present={stats['scenario_context_present']}, "
+                    f"scenario_scales_positive={stats['scenario_scales_positive']}\n"
+                )
+        f.write("\n")
+
         f.write("## Tyre-Domain Gate Failures by Track/Variant\n\n")
         if max_out_of_domain_count < 0:
             f.write("Tyre-domain gate disabled (reporting mode only).\n")
@@ -494,6 +584,8 @@ def run_suite(
     tyre_domain_fail_total = sum(tyre_domain_fail_counts.values()) if max_out_of_domain_count >= 0 else 0
     milestone4_fail_total = 0
     milestone3_fail_total = 0
+    milestone5_fail_total = 0
+    milestone6_fail_total = 0
     if enforce_milestone4_gates:
         milestone4_fail_total = int(sum(fallback_track_fail_counts.values()) + sum(solver_success_fail_counts.values()))
     if enforce_milestone3_gates:
@@ -505,7 +597,25 @@ def run_suite(
                     base_mu_gate_ok = bool(stats["base_mu_nontrivial_pass"])
                 if not (stats["normal_load_pass"] and stats["cog_sign_pass"] and base_mu_gate_ok):
                     milestone3_fail_total += 1
-    return runs_csv, sens_csv, md_path, tyre_domain_fail_total, milestone4_fail_total, milestone3_fail_total
+    if enforce_milestone5_gates:
+        milestone5_fail_total = int(sum(milestone5_layerc_fail_counts.values()))
+    if enforce_milestone6_gates:
+        for track_name in include_tracks:
+            for variant_name in variant_names:
+                stats = milestone6_gate_summary[(track_name, variant_name)]
+                if not (stats["scenario_context_present"] and stats["scenario_scales_positive"]):
+                    milestone6_fail_total += 1
+
+    return (
+        runs_csv,
+        sens_csv,
+        md_path,
+        tyre_domain_fail_total,
+        milestone4_fail_total,
+        milestone3_fail_total,
+        milestone5_fail_total,
+        milestone6_fail_total,
+    )
 
 
 def main():
@@ -539,6 +649,21 @@ def main():
         action="store_true",
         help="Enable Milestone 3 hard gates for normal-load events and sensitivity sign checks",
     )
+    parser.add_argument(
+        "--enforce-milestone5-gates",
+        action="store_true",
+        help="Enable Milestone 5 Layer C hard gate for FSUK realism limits",
+    )
+    parser.add_argument(
+        "--enforce-milestone6-gates",
+        action="store_true",
+        help="Enable Milestone 6 scenario-separation gate checks",
+    )
+    parser.add_argument("--scenario-name", default="baseline", help="Scenario context label")
+    parser.add_argument("--scenario-grip-scale", type=float, default=1.0, help="Scenario multiplier for tyre grip")
+    parser.add_argument("--scenario-air-density-scale", type=float, default=1.0, help="Scenario multiplier for ambient air density")
+    parser.add_argument("--m5-max-abs-glat-g", type=float, default=2.0, help="Milestone 5 FSUK peak |g_lat| gate")
+    parser.add_argument("--m5-max-gtotal-g", type=float, default=3.0, help="Milestone 5 FSUK peak g_total gate")
     args = parser.parse_args()
 
     include_tracks = [t.strip() for t in args.tracks.split(",") if t.strip()]
@@ -546,7 +671,16 @@ def main():
     if not variant_names:
         raise ValueError("At least one variant is required")
 
-    runs_csv, sens_csv, md_path, tyre_domain_fail_total, milestone4_fail_total, milestone3_fail_total = run_suite(
+    (
+        runs_csv,
+        sens_csv,
+        md_path,
+        tyre_domain_fail_total,
+        milestone4_fail_total,
+        milestone3_fail_total,
+        milestone5_fail_total,
+        milestone6_fail_total,
+    ) = run_suite(
         output_dir=args.output_dir,
         include_tracks=include_tracks,
         stale_threshold=args.stale_threshold,
@@ -555,6 +689,13 @@ def main():
         max_out_of_domain_count=args.max_out_of_domain_count,
         enforce_milestone4_gates=bool(args.enforce_milestone4_gates),
         enforce_milestone3_gates=bool(args.enforce_milestone3_gates),
+        enforce_milestone5_gates=bool(args.enforce_milestone5_gates),
+        enforce_milestone6_gates=bool(args.enforce_milestone6_gates),
+        scenario_name=str(args.scenario_name),
+        scenario_grip_scale=float(args.scenario_grip_scale),
+        scenario_air_density_scale=float(args.scenario_air_density_scale),
+        milestone5_max_abs_glat_g=float(args.m5_max_abs_glat_g),
+        milestone5_max_gtotal_g=float(args.m5_max_gtotal_g),
     )
 
     if args.max_out_of_domain_count >= 0 and tyre_domain_fail_total > 0:
@@ -578,6 +719,22 @@ def main():
         print("A/B suite failed Milestone 3 gates")
         print(f"Track/variant gate failures: {milestone3_fail_total}")
         print("Milestone 3 gates: normal-load non-physical events must be zero, cog_z sign check must pass, base_mu sensitivity must be non-trivial")
+        print(f"Runs CSV: {runs_csv}")
+        print(f"Summary Markdown: {md_path}")
+        raise SystemExit(1)
+
+    if args.enforce_milestone5_gates and milestone5_fail_total > 0:
+        print("A/B suite failed Milestone 5 Layer C gate")
+        print(f"Layer C gate failures: {milestone5_fail_total}")
+        print(f"FSUK limits: peak |g_lat| <= {float(args.m5_max_abs_glat_g)}, peak g_total <= {float(args.m5_max_gtotal_g)}")
+        print(f"Runs CSV: {runs_csv}")
+        print(f"Summary Markdown: {md_path}")
+        raise SystemExit(1)
+
+    if args.enforce_milestone6_gates and milestone6_fail_total > 0:
+        print("A/B suite failed Milestone 6 scenario-separation gate")
+        print(f"Scenario gate failures: {milestone6_fail_total}")
+        print("Scenario context must be explicit and scenario multipliers must remain positive.")
         print(f"Runs CSV: {runs_csv}")
         print(f"Summary Markdown: {md_path}")
         raise SystemExit(1)

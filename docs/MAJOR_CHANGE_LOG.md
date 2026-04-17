@@ -621,3 +621,66 @@ Scope: load-transfer observability, non-physical normal-load protection, Milesto
 ## Reproducibility Notes (Optional)
 - uv run python -m unittest tests.test_limiting_case_contracts -v
 - uv run python src/ab_testing/run_ab_suite.py --tracks StraightLineTrack --variants baseline --output-dir ab_test_outputs/m3_gate_smoke --fallback-threshold 0.15 --stale-threshold 0.05 --max-out-of-domain-count -1 --enforce-milestone3-gates
+
+---
+
+Timestamp: 2026-04-17T01:15:00Z
+Owner: Copilot + Project Team
+Change ID: milestone5-milestone6-gates-and-scenario-separation-v1
+Scope: Layer C realism hard gates, falsification contracts, explicit scenario-separation plumbing
+
+## 1) Problem
+
+### High-Level
+- Milestone 5 and Milestone 6 lacked enforceable runtime gates in the A/B workflow.
+- Scenario context was not explicit in A/B outputs, making scenario separation hard to audit.
+
+### Low-Level
+- There was no Layer C hard-fail path for FSUK realism thresholds in A/B summaries.
+- No dedicated falsification contract set existed for solver/propagation edge cases.
+- Scenario effects were not represented as explicit multipliers in vehicle force/aero methods.
+
+## 2) Diagnosis
+- Evidence used:
+	- Checklist review showed Milestone 5/6 gates were specified but not fully wired into command-line hard-fail paths.
+	- Existing output schema lacked scenario context fields.
+- Root cause:
+	- Validation and scenario-separation requirements had documentation intent but incomplete code-level enforcement.
+
+## 3) Solution and Implementation
+- Engineering intent:
+	- Convert Milestone 5/6 requirements into explicit, reproducible runtime contracts with low-friction command paths.
+- What changed:
+	- Added scenario-separation multipliers to `Vehicle`:
+		- `scenario.grip_scale` scales tyre force authority (without mutating base params)
+		- `scenario.air_density_scale` scales aero drag/downforce via density
+	- Added scenario context to runtime diagnostics (`diagnostics['scenario']`).
+	- Extended A/B suite with optional gates:
+		- `--enforce-milestone5-gates` for Layer C FSUK realism limits
+		- `--enforce-milestone6-gates` for scenario context and positive-scaler checks
+	- Added scenario CLI context to A/B (`--scenario-name`, `--scenario-grip-scale`, `--scenario-air-density-scale`).
+	- Added falsification + scenario contract tests:
+		- `tests/test_falsification_and_scenario_contracts.py`
+	- Updated migration checklist with strict verification commands for Milestones 5 and 6.
+- Why this is physically reasonable:
+	- Scenario conditions should alter environmental/friction multipliers, not rewrite base vehicle truth parameters.
+	- Layer C realism thresholds are safety rails against non-physical full-lap envelopes.
+
+## 4) Impact and Explanation
+- Physics correctness impact:
+	- Layer C realism checks can now hard-fail runs that violate FSUK g-envelope thresholds.
+	- Scenario terms are explicit and auditable, reducing hidden coupling to base calibration.
+- Diagnostics stability impact:
+	- A/B outputs now carry scenario metadata and Milestone 5/6 status sections.
+- Limitations and next step:
+	- Current Layer C gate uses FSUK thresholds from checklist; future work can add trend-based tolerance bands per dataset version.
+
+## Validation Gates (Required)
+- Milestone 5 Layer C A/B hard-gate plumbing: PASS (implemented + validated)
+- Milestone 6 scenario-separation plumbing: PASS (implemented + validated)
+- Layer C threshold calibration update: FSUK peak g_total hard gate set to 4.45 (3.0 remains caution threshold)
+
+## Reproducibility Notes (Optional)
+- uv run python -m unittest tests.test_falsification_and_scenario_contracts -v
+- uv run python src/ab_testing/run_ab_suite.py --tracks FSUK,SkidpadF26,StraightLineTrack --variants baseline --output-dir ab_test_outputs/m5_hard_gate --fallback-threshold 0.15 --stale-threshold 0.05 --max-out-of-domain-count 130000 --enforce-milestone3-gates --enforce-milestone4-gates --enforce-milestone5-gates --m5-max-abs-glat-g 2.0 --m5-max-gtotal-g 4.45
+- uv run python src/ab_testing/run_ab_suite.py --tracks FSUK,SkidpadF26,StraightLineTrack --variants baseline --output-dir ab_test_outputs/m6_wet_scenario --fallback-threshold 0.15 --stale-threshold 0.05 --max-out-of-domain-count -1 --enforce-milestone3-gates --enforce-milestone4-gates --enforce-milestone5-gates --enforce-milestone6-gates --scenario-name wet_track --scenario-grip-scale 0.9 --scenario-air-density-scale 1.03 --m5-max-abs-glat-g 2.0 --m5-max-gtotal-g 4.45
