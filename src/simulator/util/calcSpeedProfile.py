@@ -145,6 +145,20 @@ def _build_retry_tiers(previous_solution, straight_speed_cap, rollover_cap):
     return tiers
 
 
+def _split_aero_load_by_cp(vehicle, aero_total):
+    """Split total aero load between front and rear axles using aero CoP."""
+    L = max(float(getattr(vehicle.params, 'wheelbase', 1.6)), 1e-6)
+    cp = float(getattr(vehicle.params, 'aero_centre_of_pressure', L * 0.5))
+    cp_clamped = min(max(cp, 0.0), L)
+
+    # Static equilibrium about axles: front share decreases as CoP moves rearward.
+    rear_frac = cp_clamped / L
+    front_frac = 1.0 - rear_frac
+    aero_front = float(aero_total) * front_frac
+    aero_rear = float(aero_total) * rear_frac
+    return aero_front, aero_rear
+
+
 def _compute_normal_loads_for_longitudinal(vehicle, v_car, a_long, config):
     """
     Compute per-tyre normal loads for front and rear axles.
@@ -175,8 +189,12 @@ def _compute_normal_loads_for_longitudinal(vehicle, v_car, a_long, config):
     f_down = max(0.0, vehicle.compute_downforce(v_car))
     total = m * g + f_down
 
-    front_axle = total * front_frac
-    rear_axle = total * rear_frac
+    static_front = (m * g) * front_frac
+    static_rear = (m * g) * rear_frac
+    aero_front, aero_rear = _split_aero_load_by_cp(vehicle, f_down)
+
+    front_axle = static_front + aero_front
+    rear_axle = static_rear + aero_rear
 
     # Positive longitudinal acceleration shifts load rearward.
     delta_long = (m * a_long * h) / L
@@ -256,16 +274,9 @@ def _longitudinal_budget_scale_from_lateral_demand(fy_demand_total, fy_cap_total
     return float(np.sqrt(max(0.0, 1.0 - ratio * ratio)))
 
 
-def _compute_corner_normal_load_per_tyre(vehicle, v_car, config):
-    """Cornering solve normal load proxy (baseline static, B1 includes aero load)."""
-    base = vehicle.compute_static_normal_load()
-    if not _is_b1_variant(config):
-        return base
-
-    m = vehicle.params.mass
-    g = 9.81
-    f_down = max(0.0, vehicle.compute_downforce(v_car))
-    return (m * g + f_down) / 4.0
+def _compute_corner_normal_load_state(vehicle, v_car, config):
+    """Cornering solve load state (front/rear per-tyre) at approximately steady longitudinal accel."""
+    return _compute_normal_loads_for_longitudinal(vehicle, v_car=v_car, a_long=0.0, config=config)
 
 def optimise_speed_at_points(track_points, vehicle, config):
     """
@@ -300,9 +311,12 @@ def optimise_speed_at_points(track_points, vehicle, config):
     previous_solution = None
     for point in track_points:
         curvature = point.curvature
-        corner_load_per_tyre = _compute_corner_normal_load_per_tyre(vehicle, 20.0, config)
+        corner_load_state = _compute_corner_normal_load_state(vehicle, 20.0, config)
+        corner_load_front = float(corner_load_state['front_per_tyre'])
+        corner_load_rear = float(corner_load_state['rear_per_tyre'])
+        corner_load_mean = float(corner_load_state['mean_per_tyre'])
         rollover_cap = _compute_rollover_speed_cap(curvature, vehicle)
-        tyre_lateral_cap = _compute_tyre_lateral_speed_cap(curvature, vehicle, corner_load_per_tyre, config)
+        tyre_lateral_cap = _compute_tyre_lateral_speed_cap(curvature, vehicle, corner_load_mean, config)
         cap = float(straight_speed_cap)
         if np.isfinite(rollover_cap):
             cap = min(cap, float(rollover_cap))
@@ -321,7 +335,8 @@ def optimise_speed_at_points(track_points, vehicle, config):
             tier_result = find_vehicle_state_at_point(
                 curvature,
                 vehicle,
-                normal_load_per_tyre=corner_load_per_tyre,
+                normal_load_front_per_tyre=corner_load_front,
+                normal_load_rear_per_tyre=corner_load_rear,
                 straight_line_speed_cap=straight_speed_cap,
                 initial_guess=tier.get('initial_guess'),
                 v_upper_bound_mps=tier.get('v_upper_bound_mps'),

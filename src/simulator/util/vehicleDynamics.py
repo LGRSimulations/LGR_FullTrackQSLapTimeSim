@@ -123,6 +123,8 @@ def find_vehicle_state_at_point(
     curvature: float,
     vehicle,
     normal_load_per_tyre: float = None,
+    normal_load_front_per_tyre: float = None,
+    normal_load_rear_per_tyre: float = None,
     straight_line_speed_cap: float = 200.0,
     initial_guess: Optional[Dict[str, float]] = None,
     v_upper_bound_mps: Optional[float] = None,
@@ -293,14 +295,24 @@ def find_vehicle_state_at_point(
             alpha_r = -beta + (b * K)
             
             # Tyre model expects degrees.
-            if normal_load_per_tyre is None:
-                Fy_f, Fy_r = vehicle.compute_tyre_forces(np.degrees(alpha_f), np.degrees(alpha_r))
+            if (normal_load_front_per_tyre is None) and (normal_load_rear_per_tyre is None):
+                if normal_load_per_tyre is None:
+                    Fy_f, Fy_r = vehicle.compute_tyre_forces(np.degrees(alpha_f), np.degrees(alpha_r))
+                else:
+                    Fy_f, Fy_r = vehicle.compute_tyre_forces(
+                        np.degrees(alpha_f),
+                        np.degrees(alpha_r),
+                        normal_load_front=normal_load_per_tyre,
+                        normal_load_rear=normal_load_per_tyre,
+                    )
             else:
+                front_load = normal_load_front_per_tyre if normal_load_front_per_tyre is not None else normal_load_per_tyre
+                rear_load = normal_load_rear_per_tyre if normal_load_rear_per_tyre is not None else normal_load_per_tyre
                 Fy_f, Fy_r = vehicle.compute_tyre_forces(
                     np.degrees(alpha_f),
                     np.degrees(alpha_r),
-                    normal_load_front=normal_load_per_tyre,
-                    normal_load_rear=normal_load_per_tyre,
+                    normal_load_front=front_load,
+                    normal_load_rear=rear_load,
                 )
             
             # Equations to solve - Step 4.iii 
