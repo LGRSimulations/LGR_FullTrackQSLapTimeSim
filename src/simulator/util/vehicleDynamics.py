@@ -193,6 +193,10 @@ def find_vehicle_state_at_point(
             'a_steer': 0.0,
             'a_sideslip': 0.0,
             'failure_reason': 'none',
+            'residual_lat_abs': 0.0,
+            'residual_yaw_abs': 0.0,
+            'residual_lat_rel': 0.0,
+            'residual_yaw_rel': 0.0,
         }
     
 
@@ -232,6 +236,10 @@ def find_vehicle_state_at_point(
             'a_steer': 0.0,
             'a_sideslip': 0.0,
             'failure_reason': 'invalid_speed_bound',
+            'residual_lat_abs': np.nan,
+            'residual_yaw_abs': np.nan,
+            'residual_lat_rel': np.nan,
+            'residual_yaw_rel': np.nan,
         }
     
     # Bicycle model: delta approx L * K
@@ -256,8 +264,16 @@ def find_vehicle_state_at_point(
         'a_steer': 0.0,
         'a_sideslip': 0.0,
         'failure_reason': 'no_feasible_solution',
+        'residual_lat_abs': np.nan,
+        'residual_yaw_abs': np.nan,
+        'residual_lat_rel': np.nan,
+        'residual_yaw_rel': np.nan,
     }
     last_failure_reason = 'no_feasible_solution'
+    last_residual_lat_abs = np.nan
+    last_residual_yaw_abs = np.nan
+    last_residual_lat_rel = np.nan
+    last_residual_yaw_rel = np.nan
 
     # Bisection search 
     for _ in range(max(1, int(max_bisection_iters))):
@@ -307,6 +323,14 @@ def find_vehicle_state_at_point(
             # Keep checks scale-aware.
             lat_scale = max(1.0, abs(m * (v_mid**2) * K))
             yaw_scale = max(1.0, lat_scale * max(a, b))
+            res_lat_abs = float(abs(res_lat))
+            res_yaw_abs = float(abs(res_yaw))
+            res_lat_rel = float(res_lat_abs / lat_scale)
+            res_yaw_rel = float(res_yaw_abs / yaw_scale)
+            last_residual_lat_abs = res_lat_abs
+            last_residual_yaw_abs = res_yaw_abs
+            last_residual_lat_rel = res_lat_rel
+            last_residual_yaw_rel = res_yaw_rel
             residual_ok = (abs(res_lat) <= 1e-2 * lat_scale) and (abs(res_yaw) <= 1e-2 * yaw_scale)
             
             # Basic check (e.g. < 45 degrees)
@@ -322,6 +346,10 @@ def find_vehicle_state_at_point(
                     'a_steer': np.degrees(delta_sol),
                     'a_sideslip': np.degrees(beta_sol),
                     'failure_reason': 'none',
+                    'residual_lat_abs': res_lat_abs,
+                    'residual_yaw_abs': res_yaw_abs,
+                    'residual_lat_rel': res_lat_rel,
+                    'residual_yaw_rel': res_yaw_rel,
                 }
                 
                 # Use this solution as the guess for the next higher speed (Step 4 note)
@@ -341,5 +369,9 @@ def find_vehicle_state_at_point(
 
     if not final_result['success']:
         final_result['failure_reason'] = last_failure_reason
+        final_result['residual_lat_abs'] = last_residual_lat_abs
+        final_result['residual_yaw_abs'] = last_residual_yaw_abs
+        final_result['residual_lat_rel'] = last_residual_lat_rel
+        final_result['residual_yaw_rel'] = last_residual_yaw_rel
 
     return final_result

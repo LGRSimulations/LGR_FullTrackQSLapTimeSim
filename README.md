@@ -312,6 +312,48 @@ Use the milestone checklist for physics-first simulator hardening:
 
 - `docs/FIRST_PRINCIPLES_MIGRATION_CHECKLIST.md`
 
+### Milestone 1 Verification (One Command)
+
+From the project root, run:
+
+```bash
+uv run python -m unittest tests.test_limiting_case_contracts -v
+uv run python tools/analysis/m1_magic_constant_scan.py --strict
+```
+
+This validates:
+- limiting-case solver behavior
+- equation units contracts
+- sign-convention symmetry
+- residual telemetry presence/finite values for solved points
+- strict undocumented-constant scan for core solver files
+
+### Milestone 2 Verification (Tyre Validity Envelope)
+
+From the project root, run:
+
+```bash
+uv run python -m unittest tests.test_tyre_force_contracts tests.test_tyre_peak_load_clamp_contracts tests.test_tyre_validity_domain_contracts -v
+uv run python tools/analysis/compare_tyre_model.py --validate --model-variant tyre_peak_load_clamp --rmse-threshold-pct 12 --max-high-load-growth-ratio 1.05 --max-out-of-domain-count -1
+uv run python src/ab_testing/run_ab_suite.py --tracks StraightLineTrack --variants baseline --output-dir ab_test_outputs/m2_domain_smoke --fallback-threshold 0.15 --stale-threshold 0.05 --max-out-of-domain-count -1
+```
+
+Hard gate baseline (measured):
+- FSUK baseline max `tyre_out_of_domain_total` = `129380`
+- SkidpadF26 baseline max `tyre_out_of_domain_total` = `0`
+- StraightLineTrack baseline max `tyre_out_of_domain_total` = `0`
+- Recommended global threshold: `130000`
+
+Strict command (fails with non-zero exit if any run exceeds threshold):
+
+```bash
+uv run python src/ab_testing/run_ab_suite.py --tracks FSUK,SkidpadF26,StraightLineTrack --variants baseline --output-dir ab_test_outputs/m2_domain_hard_gate --fallback-threshold 0.15 --stale-threshold 0.05 --max-out-of-domain-count 130000
+```
+
+Notes:
+- `--max-out-of-domain-count -1` keeps out-of-domain telemetry enabled in reporting mode.
+- Non-negative thresholds enable hard-gate behavior for CI.
+
 ### Command Quick Reference
 
 From the project root:

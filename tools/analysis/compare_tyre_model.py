@@ -433,6 +433,7 @@ def build_html_report(
     all_rows,
     zero_force_rows,
     extrapolation_rows,
+    tyre_domain_rows,
     image_paths,
     plotly_figures,
     summary_csv,
@@ -473,6 +474,15 @@ def build_html_report(
                 "growth_ratio": f"{row['growth_ratio']:.3f}",
                 "threshold": f"{row['threshold']:.3f}",
                 "status": row["status"],
+            }
+        )
+
+    tyre_domain_table_rows = []
+    for row in tyre_domain_rows:
+        tyre_domain_table_rows.append(
+            {
+                "metric": row["metric"],
+                "value": row["value"],
             }
         )
 
@@ -641,6 +651,12 @@ def build_html_report(
         </div>
 
         <div class='section card'>
+            <h2>Tyre Validity-Domain Diagnostics</h2>
+            <div class='table-wrap'>{dataframe_to_html(tyre_domain_table_rows)}</div>
+            <p class='note'>Counts track slip/load requests outside the TTC-derived validity ranges observed by the runtime tyre model API.</p>
+        </div>
+
+        <div class='section card'>
             <h2>2D Plots</h2>
             <div class='grid image-grid'>
                 {''.join(image_cards)}
@@ -670,6 +686,7 @@ def main():
     parser.add_argument("--rmse-threshold-pct", type=float, default=12.0, help="Fail validation if any load-bin RMSE exceeds this percent of peak force")
     parser.add_argument("--model-variant", default="baseline", help="Tyre model variant (e.g. baseline, tyre_peak_load_clamp)")
     parser.add_argument("--max-high-load-growth-ratio", type=float, default=1.35, help="Fail validation if predicted peak force at 1.5x max TTC load exceeds this ratio")
+    parser.add_argument("--max-out-of-domain-count", type=int, default=-1, help="Fail validation if out-of-domain usage count exceeds this value (negative disables gate)")
     args = parser.parse_args()
 
     ensure_dir(args.output_dir)
@@ -678,6 +695,8 @@ def main():
     plt = import_pyplot()
 
     model, tyre_data_lat, tyre_data_long = load_model(args.lateral_csv, args.longitudinal_csv, model_variant=args.model_variant)
+    if hasattr(model, "reset_domain_diagnostics"):
+        model.reset_domain_diagnostics()
 
     lateral_rows = evaluate_lateral(model, tyre_data_lat)
     longitudinal_rows = evaluate_longitudinal(model, tyre_data_long)
@@ -769,8 +788,14 @@ def main():
         max_ratio_threshold=args.max_high_load_growth_ratio,
         probe_scale=1.5,
     )
+    tyre_domain_diag = model.get_domain_diagnostics() if hasattr(model, "get_domain_diagnostics") else {}
+    tyre_domain_rows = [{"metric": k, "value": v} for k, v in tyre_domain_diag.items()]
+
     extrapolation_fail_rows = [row for row in extrapolation_rows if row["status"] != "PASS"]
-    validation_passed = (len(failed_rows) == 0) and (len(extrapolation_fail_rows) == 0)
+    out_of_domain_total = int(tyre_domain_diag.get("out_of_domain_total", 0)) if isinstance(tyre_domain_diag, dict) else 0
+    out_of_domain_gate_enabled = int(args.max_out_of_domain_count) >= 0
+    out_of_domain_gate_pass = (out_of_domain_total <= int(args.max_out_of_domain_count)) if out_of_domain_gate_enabled else True
+    validation_passed = (len(failed_rows) == 0) and (len(extrapolation_fail_rows) == 0) and out_of_domain_gate_pass
 
     html_report = os.path.join(args.output_dir, "tyre_model_verification.html")
     zero_force_lines, zero_force_rows = run_zero_force_checks(model)
@@ -810,6 +835,7 @@ def main():
         all_rows=all_rows,
         zero_force_rows=zero_force_rows,
         extrapolation_rows=extrapolation_rows,
+        tyre_domain_rows=tyre_domain_rows,
         image_paths=image_paths,
         plotly_figures=plotly_figures,
         summary_csv=summary_csv,
@@ -822,6 +848,8 @@ def main():
     print(f"Longitudinal mean RMSE % peak: {longitudinal_rmse_pct:.2f}%")
     print(f"Validation threshold: {args.rmse_threshold_pct:.2f}% of peak")
     print(f"High-load growth ratio threshold: {args.max_high_load_growth_ratio:.2f}")
+    print(f"Out-of-domain gate: {'disabled' if not out_of_domain_gate_enabled else f'<= {int(args.max_out_of_domain_count)}'}")
+    print(f"Out-of-domain total count: {out_of_domain_total}")
     print(f"Model variant: {args.model_variant}")
     print(f"Validation result: {'PASS' if validation_passed else 'FAIL'}")
 
@@ -839,6 +867,10 @@ def main():
         for row in extrapolation_fail_rows:
             print(
                 f"  {row['channel']} high-load growth ratio={row['growth_ratio']:.3f} (threshold={row['threshold']:.3f})"
+            )
+        if not out_of_domain_gate_pass:
+            print(
+                f"  out_of_domain_total={out_of_domain_total} exceeds threshold={int(args.max_out_of_domain_count)}"
             )
         raise SystemExit(1)
 
