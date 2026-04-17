@@ -2,11 +2,14 @@ import argparse
 import copy
 import csv
 import json
+import math
 import os
 import sys
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from statistics import mean
+
+import numpy as np
 
 
 SRC_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -47,7 +50,21 @@ def limiter_fractions(modes):
     return {k: v / total for k, v in counts.items()}
 
 
-def run_suite(output_dir, include_tracks, stale_threshold, variant_names, fallback_threshold):
+def finite_percentile(values, pct):
+    finite_vals = [float(v) for v in values if isinstance(v, (int, float)) and math.isfinite(float(v))]
+    if not finite_vals:
+        return ""
+    return float(np.percentile(finite_vals, pct))
+
+
+def finite_max(values):
+    finite_vals = [float(v) for v in values if isinstance(v, (int, float)) and math.isfinite(float(v))]
+    if not finite_vals:
+        return ""
+    return float(max(finite_vals))
+
+
+def run_suite(output_dir, include_tracks, stale_threshold, variant_names, fallback_threshold, max_out_of_domain_count):
     from track.track import load_track
     from vehicle.vehicle import create_vehicle
     from simulator.simulator import run_lap_time_simulation
@@ -118,6 +135,18 @@ def run_suite(output_dir, include_tracks, stale_threshold, variant_names, fallba
                         "forward_mode_breakdown": "",
                         "backward_mode_breakdown": "",
                         "fallback_gate_pass": "",
+                        "corner_residual_lat_abs_p90": "",
+                        "corner_residual_lat_abs_max": "",
+                        "corner_residual_yaw_abs_p90": "",
+                        "corner_residual_yaw_abs_max": "",
+                        "corner_residual_lat_rel_p90": "",
+                        "corner_residual_lat_rel_max": "",
+                        "corner_residual_yaw_rel_p90": "",
+                        "corner_residual_yaw_rel_max": "",
+                        "tyre_out_of_domain_total": "",
+                        "tyre_out_of_domain_slip": "",
+                        "tyre_out_of_domain_load": "",
+                        "tyre_domain_gate_pass": "",
                     }
 
                     try:
@@ -132,6 +161,14 @@ def run_suite(output_dir, include_tracks, stale_threshold, variant_names, fallba
                         backward_modes = diagnostics.get("backward_limiting_mode", [])
                         forward_breakdown = limiter_fractions(forward_modes)
                         backward_breakdown = limiter_fractions(backward_modes)
+                        lat_abs = diagnostics.get("corner_solver_lat_residual_abs", [])
+                        yaw_abs = diagnostics.get("corner_solver_yaw_residual_abs", [])
+                        lat_rel = diagnostics.get("corner_solver_lat_residual_rel", [])
+                        yaw_rel = diagnostics.get("corner_solver_yaw_residual_rel", [])
+                        tyre_domain = diagnostics.get("tyre_domain", {}) if isinstance(diagnostics, dict) else {}
+                        tyre_out_slip = int(tyre_domain.get("lateral_out_of_domain_slip", 0)) + int(tyre_domain.get("longitudinal_out_of_domain_slip", 0))
+                        tyre_out_load = int(tyre_domain.get("lateral_out_of_domain_load", 0)) + int(tyre_domain.get("longitudinal_out_of_domain_load", 0))
+                        tyre_out_total = int(tyre_domain.get("out_of_domain_total", tyre_out_slip + tyre_out_load))
 
                         row["lap_time_s"] = float(sim_result.lap_time)
                         row["fallback_rate"] = float(fallback_rate)
@@ -140,6 +177,19 @@ def run_suite(output_dir, include_tracks, stale_threshold, variant_names, fallba
                         row["backward_mode_breakdown"] = json.dumps(backward_breakdown, sort_keys=True)
                         row["forward_dominant_mode"] = max(forward_breakdown, key=forward_breakdown.get) if forward_breakdown else ""
                         row["backward_dominant_mode"] = max(backward_breakdown, key=backward_breakdown.get) if backward_breakdown else ""
+                        row["corner_residual_lat_abs_p90"] = finite_percentile(lat_abs, 90)
+                        row["corner_residual_lat_abs_max"] = finite_max(lat_abs)
+                        row["corner_residual_yaw_abs_p90"] = finite_percentile(yaw_abs, 90)
+                        row["corner_residual_yaw_abs_max"] = finite_max(yaw_abs)
+                        row["corner_residual_lat_rel_p90"] = finite_percentile(lat_rel, 90)
+                        row["corner_residual_lat_rel_max"] = finite_max(lat_rel)
+                        row["corner_residual_yaw_rel_p90"] = finite_percentile(yaw_rel, 90)
+                        row["corner_residual_yaw_rel_max"] = finite_max(yaw_rel)
+                        row["tyre_out_of_domain_total"] = tyre_out_total
+                        row["tyre_out_of_domain_slip"] = tyre_out_slip
+                        row["tyre_out_of_domain_load"] = tyre_out_load
+                        if max_out_of_domain_count >= 0:
+                            row["tyre_domain_gate_pass"] = bool(tyre_out_total <= max_out_of_domain_count)
 
                     except Exception as exc:
                         row["status"] = "invalid"
@@ -194,7 +244,32 @@ def run_suite(output_dir, include_tracks, stale_threshold, variant_names, fallba
         for r in valid_rows
         if float(r["fallback_rate"]) > float(fallback_threshold)
     )
+    tyre_domain_fail_counts = Counter(
+        (r["track"], r["variant"])
+        for r in valid_rows
+        if max_out_of_domain_count >= 0 and float(r.get("tyre_out_of_domain_total", 0.0)) > float(max_out_of_domain_count)
+    )
     rollover_modes_present = sorted({r.get("rollover_mode", "") for r in rows if r.get("rollover_mode", "")})
+
+    residual_summary = {}
+    tyre_domain_summary = {}
+    for track_name in include_tracks:
+        for variant_name in variant_names:
+            subset = [
+                r for r in valid_rows
+                if r["track"] == track_name and r["variant"] == variant_name
+            ]
+            residual_summary[(track_name, variant_name)] = {
+                "lat_abs_max": finite_max([r.get("corner_residual_lat_abs_max", "") for r in subset]),
+                "yaw_abs_max": finite_max([r.get("corner_residual_yaw_abs_max", "") for r in subset]),
+                "lat_rel_p90": finite_percentile([r.get("corner_residual_lat_rel_p90", "") for r in subset], 90),
+                "yaw_rel_p90": finite_percentile([r.get("corner_residual_yaw_rel_p90", "") for r in subset], 90),
+            }
+            tyre_domain_summary[(track_name, variant_name)] = {
+                "out_total_max": finite_max([r.get("tyre_out_of_domain_total", "") for r in subset]),
+                "out_slip_max": finite_max([r.get("tyre_out_of_domain_slip", "") for r in subset]),
+                "out_load_max": finite_max([r.get("tyre_out_of_domain_load", "") for r in subset]),
+            }
 
     md_path = os.path.join(output_dir, "ab_summary.md")
     with open(md_path, "w", encoding="utf-8") as f:
@@ -207,7 +282,13 @@ def run_suite(output_dir, include_tracks, stale_threshold, variant_names, fallba
         if rollover_modes_present:
             f.write(f"- Rollover modes in this run: {', '.join(rollover_modes_present)}\n")
         f.write("- Focused parameters: downforce_coefficient, aero_cp, cog_z, front_track_width, rear_track_width, roll_stiffness, max_roll_angle_deg, base_mu\n\n")
-        f.write(f"- Fallback-rate gate: pass when fallback_rate <= {fallback_threshold:.3f}\n\n")
+        f.write(f"- Fallback-rate gate: pass when fallback_rate <= {fallback_threshold:.3f}\n")
+        if max_out_of_domain_count >= 0:
+            f.write(f"- Tyre-domain gate: pass when tyre_out_of_domain_total <= {int(max_out_of_domain_count)}\n")
+            f.write(f"- Tyre-domain gate failures (runs): {sum(tyre_domain_fail_counts.values())}\n")
+        else:
+            f.write("- Tyre-domain gate: reporting only (no hard fail threshold)\n")
+        f.write("\n")
 
         f.write("## Invalid Run Breakdown\n\n")
         if invalid_count == 0:
@@ -230,6 +311,42 @@ def run_suite(output_dir, include_tracks, stale_threshold, variant_names, fallba
                 f.write(f"- {track_name} / {variant_name}: {fallback_fail_counts.get((track_name, variant_name), 0)} runs above threshold\n")
         f.write("\n")
 
+        f.write("## Tyre-Domain Gate Failures by Track/Variant\n\n")
+        if max_out_of_domain_count < 0:
+            f.write("Tyre-domain gate disabled (reporting mode only).\n")
+        else:
+            for track_name in include_tracks:
+                for variant_name in variant_names:
+                    f.write(f"- {track_name} / {variant_name}: {tyre_domain_fail_counts.get((track_name, variant_name), 0)} runs above threshold\n")
+        f.write("\n")
+
+        f.write("## Corner Residual Telemetry (Track/Variant)\n\n")
+        f.write("- Metrics summarize residual channels emitted by corner equilibrium solving.\n")
+        for track_name in include_tracks:
+            for variant_name in variant_names:
+                stats = residual_summary[(track_name, variant_name)]
+                f.write(
+                    f"- {track_name} / {variant_name}: "
+                    f"lat_abs_max={stats['lat_abs_max']}, "
+                    f"yaw_abs_max={stats['yaw_abs_max']}, "
+                    f"lat_rel_p90={stats['lat_rel_p90']}, "
+                    f"yaw_rel_p90={stats['yaw_rel_p90']}\n"
+                )
+        f.write("\n")
+
+        f.write("## Tyre Validity-Domain Usage (Track/Variant)\n\n")
+        f.write("- Counts summarize out-of-domain slip/load usage observed during simulation calls.\n")
+        for track_name in include_tracks:
+            for variant_name in variant_names:
+                stats = tyre_domain_summary[(track_name, variant_name)]
+                f.write(
+                    f"- {track_name} / {variant_name}: "
+                    f"out_total_max={stats['out_total_max']}, "
+                    f"out_slip_max={stats['out_slip_max']}, "
+                    f"out_load_max={stats['out_load_max']}\n"
+                )
+        f.write("\n")
+
         f.write("## Top Sensitivity Movers\n\n")
         ranked = sorted(sens_rows, key=lambda r: r["delta_lap_time_s"], reverse=True)
         for row in ranked[:12]:
@@ -238,7 +355,8 @@ def run_suite(output_dir, include_tracks, stale_threshold, variant_names, fallba
                 f"delta_lap_time_s={row['delta_lap_time_s']:.4f}, stale={row['stale']}\n"
             )
 
-    return runs_csv, sens_csv, md_path
+    tyre_domain_fail_total = sum(tyre_domain_fail_counts.values()) if max_out_of_domain_count >= 0 else 0
+    return runs_csv, sens_csv, md_path, tyre_domain_fail_total
 
 
 def main():
@@ -256,6 +374,12 @@ def main():
     )
     parser.add_argument("--stale-threshold", type=float, default=0.05, help="Delta lap-time threshold (s) for stale flag")
     parser.add_argument("--fallback-threshold", type=float, default=0.15, help="Fallback-rate pass threshold")
+    parser.add_argument(
+        "--max-out-of-domain-count",
+        type=int,
+        default=-1,
+        help="Tyre-domain hard gate threshold; set -1 for reporting-only mode",
+    )
     args = parser.parse_args()
 
     include_tracks = [t.strip() for t in args.tracks.split(",") if t.strip()]
@@ -263,13 +387,22 @@ def main():
     if not variant_names:
         raise ValueError("At least one variant is required")
 
-    runs_csv, sens_csv, md_path = run_suite(
+    runs_csv, sens_csv, md_path, tyre_domain_fail_total = run_suite(
         output_dir=args.output_dir,
         include_tracks=include_tracks,
         stale_threshold=args.stale_threshold,
         variant_names=variant_names,
         fallback_threshold=args.fallback_threshold,
+        max_out_of_domain_count=args.max_out_of_domain_count,
     )
+
+    if args.max_out_of_domain_count >= 0 and tyre_domain_fail_total > 0:
+        print("A/B suite failed tyre-domain gate")
+        print(f"Runs above threshold: {tyre_domain_fail_total}")
+        print(f"Threshold: {args.max_out_of_domain_count}")
+        print(f"Runs CSV: {runs_csv}")
+        print(f"Summary Markdown: {md_path}")
+        raise SystemExit(1)
 
     print("A/B suite complete")
     print(f"Runs CSV: {runs_csv}")

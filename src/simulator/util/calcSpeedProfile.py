@@ -247,6 +247,10 @@ def optimise_speed_at_points(track_points, vehicle, config):
     physical_cap_speed = []
     failure_reason = []
     tier_failure_reasons = []
+    residual_lat_abs = []
+    residual_yaw_abs = []
+    residual_lat_rel = []
+    residual_yaw_rel = []
     straight_speed_cap = _get_straight_speed_cap(config)
     previous_solution = None
     for point in track_points:
@@ -295,6 +299,10 @@ def optimise_speed_at_points(track_points, vehicle, config):
             solve_method.append(used_method)
             failure_reason.append('none')
             tier_failure_reasons.append(';'.join(per_tier_fail_reasons))
+            residual_lat_abs.append(float(result.get('residual_lat_abs', np.nan)))
+            residual_yaw_abs.append(float(result.get('residual_yaw_abs', np.nan)))
+            residual_lat_rel.append(float(result.get('residual_lat_rel', np.nan)))
+            residual_yaw_rel.append(float(result.get('residual_yaw_rel', np.nan)))
             previous_solution = {
                 'v_car': float(result['v_car']),
                 'a_steer': float(result['a_steer']),
@@ -324,6 +332,10 @@ def optimise_speed_at_points(track_points, vehicle, config):
                 final_reason = str(result.get('failure_reason', 'unknown'))
             failure_reason.append(final_reason)
             tier_failure_reasons.append(';'.join(per_tier_fail_reasons))
+            residual_lat_abs.append(float(result.get('residual_lat_abs', np.nan)))
+            residual_yaw_abs.append(float(result.get('residual_yaw_abs', np.nan)))
+            residual_lat_rel.append(float(result.get('residual_lat_rel', np.nan)))
+            residual_yaw_rel.append(float(result.get('residual_yaw_rel', np.nan)))
             previous_solution = None
 
     diagnostics = {
@@ -335,6 +347,10 @@ def optimise_speed_at_points(track_points, vehicle, config):
         'corner_physical_cap_speed': physical_cap_speed,
         'corner_failure_reason': failure_reason,
         'corner_tier_failure_reasons': tier_failure_reasons,
+        'corner_solver_lat_residual_abs': residual_lat_abs,
+        'corner_solver_yaw_residual_abs': residual_yaw_abs,
+        'corner_solver_lat_residual_rel': residual_lat_rel,
+        'corner_solver_yaw_residual_rel': residual_yaw_rel,
     }
     return point_speeds, diagnostics
 
@@ -537,6 +553,9 @@ def compute_speed_profile(track, vehicle, config):
     Compute final speed profile using forward and backward passes for all track points.
     Parallelises the optimisation of cornering speeds at each point.
     """
+    if hasattr(vehicle, 'tyre_model') and hasattr(vehicle.tyre_model, 'reset_domain_diagnostics'):
+        vehicle.tyre_model.reset_domain_diagnostics()
+
     # Pass 1: Find ultimate speeds possible given vehicle model
     point_speeds, corner_diag = optimise_speed_at_points(track.points, vehicle, config)
     # Pass 2: Forward pass propagating accel limits
@@ -552,4 +571,6 @@ def compute_speed_profile(track, vehicle, config):
         **backward_diag,
         'model_variant': _get_model_variant(config),
     }
+    if hasattr(vehicle, 'tyre_model') and hasattr(vehicle.tyre_model, 'get_domain_diagnostics'):
+        diagnostics['tyre_domain'] = vehicle.tyre_model.get_domain_diagnostics()
     return final_speeds, point_speeds, diagnostics

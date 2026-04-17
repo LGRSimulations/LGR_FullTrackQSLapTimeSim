@@ -67,12 +67,239 @@ Scope: tyre force envelope realism, validation gating, A/B comparison clarity
 
 ## Validation Gates (Required)
 - Tyre invariants: PASS
+
+---
+
+Timestamp: 2026-04-17T09:40:00Z
+Owner: Copilot + Project Team
+Change ID: milestone1-residual-telemetry-and-gates-v1
+Scope: first-principles Milestone 1 completion surface (equation residual diagnostics, A/B exposure, hard-gate verification path)
+
+## 1) Problem
+
+### High-Level
+- Milestone 1 had equation/unit/sign contracts, but runtime diagnostics did not expose explicit corner-equilibrium residual channels.
+- This limited our ability to track solver equation quality on full runs and reduced surface area for detecting physics regressions.
+
+### Low-Level
+- `find_vehicle_state_at_point` computed residuals internally but did not return them.
+- `compute_speed_profile` diagnostics therefore lacked per-point residual telemetry.
+- A/B output and summary had no residual distribution statistics.
+
+## 2) Diagnosis
+- Evidence used:
+	- Review of solver return payload fields and diagnostics channel map.
+	- Review of A/B run-level schema and markdown summary sections.
+- Root cause:
+	- Residual values were used for accept/reject but not persisted to diagnostics.
+- Alternatives ruled out:
+	- Relying only on pass/fail solver flags does not provide enough quantitative quality information.
+
+## 3) Solution and Implementation
+- Engineering intent:
+	- Make equation-quality telemetry first-class so Milestone 1 can be verified and monitored consistently.
+- What changed:
+	- Added solver payload channels: `residual_lat_abs`, `residual_yaw_abs`, `residual_lat_rel`, `residual_yaw_rel`.
+	- Threaded residual channels into speed-profile diagnostics arrays:
+		- `corner_solver_lat_residual_abs`
+		- `corner_solver_yaw_residual_abs`
+		- `corner_solver_lat_residual_rel`
+		- `corner_solver_yaw_residual_rel`
+	- Added A/B run-row residual metrics (p90/max, abs/rel, lat/yaw).
+	- Added A/B markdown section summarizing residual telemetry by track/variant.
+	- Added test contract ensuring residual channels exist and are finite for solved points.
+	- Added one-command Milestone 1 verification path to README/checklist.
+- Why this is physically reasonable:
+	- Equation residuals directly measure closeness to force/moment equilibrium constraints used by the solver.
+	- Recording both absolute and normalized residuals preserves interpretability across operating points.
+- Verification added:
+	- `tests.test_limiting_case_contracts` expanded and rerun with all tests passing.
+
+## 4) Impact and Explanation
+- Physics correctness impact:
+	- Improves observability of equation-consistency quality during runtime.
+- Lap-time trustworthiness impact:
+	- High lap-time performance can now be checked against residual quality, reducing risk of accepting numerically weak states.
+- Diagnostics stability impact:
+	- A/B artifacts now include residual telemetry summaries for quick regression triage.
+- Limitations and next step:
+	- Residual guardrail thresholds are not yet fixed in CI; next step is freezing p90/max baselines and adding threshold gates.
+
+## Validation Gates (Required)
+- Tyre invariants: NOT RUN in this change
+- RMSE thresholds: NOT RUN in this change
+- Fallback-rate thresholds: NOT RUN in this change
+- Milestone 1 contract suite: PASS (`tests.test_limiting_case_contracts`)
+
+## Reproducibility Notes (Optional)
+- uv run python -m unittest tests.test_limiting_case_contracts -v
+
+---
+
+Timestamp: 2026-04-17T10:20:00Z
+Owner: Copilot + Project Team
+Change ID: milestone1-magic-constant-scan-v1
+Scope: lint-style enforcement of "no undocumented constants" for core solver files
+
+## 1) Problem
+
+### High-Level
+- Milestone 1 required a "no undocumented constants" gate, but this was only stated in docs and not mechanically enforced.
+
+### Low-Level
+- Core solver files contained many numeric literals and no automated check to guard future additions.
+
+## 2) Diagnosis
+- Evidence used:
+	- Milestone 1 gate review and checklist audit.
+- Root cause:
+	- Missing lint-style scanner for reviewed numeric constants.
+
+## 3) Solution and Implementation
+- Engineering intent:
+	- Add an explicit, reproducible lint-style scan that can fail CI/verification when new undocumented constants appear.
+- What changed:
+	- Added AST-based scanner script: `tools/analysis/m1_magic_constant_scan.py`.
+	- Scanner targets:
+		- `src/simulator/util/vehicleDynamics.py`
+		- `src/simulator/util/calcSpeedProfile.py`
+	- Added strict mode (`--strict`) to return non-zero on findings.
+	- Integrated command into Milestone 1 checklist and README verification section.
+- Why this is physically reasonable:
+	- Forces explicit review/documentation of solver constants tied to equation tolerances, bounds, and physical safeguards.
+- Verification added:
+	- Strict scan run completed and passed.
+
+## 4) Impact and Explanation
+- Physics correctness impact:
+	- Reduces silent drift in critical solver assumptions caused by ad hoc literal insertion.
+- Diagnostics stability impact:
+	- Makes constant changes auditable and reproducible in Milestone 1 verification flow.
+- Limitations and next step:
+	- Scanner currently scopes only core solver util files; can expand in later milestones if needed.
+
+## Validation Gates (Required)
+- Milestone 1 unit/contract suite: PASS
+- Strict magic-constant scan: PASS
+
+## Reproducibility Notes (Optional)
+- uv run python -m unittest tests.test_limiting_case_contracts -v
+- uv run python tools/analysis/m1_magic_constant_scan.py --strict
+
+---
+
+Timestamp: 2026-04-17T11:05:00Z
+Owner: Copilot + Project Team
+Change ID: milestone2-tyre-validity-envelope-v1
+Scope: tyre validity-domain declaration, out-of-domain telemetry, and reporting/gating integration
+
+## 1) Problem
+
+### High-Level
+- Milestone 2 required explicit validity-domain handling for tyre forces, but runtime diagnostics did not expose out-of-domain usage.
+
+### Low-Level
+- Tyre API calls could request slip/load outside TTC-supported ranges without a unified per-run telemetry channel.
+- A/B and tyre-verification outputs did not include validity-domain counters.
+
+## 2) Diagnosis
+- Evidence used:
+	- Review of tyre model force methods and current verification outputs.
+- Root cause:
+	- Validity bounds were implicit in data and interpolators, but not exported as structured diagnostics.
+
+## 3) Solution and Implementation
+- Engineering intent:
+	- Make tyre validity-domain usage explicit and measurable at model, runtime, and report layers.
+- What changed:
+	- Added declared validity-domain ranges to `LookupTableTyreModel`:
+		- lateral slip range (deg)
+		- longitudinal slip ratio range (dimensionless)
+		- lateral/longitudinal load ranges (N)
+	- Added per-channel counters for out-of-domain slip/load usage and high-load clamp events.
+	- Added tyre model diagnostics API:
+		- `reset_domain_diagnostics()`
+		- `get_domain_diagnostics()`
+	- Threaded tyre-domain diagnostics into runtime speed-profile diagnostics as `tyre_domain`.
+	- Added A/B run-level columns and markdown summary section for tyre validity-domain usage.
+	- Added compare-tyre-model reporting section for domain diagnostics and optional strict gate:
+		- `--max-out-of-domain-count`
+	- Added contract tests for domain counters, reset behavior, and runtime diagnostics presence.
+- Why this is physically reasonable:
+	- Out-of-domain force usage is now observable rather than hidden, enabling bounded interpretation of results.
+- Verification added:
+	- New unit contracts for tyre validity domain and runtime diagnostics.
+	- Tyre verification and A/B smoke runs completed with new telemetry visible.
+
+## 4) Impact and Explanation
+- Physics correctness impact:
+	- Improves traceability of when solver requests exceed validated tyre-data envelope.
+- Lap-time trustworthiness impact:
+	- Allows separating in-domain performance conclusions from out-of-domain extrapolation risk.
+- Diagnostics stability impact:
+	- Adds structured counters at model/runtime/report levels for quick regression triage.
+- Limitations and next step:
+	- Strict out-of-domain thresholds are not yet fixed; baseline-specific thresholds should be set before CI hard-fail enablement.
+
+## Validation Gates (Required)
+- Tyre invariants: PASS
+- RMSE thresholds: PASS (4.89% lateral, 5.96% longitudinal in latest run)
+- High-load growth threshold: PASS (tyre_peak_load_clamp, threshold 1.05)
+- Out-of-domain usage reporting: PASS (available in runtime + A/B + tyre verification outputs)
+
+## Reproducibility Notes (Optional)
+- uv run python -m unittest tests.test_tyre_force_contracts tests.test_tyre_peak_load_clamp_contracts tests.test_tyre_validity_domain_contracts -v
+- uv run python -m unittest tests.test_limiting_case_contracts -v
+- uv run python tools/analysis/compare_tyre_model.py --validate --model-variant tyre_peak_load_clamp --rmse-threshold-pct 12 --max-high-load-growth-ratio 1.05 --max-out-of-domain-count -1
+- uv run python src/ab_testing/run_ab_suite.py --tracks StraightLineTrack --variants baseline --output-dir ab_test_outputs/m2_domain_smoke --fallback-threshold 0.15 --stale-threshold 0.05
 - RMSE thresholds: PASS
 - Fallback-rate thresholds: PASS (smoke suite baseline vs tyre_peak_load_clamp)
 
 ## Reproducibility Notes (Optional)
 - uv run python -m unittest tests.test_tyre_force_contracts tests.test_tyre_peak_load_clamp_contracts
 - uv run python tools/analysis/compare_tyre_model.py --validate --model-variant baseline --rmse-threshold-pct 12 --max-high-load-growth-ratio 1.35
+
+---
+
+Timestamp: 2026-04-17T12:05:00Z
+Owner: Copilot + Project Team
+Change ID: milestone2-tyre-domain-hard-gate-baseline-v1
+Scope: baseline threshold derivation and hard-gate enforcement in A/B workflow
+
+## 1) Problem
+
+### High-Level
+- Milestone 2 had out-of-domain reporting, but no agreed hard threshold and no A/B hard-fail behavior.
+
+### Low-Level
+- `run_ab_suite.py` exported tyre-domain counts without a pass/fail gate.
+- Docs still relied on deferred threshold selection.
+
+## 2) Diagnosis
+- Baseline focused sweeps were run per standard track for `baseline` variant:
+  - FSUK max `tyre_out_of_domain_total` = `129380`
+  - SkidpadF26 max `tyre_out_of_domain_total` = `0`
+  - StraightLineTrack max `tyre_out_of_domain_total` = `0`
+- Recommended global hard threshold set to `130000`.
+
+## 3) Solution and Implementation
+- Added `--max-out-of-domain-count` to `src/ab_testing/run_ab_suite.py`.
+- Added per-run `tyre_domain_gate_pass` output field.
+- Added markdown summary lines for tyre-domain gate threshold and fail counts.
+- Added hard-fail exit behavior (`SystemExit(1)`) when threshold is enabled and any run exceeds it.
+- Updated README/checklist commands to include reporting mode (`-1`) and strict mode (`130000`).
+
+## 4) Impact and Explanation
+- Physics correctness impact:
+  - Converts validity-envelope usage from passive telemetry to enforceable contract.
+- CI impact:
+  - Baseline thresholds can now be enforced with non-zero exit behavior in A/B checks.
+- Limitations and next step:
+  - Threshold is global; if future track-specific gating is needed, split by track in a follow-up change.
+
+## Validation Gates (Required)
+- Baseline threshold extraction: PASS
+- A/B tyre-domain hard gate wiring: PASS (code path + docs updated)
 - uv run python tools/analysis/compare_tyre_model.py --validate --model-variant tyre_peak_load_clamp --rmse-threshold-pct 12 --max-high-load-growth-ratio 1.05
 - uv run python src/ab_testing/run_ab_suite.py --tracks StraightLineTrack --variants baseline,tyre_peak_load_clamp --fallback-threshold 0.15 --output-dir ab_test_outputs/smoke_tyre_clamp
 

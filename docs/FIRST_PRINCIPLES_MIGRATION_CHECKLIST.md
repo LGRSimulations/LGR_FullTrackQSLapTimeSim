@@ -59,7 +59,16 @@ Ensure every core dynamics equation is dimensionally and sign-consistent.
 ### Pass gates
 - Unit-consistency tests: 100% pass.
 - Limiting-case tests: 100% pass.
+- Corner-equilibrium residual telemetry channels exist and are finite for solved points.
+- Strict magic-constant scan passes for core solver files.
 - Equation audit signed off in docs.
+
+### Verification run (single flow)
+
+```bash
+uv run python -m unittest tests.test_limiting_case_contracts -v
+uv run python tools/analysis/m1_magic_constant_scan.py --strict
+```
 
 ---
 
@@ -85,6 +94,23 @@ Guarantee tyre force usage stays inside validated domain, or is explicitly bound
 - Longitudinal RMSE <= 12% against verification dataset.
 - High-load growth gate for clamped variant <= 1.05.
 - Out-of-domain usage count is reported in diagnostics.
+- Baseline hard gate passes with `tyre_out_of_domain_total <= 130000` for standard-track baseline A/B run.
+
+### Verification run (recommended)
+
+```bash
+uv run python -m unittest tests.test_tyre_force_contracts tests.test_tyre_peak_load_clamp_contracts tests.test_tyre_validity_domain_contracts -v
+uv run python -m unittest tests.test_limiting_case_contracts -v
+uv run python tools/analysis/compare_tyre_model.py --validate --model-variant tyre_peak_load_clamp --rmse-threshold-pct 12 --max-high-load-growth-ratio 1.05 --max-out-of-domain-count -1
+uv run python src/ab_testing/run_ab_suite.py --tracks StraightLineTrack --variants baseline --output-dir ab_test_outputs/m2_domain_smoke --fallback-threshold 0.15 --stale-threshold 0.05 --max-out-of-domain-count -1
+```
+
+Strict gate check (measured baseline threshold):
+
+```bash
+uv run python src/ab_testing/run_ab_suite.py --tracks FSUK,SkidpadF26,StraightLineTrack --variants baseline --output-dir ab_test_outputs/m2_domain_hard_gate --fallback-threshold 0.15 --stale-threshold 0.05 --max-out-of-domain-count 130000
+uv run python tools/analysis/compare_tyre_model.py --validate --model-variant tyre_peak_load_clamp --rmse-threshold-pct 12 --max-high-load-growth-ratio 1.05 --max-out-of-domain-count -1
+```
 
 ---
 

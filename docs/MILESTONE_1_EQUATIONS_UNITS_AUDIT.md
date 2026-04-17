@@ -86,12 +86,35 @@ Audit rule: each additive equation must sum same dimensions on both sides.
 The following contracts are now covered by dedicated tests:
 
 - Near-zero curvature returns straight-cap speed and zero steer/sideslip.
+- Sign-convention symmetry for mirrored turns:
+	- `+K` and `-K` produce matching corner speed caps.
+	- steering and sideslip angles are equal-magnitude with opposite sign.
+- Core equation dimensions are asserted explicitly:
+	- lateral balance `m v^2 K` vs tyre force sum
+	- yaw balance `a Fy` vs `b Fy`
+	- rollover-cap inner term vs speed-squared units
+	- kinematic propagation term consistency `v^2` and `a ds`
 - Longitudinal combined-slip budget scale remains bounded in [0, 1] with expected endpoints.
 - Zero powertrain torque does not create forward acceleration on a straight segment.
 - Zero-speed backward propagation remains stationary.
+- Corner-equilibrium residual telemetry exists and is finite for solved points:
+	- `corner_solver_lat_residual_abs`
+	- `corner_solver_yaw_residual_abs`
+	- `corner_solver_lat_residual_rel`
+	- `corner_solver_yaw_residual_rel`
 
 ## 5) Open Follow-Ups
 
-- Extend sign-convention coverage to lateral direction consistency checks at left/right curvature pairs.
-- Add explicit dimensional assertion helpers for equation terms in tests.
-- Add per-equation residual channels to diagnostics for easier post-run audits.
+- Add residual trend thresholds (p90/max guardrails) into CI-style gates once baseline distributions are fixed.
+
+## 6) Lint-Style Constant Scan
+
+To enforce the Milestone 1 "no undocumented constants" rule on core solver files, run:
+
+```bash
+uv run python tools/analysis/m1_magic_constant_scan.py --strict
+```
+
+This scan is AST-based and currently targets:
+- `src/simulator/util/vehicleDynamics.py`
+- `src/simulator/util/calcSpeedProfile.py`
