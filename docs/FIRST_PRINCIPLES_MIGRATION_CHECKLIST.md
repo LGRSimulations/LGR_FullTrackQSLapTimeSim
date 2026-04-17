@@ -159,6 +159,17 @@ Improve convergence reliability while keeping fallback physically constrained.
 - Solver success rate on each track >= 0.85.
 - No discontinuous g spikes attributable to fallback.
 
+### Verification run (strict)
+
+```bash
+uv run python src/ab_testing/run_ab_suite.py --tracks FSUK,SkidpadF26,StraightLineTrack --variants baseline --output-dir ab_test_outputs/m4_hard_gate --fallback-threshold 0.15 --stale-threshold 0.05 --max-out-of-domain-count 130000 --enforce-milestone4-gates
+```
+
+Notes:
+- `--enforce-milestone4-gates` applies track-specific hard gates:
+  - fallback rate: FSUK <= 0.15, SkidpadF26 <= 0.15, StraightLineTrack <= 0.05
+  - solver success rate: FSUK >= 0.85, SkidpadF26 >= 0.85, StraightLineTrack >= 0.95
+
 ---
 
 ## Milestone 5: Validation Hierarchy and Falsification
