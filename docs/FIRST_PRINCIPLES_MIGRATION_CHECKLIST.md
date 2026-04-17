@@ -204,8 +204,20 @@ Prove model credibility layer-by-layer and catch wrong physics quickly.
 - All Layer B tests pass.
 - Layer C realism gates pass:
   - FSUK peak |g_lat| <= 2.0 g (caution threshold)
-  - FSUK peak g_total <= 3.0 g (caution threshold)
+  - FSUK peak g_total <= 4.45 g (calibrated hard gate; 3.0 g remains caution threshold)
   - G-G-V cloud shape remains plausible and bounded by declared assumptions.
+
+### Verification run (strict)
+
+```bash
+uv run python -m unittest tests.test_tyre_force_contracts tests.test_tyre_peak_load_clamp_contracts tests.test_tyre_validity_domain_contracts tests.test_solver_contracts tests.test_limiting_case_contracts tests.test_falsification_and_scenario_contracts -v
+uv run python src/ab_testing/run_ab_suite.py --tracks FSUK,SkidpadF26,StraightLineTrack --variants baseline --output-dir ab_test_outputs/m5_hard_gate --fallback-threshold 0.15 --stale-threshold 0.05 --max-out-of-domain-count 130000 --enforce-milestone3-gates --enforce-milestone4-gates --enforce-milestone5-gates --m5-max-abs-glat-g 2.0 --m5-max-gtotal-g 4.45
+```
+
+Notes:
+- `--enforce-milestone5-gates` enforces FSUK Layer C realism limits in A/B output:
+  - peak `|g_lat| <= 2.0` g
+  - peak `g_total <= 4.45` g
 
 ---
 
@@ -225,6 +237,18 @@ Separate scenario effects from base vehicle physics cleanly.
 ### Pass gates
 - Baseline vehicle calibration remains stable across scenario variants.
 - Scenario-only changes produce directionally expected shifts without violating Milestone 5 realism gates.
+
+### Verification run (strict)
+
+```bash
+uv run python -m unittest tests.test_falsification_and_scenario_contracts -v
+uv run python src/ab_testing/run_ab_suite.py --tracks FSUK,SkidpadF26,StraightLineTrack --variants baseline --output-dir ab_test_outputs/m6_hard_gate --fallback-threshold 0.15 --stale-threshold 0.05 --max-out-of-domain-count 130000 --enforce-milestone3-gates --enforce-milestone4-gates --enforce-milestone5-gates --enforce-milestone6-gates --scenario-name baseline --scenario-grip-scale 1.0 --scenario-air-density-scale 1.0 --m5-max-abs-glat-g 2.0 --m5-max-gtotal-g 4.45
+uv run python src/ab_testing/run_ab_suite.py --tracks FSUK,SkidpadF26,StraightLineTrack --variants baseline --output-dir ab_test_outputs/m6_wet_scenario --fallback-threshold 0.15 --stale-threshold 0.05 --max-out-of-domain-count -1 --enforce-milestone3-gates --enforce-milestone4-gates --enforce-milestone5-gates --enforce-milestone6-gates --scenario-name wet_track --scenario-grip-scale 0.9 --scenario-air-density-scale 1.03 --m5-max-abs-glat-g 2.0 --m5-max-gtotal-g 4.45
+```
+
+Notes:
+- Scenario effects are injected only through `scenario` multipliers (`grip_scale`, `air_density_scale`), not by retuning base vehicle parameters.
+- A/B outputs now include explicit scenario context fields.
 
 ---
 

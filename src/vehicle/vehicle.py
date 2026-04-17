@@ -119,6 +119,21 @@ class Vehicle:
         self.tyre_model = tyre_model
         self.config = config
         self.base_mu_reference = max(float(parameters.base_mu), 1e-6)
+        scenario_cfg = config.get('scenario', {}) if isinstance(config, dict) else {}
+        try:
+            self.scenario_name = str(scenario_cfg.get('name', 'baseline')).strip() or 'baseline'
+        except Exception:
+            self.scenario_name = 'baseline'
+        try:
+            self.scenario_grip_scale = float(scenario_cfg.get('grip_scale', 1.0))
+        except (TypeError, ValueError):
+            self.scenario_grip_scale = 1.0
+        try:
+            self.scenario_air_density_scale = float(scenario_cfg.get('air_density_scale', 1.0))
+        except (TypeError, ValueError):
+            self.scenario_air_density_scale = 1.0
+        self.scenario_grip_scale = max(self.scenario_grip_scale, 0.0)
+        self.scenario_air_density_scale = max(self.scenario_air_density_scale, 0.0)
         
         # Calculate derived parameters
         self.weight = parameters.mass * 9.81  # N
@@ -149,7 +164,7 @@ class Vehicle:
             normal_load_front = self.compute_static_normal_load()
         if normal_load_rear is None:
             normal_load_rear = self.compute_static_normal_load()
-        mu_scale = float(self.params.base_mu) / self.base_mu_reference
+        mu_scale = (float(self.params.base_mu) / self.base_mu_reference) * self.scenario_grip_scale
         f_front = self.tyre_model.get_lateral_force(slip_angle_front, normal_load=normal_load_front) * 2 * mu_scale
         f_rear = self.tyre_model.get_lateral_force(slip_angle_rear, normal_load=normal_load_rear) * 2 * mu_scale
         return f_front, f_rear
@@ -204,6 +219,7 @@ class Vehicle:
         """
         # Use air density from config if available, else default to 1.225
         rho = self.config.get('ambient_conditions', {}).get('air_density', 1.225)
+        rho = float(rho) * self.scenario_air_density_scale
         f_drag = 0.5 * rho * self.params.drag_coefficient * self.params.frontal_area * v_car**2
         return f_drag
     
@@ -221,6 +237,7 @@ class Vehicle:
         """
         # Use air density from config if available, else default to 1.225
         rho = self.config.get('ambient_conditions', {}).get('air_density', 1.225)
+        rho = float(rho) * self.scenario_air_density_scale
         f_downforce = 0.5 * rho * self.params.downforce_coefficient * self.params.frontal_area * v_car**2
         return f_downforce
     
