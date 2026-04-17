@@ -141,6 +141,9 @@ def _compute_normal_loads_for_longitudinal(vehicle, v_car, a_long, config):
             'rear_per_tyre': base,
             'mean_per_tyre': base,
             'total_normal_load': base * 4.0,
+            'non_physical_event': False,
+            'front_per_tyre_raw': base,
+            'rear_per_tyre_raw': base,
         }
 
     m = vehicle.params.mass
@@ -159,8 +162,24 @@ def _compute_normal_loads_for_longitudinal(vehicle, v_car, a_long, config):
 
     # Positive longitudinal acceleration shifts load rearward.
     delta_long = (m * a_long * h) / L
-    front_axle -= delta_long
-    rear_axle += delta_long
+    # Bound transferable load so axle normals remain physically feasible.
+    min_axle_load = 0.05 * total
+    delta_min = -(rear_axle - min_axle_load)
+    delta_max = front_axle - min_axle_load
+    delta_long_bounded = float(np.clip(delta_long, delta_min, delta_max))
+    transfer_clamped = not np.isclose(delta_long_bounded, float(delta_long), rtol=0.0, atol=1e-12)
+
+    front_axle -= delta_long_bounded
+    rear_axle += delta_long_bounded
+
+    front_axle_raw = float(front_axle)
+    rear_axle_raw = float(rear_axle)
+    non_physical_event = (
+        (not np.isfinite(front_axle_raw))
+        or (not np.isfinite(rear_axle_raw))
+        or (front_axle_raw < 0.0)
+        or (rear_axle_raw < 0.0)
+    )
 
     # Clamp to keep solver numerically safe in extreme states.
     front_axle = max(0.0, front_axle)
@@ -171,6 +190,10 @@ def _compute_normal_loads_for_longitudinal(vehicle, v_car, a_long, config):
         'rear_per_tyre': rear_axle / 2.0,
         'mean_per_tyre': (front_axle + rear_axle) / 4.0,
         'total_normal_load': front_axle + rear_axle,
+        'non_physical_event': bool(non_physical_event),
+        'front_per_tyre_raw': front_axle_raw / 2.0,
+        'rear_per_tyre_raw': rear_axle_raw / 2.0,
+        'transfer_clamped': bool(transfer_clamped),
     }
 
 
@@ -251,6 +274,10 @@ def optimise_speed_at_points(track_points, vehicle, config):
     residual_yaw_abs = []
     residual_lat_rel = []
     residual_yaw_rel = []
+    corner_front_normal_load_per_tyre = []
+    corner_rear_normal_load_per_tyre = []
+    corner_non_physical_normal_load = []
+    corner_transfer_clamped = []
     straight_speed_cap = _get_straight_speed_cap(config)
     previous_solution = None
     for point in track_points:
@@ -303,6 +330,11 @@ def optimise_speed_at_points(track_points, vehicle, config):
             residual_yaw_abs.append(float(result.get('residual_yaw_abs', np.nan)))
             residual_lat_rel.append(float(result.get('residual_lat_rel', np.nan)))
             residual_yaw_rel.append(float(result.get('residual_yaw_rel', np.nan)))
+            corner_load_state = _compute_normal_loads_for_longitudinal(vehicle, float(result['v_car']), 0.0, config)
+            corner_front_normal_load_per_tyre.append(float(corner_load_state['front_per_tyre']))
+            corner_rear_normal_load_per_tyre.append(float(corner_load_state['rear_per_tyre']))
+            corner_non_physical_normal_load.append(bool(corner_load_state.get('non_physical_event', False)))
+            corner_transfer_clamped.append(bool(corner_load_state.get('transfer_clamped', False)))
             previous_solution = {
                 'v_car': float(result['v_car']),
                 'a_steer': float(result['a_steer']),
@@ -336,6 +368,11 @@ def optimise_speed_at_points(track_points, vehicle, config):
             residual_yaw_abs.append(float(result.get('residual_yaw_abs', np.nan)))
             residual_lat_rel.append(float(result.get('residual_lat_rel', np.nan)))
             residual_yaw_rel.append(float(result.get('residual_yaw_rel', np.nan)))
+            corner_load_state = _compute_normal_loads_for_longitudinal(vehicle, float(v_fallback), 0.0, config)
+            corner_front_normal_load_per_tyre.append(float(corner_load_state['front_per_tyre']))
+            corner_rear_normal_load_per_tyre.append(float(corner_load_state['rear_per_tyre']))
+            corner_non_physical_normal_load.append(bool(corner_load_state.get('non_physical_event', False)))
+            corner_transfer_clamped.append(bool(corner_load_state.get('transfer_clamped', False)))
             previous_solution = None
 
     diagnostics = {
@@ -351,6 +388,10 @@ def optimise_speed_at_points(track_points, vehicle, config):
         'corner_solver_yaw_residual_abs': residual_yaw_abs,
         'corner_solver_lat_residual_rel': residual_lat_rel,
         'corner_solver_yaw_residual_rel': residual_yaw_rel,
+        'corner_front_normal_load_per_tyre': corner_front_normal_load_per_tyre,
+        'corner_rear_normal_load_per_tyre': corner_rear_normal_load_per_tyre,
+        'corner_non_physical_normal_load_events': int(sum(1 for x in corner_non_physical_normal_load if x)),
+        'corner_normal_load_transfer_clamped_events': int(sum(1 for x in corner_transfer_clamped if x)),
     }
     return point_speeds, diagnostics
 
@@ -377,6 +418,10 @@ def forward_pass(track, vehicle, point_speeds, config):
     combined_budget_scale = [1.0] * n_points
     net_long_forces = [0.0] * n_points
     normal_load_per_tyre = [vehicle.compute_static_normal_load()] * n_points
+    front_normal_load_per_tyre = [vehicle.compute_static_normal_load()] * n_points
+    rear_normal_load_per_tyre = [vehicle.compute_static_normal_load()] * n_points
+    non_physical_normal_load_flags = [False] * n_points
+    transfer_clamped_flags = [False] * n_points
     peak_slip_ratio = float(config.get('ab_testing', {}).get('peak_slip_ratio_accel', 12.0))
 
     for i in range(1, n_points):
@@ -403,6 +448,10 @@ def forward_pass(track, vehicle, point_speeds, config):
         front_load = load_state['front_per_tyre']
         rear_load = load_state['rear_per_tyre']
         normal_load_per_tyre[i] = load_state['mean_per_tyre']
+        front_normal_load_per_tyre[i] = float(front_load)
+        rear_normal_load_per_tyre[i] = float(rear_load)
+        non_physical_normal_load_flags[i] = bool(load_state.get('non_physical_event', False))
+        transfer_clamped_flags[i] = bool(load_state.get('transfer_clamped', False))
 
         fx_cap_total, fy_cap_total = _compute_total_force_caps(
             vehicle=vehicle,
@@ -450,6 +499,10 @@ def forward_pass(track, vehicle, point_speeds, config):
         'forward_combined_budget_scale': combined_budget_scale,
         'forward_net_long_force': net_long_forces,
         'forward_normal_load_per_tyre': normal_load_per_tyre,
+        'forward_front_normal_load_per_tyre': front_normal_load_per_tyre,
+        'forward_rear_normal_load_per_tyre': rear_normal_load_per_tyre,
+        'forward_non_physical_normal_load_events': int(sum(1 for x in non_physical_normal_load_flags if x)),
+        'forward_normal_load_transfer_clamped_events': int(sum(1 for x in transfer_clamped_flags if x)),
     }
     return speeds, diagnostics
 
@@ -476,6 +529,10 @@ def backward_pass(track, vehicle, point_speeds, config):
     brake_lateral_caps = [0.0] * n_points
     brake_combined_budget_scale = [1.0] * n_points
     normal_load_per_tyre = [vehicle.compute_static_normal_load()] * n_points
+    front_normal_load_per_tyre = [vehicle.compute_static_normal_load()] * n_points
+    rear_normal_load_per_tyre = [vehicle.compute_static_normal_load()] * n_points
+    non_physical_normal_load_flags = [False] * n_points
+    transfer_clamped_flags = [False] * n_points
     peak_slip_ratio = float(config.get('ab_testing', {}).get('peak_slip_ratio_brake', 12.0))
 
     for i in range(n_points-2, -1, -1):
@@ -492,6 +549,10 @@ def backward_pass(track, vehicle, point_speeds, config):
         front_load = load_state['front_per_tyre']
         rear_load = load_state['rear_per_tyre']
         normal_load_per_tyre[i] = load_state['mean_per_tyre']
+        front_normal_load_per_tyre[i] = float(front_load)
+        rear_normal_load_per_tyre[i] = float(rear_load)
+        non_physical_normal_load_flags[i] = bool(load_state.get('non_physical_event', False))
+        transfer_clamped_flags[i] = bool(load_state.get('transfer_clamped', False))
 
         fx_cap_total, fy_cap_total = _compute_total_force_caps(
             vehicle=vehicle,
@@ -545,6 +606,10 @@ def backward_pass(track, vehicle, point_speeds, config):
         'backward_tyre_lateral_cap': brake_lateral_caps,
         'backward_combined_budget_scale': brake_combined_budget_scale,
         'backward_normal_load_per_tyre': normal_load_per_tyre,
+        'backward_front_normal_load_per_tyre': front_normal_load_per_tyre,
+        'backward_rear_normal_load_per_tyre': rear_normal_load_per_tyre,
+        'backward_non_physical_normal_load_events': int(sum(1 for x in non_physical_normal_load_flags if x)),
+        'backward_normal_load_transfer_clamped_events': int(sum(1 for x in transfer_clamped_flags if x)),
     }
     return speeds, diagnostics
 
@@ -571,6 +636,16 @@ def compute_speed_profile(track, vehicle, config):
         **backward_diag,
         'model_variant': _get_model_variant(config),
     }
+    diagnostics['normal_load_non_physical_events_total'] = int(
+        diagnostics.get('corner_non_physical_normal_load_events', 0)
+        + diagnostics.get('forward_non_physical_normal_load_events', 0)
+        + diagnostics.get('backward_non_physical_normal_load_events', 0)
+    )
+    diagnostics['normal_load_transfer_clamped_events_total'] = int(
+        diagnostics.get('corner_normal_load_transfer_clamped_events', 0)
+        + diagnostics.get('forward_normal_load_transfer_clamped_events', 0)
+        + diagnostics.get('backward_normal_load_transfer_clamped_events', 0)
+    )
     if hasattr(vehicle, 'tyre_model') and hasattr(vehicle.tyre_model, 'get_domain_diagnostics'):
         diagnostics['tyre_domain'] = vehicle.tyre_model.get_domain_diagnostics()
     return final_speeds, point_speeds, diagnostics

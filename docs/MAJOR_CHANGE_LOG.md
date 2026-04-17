@@ -554,3 +554,70 @@ Scope: forward/backward speed propagation realism under combined lateral + longi
 ## Reproducibility Notes (Optional)
 - uv run python -m unittest tests.test_solver_contracts tests.test_tyre_force_contracts tests.test_tyre_peak_load_clamp_contracts
 - uv run python src/diagnostics/gg_rollover_suite.py --track datasets/tracks/FSUK.txt --output-dir artifacts/diagnostics/gg_rollover_suite
+
+---
+
+Timestamp: 2026-04-17T00:35:00Z
+Owner: Copilot + Project Team
+Change ID: milestone3-normal-load-telemetry-and-gates-v1
+Scope: load-transfer observability, non-physical normal-load protection, Milestone 3 hard-gate integration
+
+## 1) Problem
+
+### High-Level
+- Milestone 3 required explicit front/rear normal-load paths and zero non-physical normal-load events, but diagnostics only exposed mean normal load per tyre.
+- There was no enforceable gate for Milestone 3 checks in the A/B workflow.
+
+### Low-Level
+- Forward/backward passes computed front/rear loads internally but did not export them as structured diagnostics channels.
+- Longitudinal load transfer could request physically impossible axle loads under aggressive decel/accel estimates in B1.
+- A/B had no Milestone 3 hard-fail path for normal-load events or sensitivity sign checks.
+
+## 2) Diagnosis
+- Evidence used:
+	- New targeted contract test on runtime normal-load diagnostics in `tests.test_limiting_case_contracts`.
+	- Initial B1 straight-track diagnostic run surfaced non-zero non-physical load-event counts.
+- Root cause:
+	- Load-transfer update path lacked bounded transfer clipping to keep axle loads inside feasible ranges under transient estimates.
+
+## 3) Solution and Implementation
+- Engineering intent:
+	- Make normal-load evolution explicit and auditable across solver stages while preventing non-physical load states.
+- What changed:
+	- Extended runtime diagnostics with stage-specific normal-load channels:
+		- `corner_front_normal_load_per_tyre`, `corner_rear_normal_load_per_tyre`
+		- `forward_front_normal_load_per_tyre`, `forward_rear_normal_load_per_tyre`
+		- `backward_front_normal_load_per_tyre`, `backward_rear_normal_load_per_tyre`
+	- Added stage-level and total non-physical load-event counters:
+		- `corner_non_physical_normal_load_events`
+		- `forward_non_physical_normal_load_events`
+		- `backward_non_physical_normal_load_events`
+		- `normal_load_non_physical_events_total`
+	- Added bounded load-transfer clipping to maintain physically feasible axle normal loads (with clip observability):
+		- `*_normal_load_transfer_clamped_events`
+		- `normal_load_transfer_clamped_events_total`
+	- Added optional Milestone 3 A/B hard gates (`--enforce-milestone3-gates`) checking:
+		- zero non-physical normal-load events,
+		- `cog_z` sign check on curved tracks,
+		- non-trivial `base_mu` sensitivity on curved tracks.
+- Why this is physically reasonable:
+	- Axle normal loads are constrained by total vertical load and cannot become negative.
+	- Exporting front/rear channels directly supports first-principles validation of load-transfer behavior.
+
+## 4) Impact and Explanation
+- Physics correctness impact:
+	- Prevents non-physical normal-load states from silently passing through B1 propagation paths.
+- Lap-time trustworthiness impact:
+	- Milestone 3 gate checks now reject suspicious sensitivity directionality and missing grip sensitivity on curved tracks.
+- Diagnostics stability impact:
+	- Runtime artifacts now include explicit, stage-separated normal-load telemetry and clamp-event visibility.
+- Limitations and next step:
+	- Current bounded-transfer clipping is a robust guardrail; future iterations can replace heuristic estimates with richer suspension/load-transfer formulations.
+
+## Validation Gates (Required)
+- Focused contract suite: PASS (`tests.test_limiting_case_contracts`)
+- Milestone 3 A/B smoke gate (StraightLineTrack): PASS
+
+## Reproducibility Notes (Optional)
+- uv run python -m unittest tests.test_limiting_case_contracts -v
+- uv run python src/ab_testing/run_ab_suite.py --tracks StraightLineTrack --variants baseline --output-dir ab_test_outputs/m3_gate_smoke --fallback-threshold 0.15 --stale-threshold 0.05 --max-out-of-domain-count -1 --enforce-milestone3-gates
