@@ -17,6 +17,20 @@ if SRC_ROOT not in sys.path:
     sys.path.insert(0, SRC_ROOT)
 
 
+MILESTONE4_FALLBACK_THRESHOLDS = {
+    "FSUK": 0.15,
+    "SkidpadF26": 0.15,
+    "StraightLineTrack": 0.05,
+}
+
+
+MILESTONE4_SOLVER_SUCCESS_THRESHOLDS = {
+    "FSUK": 0.85,
+    "SkidpadF26": 0.85,
+    "StraightLineTrack": 0.95,
+}
+
+
 def load_config(config_path):
     with open(config_path, "r") as f:
         return json.load(f)
@@ -64,7 +78,15 @@ def finite_max(values):
     return float(max(finite_vals))
 
 
-def run_suite(output_dir, include_tracks, stale_threshold, variant_names, fallback_threshold, max_out_of_domain_count):
+def run_suite(
+    output_dir,
+    include_tracks,
+    stale_threshold,
+    variant_names,
+    fallback_threshold,
+    max_out_of_domain_count,
+    enforce_milestone4_gates,
+):
     from track.track import load_track
     from vehicle.vehicle import create_vehicle
     from simulator.simulator import run_lap_time_simulation
@@ -135,6 +157,11 @@ def run_suite(output_dir, include_tracks, stale_threshold, variant_names, fallba
                         "forward_mode_breakdown": "",
                         "backward_mode_breakdown": "",
                         "fallback_gate_pass": "",
+                        "fallback_gate_track_threshold": "",
+                        "fallback_gate_track_pass": "",
+                        "corner_solver_success_rate": "",
+                        "solver_success_gate_threshold": "",
+                        "solver_success_gate_pass": "",
                         "corner_residual_lat_abs_p90": "",
                         "corner_residual_lat_abs_max": "",
                         "corner_residual_yaw_abs_p90": "",
@@ -155,7 +182,12 @@ def run_suite(output_dir, include_tracks, stale_threshold, variant_names, fallba
                         diagnostics = getattr(sim_result, "diagnostics", {})
 
                         fallback_flags = diagnostics.get("corner_fallback_used", [])
+                        solver_success_flags = diagnostics.get("corner_solver_success", [])
                         fallback_rate = mean([1.0 if f else 0.0 for f in fallback_flags]) if fallback_flags else 0.0
+                        solver_success_rate = mean([1.0 if bool(s) else 0.0 for s in solver_success_flags]) if solver_success_flags else 0.0
+
+                        fallback_track_threshold = float(MILESTONE4_FALLBACK_THRESHOLDS.get(track_name, fallback_threshold))
+                        solver_success_threshold = float(MILESTONE4_SOLVER_SUCCESS_THRESHOLDS.get(track_name, 0.85))
 
                         forward_modes = diagnostics.get("forward_limiting_mode", [])
                         backward_modes = diagnostics.get("backward_limiting_mode", [])
@@ -173,6 +205,11 @@ def run_suite(output_dir, include_tracks, stale_threshold, variant_names, fallba
                         row["lap_time_s"] = float(sim_result.lap_time)
                         row["fallback_rate"] = float(fallback_rate)
                         row["fallback_gate_pass"] = bool(fallback_rate <= fallback_threshold)
+                        row["fallback_gate_track_threshold"] = float(fallback_track_threshold)
+                        row["fallback_gate_track_pass"] = bool(fallback_rate <= fallback_track_threshold)
+                        row["corner_solver_success_rate"] = float(solver_success_rate)
+                        row["solver_success_gate_threshold"] = float(solver_success_threshold)
+                        row["solver_success_gate_pass"] = bool(solver_success_rate >= solver_success_threshold)
                         row["forward_mode_breakdown"] = json.dumps(forward_breakdown, sort_keys=True)
                         row["backward_mode_breakdown"] = json.dumps(backward_breakdown, sort_keys=True)
                         row["forward_dominant_mode"] = max(forward_breakdown, key=forward_breakdown.get) if forward_breakdown else ""
@@ -244,6 +281,16 @@ def run_suite(output_dir, include_tracks, stale_threshold, variant_names, fallba
         for r in valid_rows
         if float(r["fallback_rate"]) > float(fallback_threshold)
     )
+    fallback_track_fail_counts = Counter(
+        (r["track"], r["variant"])
+        for r in valid_rows
+        if float(r.get("fallback_gate_track_pass", 1.0)) == 0.0
+    )
+    solver_success_fail_counts = Counter(
+        (r["track"], r["variant"])
+        for r in valid_rows
+        if float(r.get("solver_success_gate_pass", 1.0)) == 0.0
+    )
     tyre_domain_fail_counts = Counter(
         (r["track"], r["variant"])
         for r in valid_rows
@@ -283,6 +330,10 @@ def run_suite(output_dir, include_tracks, stale_threshold, variant_names, fallba
             f.write(f"- Rollover modes in this run: {', '.join(rollover_modes_present)}\n")
         f.write("- Focused parameters: downforce_coefficient, aero_cp, cog_z, front_track_width, rear_track_width, roll_stiffness, max_roll_angle_deg, base_mu\n\n")
         f.write(f"- Fallback-rate gate: pass when fallback_rate <= {fallback_threshold:.3f}\n")
+        if enforce_milestone4_gates:
+            f.write("- Milestone 4 track gates: enabled (track-specific fallback and solver-success thresholds)\n")
+        else:
+            f.write("- Milestone 4 track gates: disabled\n")
         if max_out_of_domain_count >= 0:
             f.write(f"- Tyre-domain gate: pass when tyre_out_of_domain_total <= {int(max_out_of_domain_count)}\n")
             f.write(f"- Tyre-domain gate failures (runs): {sum(tyre_domain_fail_counts.values())}\n")
@@ -309,6 +360,19 @@ def run_suite(output_dir, include_tracks, stale_threshold, variant_names, fallba
         for track_name in include_tracks:
             for variant_name in variant_names:
                 f.write(f"- {track_name} / {variant_name}: {fallback_fail_counts.get((track_name, variant_name), 0)} runs above threshold\n")
+        f.write("\n")
+
+        f.write("## Milestone 4 Track Gate Failures by Track/Variant\n\n")
+        if not enforce_milestone4_gates:
+            f.write("Milestone 4 track gates disabled.\n")
+        else:
+            for track_name in include_tracks:
+                for variant_name in variant_names:
+                    f.write(
+                        f"- {track_name} / {variant_name}: "
+                        f"fallback_track_gate_fails={fallback_track_fail_counts.get((track_name, variant_name), 0)}, "
+                        f"solver_success_gate_fails={solver_success_fail_counts.get((track_name, variant_name), 0)}\n"
+                    )
         f.write("\n")
 
         f.write("## Tyre-Domain Gate Failures by Track/Variant\n\n")
@@ -356,7 +420,10 @@ def run_suite(output_dir, include_tracks, stale_threshold, variant_names, fallba
             )
 
     tyre_domain_fail_total = sum(tyre_domain_fail_counts.values()) if max_out_of_domain_count >= 0 else 0
-    return runs_csv, sens_csv, md_path, tyre_domain_fail_total
+    milestone4_fail_total = 0
+    if enforce_milestone4_gates:
+        milestone4_fail_total = int(sum(fallback_track_fail_counts.values()) + sum(solver_success_fail_counts.values()))
+    return runs_csv, sens_csv, md_path, tyre_domain_fail_total, milestone4_fail_total
 
 
 def main():
@@ -380,6 +447,11 @@ def main():
         default=-1,
         help="Tyre-domain hard gate threshold; set -1 for reporting-only mode",
     )
+    parser.add_argument(
+        "--enforce-milestone4-gates",
+        action="store_true",
+        help="Enable Milestone 4 track-specific hard gates for fallback rate and solver success",
+    )
     args = parser.parse_args()
 
     include_tracks = [t.strip() for t in args.tracks.split(",") if t.strip()]
@@ -387,19 +459,29 @@ def main():
     if not variant_names:
         raise ValueError("At least one variant is required")
 
-    runs_csv, sens_csv, md_path, tyre_domain_fail_total = run_suite(
+    runs_csv, sens_csv, md_path, tyre_domain_fail_total, milestone4_fail_total = run_suite(
         output_dir=args.output_dir,
         include_tracks=include_tracks,
         stale_threshold=args.stale_threshold,
         variant_names=variant_names,
         fallback_threshold=args.fallback_threshold,
         max_out_of_domain_count=args.max_out_of_domain_count,
+        enforce_milestone4_gates=bool(args.enforce_milestone4_gates),
     )
 
     if args.max_out_of_domain_count >= 0 and tyre_domain_fail_total > 0:
         print("A/B suite failed tyre-domain gate")
         print(f"Runs above threshold: {tyre_domain_fail_total}")
         print(f"Threshold: {args.max_out_of_domain_count}")
+        print(f"Runs CSV: {runs_csv}")
+        print(f"Summary Markdown: {md_path}")
+        raise SystemExit(1)
+
+    if args.enforce_milestone4_gates and milestone4_fail_total > 0:
+        print("A/B suite failed Milestone 4 track gates")
+        print(f"Gate violations: {milestone4_fail_total}")
+        print("Track fallback thresholds: FSUK<=0.15, SkidpadF26<=0.15, StraightLineTrack<=0.05")
+        print("Track solver-success thresholds: FSUK>=0.85, SkidpadF26>=0.85, StraightLineTrack>=0.95")
         print(f"Runs CSV: {runs_csv}")
         print(f"Summary Markdown: {md_path}")
         raise SystemExit(1)
