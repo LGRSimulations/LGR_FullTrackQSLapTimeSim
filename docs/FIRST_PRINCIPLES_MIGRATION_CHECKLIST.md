@@ -261,3 +261,11 @@ Notes:
 5. Milestone 6 (scenario separation)
 
 This order keeps the model physically interpretable first, then adds controlled scenario flexibility.
+
+---
+
+## Companion Roadmap
+
+For parameter-by-parameter enforcement, debugging, and fix workflow, use:
+
+- `docs/PARAMETER_ENFORCEMENT_AUDIT_ROADMAP.md`

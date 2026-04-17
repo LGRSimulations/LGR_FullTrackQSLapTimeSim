@@ -11,6 +11,67 @@ Usage rules:
 
 ---
 
+Timestamp: 2026-04-17T12:45:00Z
+Owner: Copilot + Project Team
+Change ID: parameter-audit-aerocp-enforcement-v1
+Scope: aero parameter enforcement completion (`aero_cp`), corner normal-load realism, parameter-contract coverage
+
+## 1) Problem
+
+### High-Level
+- The parameter enforcement audit found that `aero_cp` was loaded from `parameters.json` but did not materially affect runtime physics.
+- This created a loaded-but-inactive parameter risk and reduced confidence in sensitivity conclusions.
+
+### Low-Level
+- Aero drag/downforce were computed, but total aero load was not split by center of pressure before corner equilibrium solve.
+- Corner solver effectively used a single average per-tyre normal load, limiting front/rear axle sensitivity.
+
+## 2) Diagnosis
+- Evidence used:
+	- Static trace from load path to runtime equations.
+	- Focused sensitivity probe on FSUK with two `aero_cp` values.
+- Root cause:
+	- Missing physical connection from `aero_cp` to axle-specific normal-load channels.
+- Alternatives ruled out:
+	- Deferring `aero_cp` was rejected because the model already includes sufficient structure to enforce it with low-risk changes.
+
+## 3) Solution and Implementation
+- Engineering intent:
+	- Enforce `aero_cp` physically in front/rear load balance while preserving total aero load and baseline stability.
+- What changed:
+	- Added aero load split helper in speed-profile path using wheelbase and `aero_centre_of_pressure`.
+	- Updated normal-load composition to include CoP split before longitudinal transfer/clamping.
+	- Replaced single-load corner helper with front/rear/mean corner load state.
+	- Extended corner solver API to accept `normal_load_front_per_tyre` and `normal_load_rear_per_tyre`.
+	- Added parameter-enforcement contracts in `tests.test_parameter_enforcement_contracts`:
+		- drag monotonicity with `drag_coefficient`
+		- drag/downforce monotonicity with `frontal_area`
+		- downforce monotonicity with `downforce_coefficient`
+		- front/rear split sensitivity and total-load invariance with `aero_cp`
+- Why this is physically reasonable:
+	- Center of pressure should alter where aero load is applied without creating/removing net vertical force.
+	- Axle-specific normal loads are necessary for realistic tyre force distribution and corner equilibrium.
+
+## 4) Impact and Explanation
+- Physics correctness impact:
+	- Closes a concrete loaded-but-inactive parameter gap in the core runtime path.
+- Lap-time trustworthiness impact:
+	- `aero_cp` now produces measurable sensitivity rather than null effect.
+- Diagnostics stability impact:
+	- Existing limiting-case suite remained passing after the change.
+- Limitations and next step:
+	- Remaining audit work is to promote `PARTIAL` parameters to `OK` with direct monotonic contracts and resolve current `GAP` rows (`suspension_stiffness`, `damping_coefficient`).
+
+## Validation Gates (Required)
+- Parameter enforcement contracts: PASS (`tests.test_parameter_enforcement_contracts`)
+- Limiting-case contracts: PASS (`tests.test_limiting_case_contracts`)
+- Focused FSUK sensitivity probe: PASS (`aero_cp` delta non-zero)
+
+## Reproducibility Notes (Optional)
+- uv run python -m unittest tests.test_parameter_enforcement_contracts tests.test_limiting_case_contracts -v
+
+---
+
 Timestamp: 2026-04-16T18:20:00Z
 Owner: Copilot + Project Team
 Change ID: tyre-peak-load-clamp-v1
