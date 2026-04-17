@@ -86,6 +86,7 @@ def run_suite(
     fallback_threshold,
     max_out_of_domain_count,
     enforce_milestone4_gates,
+    enforce_milestone3_gates,
 ):
     from track.track import load_track
     from vehicle.vehicle import create_vehicle
@@ -162,6 +163,11 @@ def run_suite(
                         "corner_solver_success_rate": "",
                         "solver_success_gate_threshold": "",
                         "solver_success_gate_pass": "",
+                        "normal_load_non_physical_events_total": "",
+                        "normal_load_non_physical_corner": "",
+                        "normal_load_non_physical_forward": "",
+                        "normal_load_non_physical_backward": "",
+                        "normal_load_gate_pass": "",
                         "corner_residual_lat_abs_p90": "",
                         "corner_residual_lat_abs_max": "",
                         "corner_residual_yaw_abs_p90": "",
@@ -201,6 +207,10 @@ def run_suite(
                         tyre_out_slip = int(tyre_domain.get("lateral_out_of_domain_slip", 0)) + int(tyre_domain.get("longitudinal_out_of_domain_slip", 0))
                         tyre_out_load = int(tyre_domain.get("lateral_out_of_domain_load", 0)) + int(tyre_domain.get("longitudinal_out_of_domain_load", 0))
                         tyre_out_total = int(tyre_domain.get("out_of_domain_total", tyre_out_slip + tyre_out_load))
+                        normal_load_non_physical_corner = int(diagnostics.get("corner_non_physical_normal_load_events", 0))
+                        normal_load_non_physical_forward = int(diagnostics.get("forward_non_physical_normal_load_events", 0))
+                        normal_load_non_physical_backward = int(diagnostics.get("backward_non_physical_normal_load_events", 0))
+                        normal_load_non_physical_total = int(diagnostics.get("normal_load_non_physical_events_total", normal_load_non_physical_corner + normal_load_non_physical_forward + normal_load_non_physical_backward))
 
                         row["lap_time_s"] = float(sim_result.lap_time)
                         row["fallback_rate"] = float(fallback_rate)
@@ -210,6 +220,11 @@ def run_suite(
                         row["corner_solver_success_rate"] = float(solver_success_rate)
                         row["solver_success_gate_threshold"] = float(solver_success_threshold)
                         row["solver_success_gate_pass"] = bool(solver_success_rate >= solver_success_threshold)
+                        row["normal_load_non_physical_events_total"] = normal_load_non_physical_total
+                        row["normal_load_non_physical_corner"] = normal_load_non_physical_corner
+                        row["normal_load_non_physical_forward"] = normal_load_non_physical_forward
+                        row["normal_load_non_physical_backward"] = normal_load_non_physical_backward
+                        row["normal_load_gate_pass"] = bool(normal_load_non_physical_total == 0)
                         row["forward_mode_breakdown"] = json.dumps(forward_breakdown, sort_keys=True)
                         row["backward_mode_breakdown"] = json.dumps(backward_breakdown, sort_keys=True)
                         row["forward_dominant_mode"] = max(forward_breakdown, key=forward_breakdown.get) if forward_breakdown else ""
@@ -291,6 +306,11 @@ def run_suite(
         for r in valid_rows
         if float(r.get("solver_success_gate_pass", 1.0)) == 0.0
     )
+    normal_load_gate_fail_counts = Counter(
+        (r["track"], r["variant"])
+        for r in valid_rows
+        if float(r.get("normal_load_non_physical_events_total", 0.0)) > 0.0
+    )
     tyre_domain_fail_counts = Counter(
         (r["track"], r["variant"])
         for r in valid_rows
@@ -300,12 +320,15 @@ def run_suite(
 
     residual_summary = {}
     tyre_domain_summary = {}
+    milestone3_gate_summary = {}
     for track_name in include_tracks:
         for variant_name in variant_names:
             subset = [
                 r for r in valid_rows
                 if r["track"] == track_name and r["variant"] == variant_name
             ]
+            is_straight_like_track = str(track_name).strip().lower() == "straightlinetrack"
+            base_mu_gate_enforced = str(track_name).strip().lower() == "fsuk"
             residual_summary[(track_name, variant_name)] = {
                 "lat_abs_max": finite_max([r.get("corner_residual_lat_abs_max", "") for r in subset]),
                 "yaw_abs_max": finite_max([r.get("corner_residual_yaw_abs_max", "") for r in subset]),
@@ -316,6 +339,37 @@ def run_suite(
                 "out_total_max": finite_max([r.get("tyre_out_of_domain_total", "") for r in subset]),
                 "out_slip_max": finite_max([r.get("tyre_out_of_domain_slip", "") for r in subset]),
                 "out_load_max": finite_max([r.get("tyre_out_of_domain_load", "") for r in subset]),
+            }
+
+            level_by_param = defaultdict(dict)
+            for r in subset:
+                level_by_param[r.get("parameter", "")][r.get("level", "")] = r
+
+            cog_sign_pass = True
+            if (not is_straight_like_track) and "cog_z" in level_by_param and ("low" in level_by_param["cog_z"]) and ("high" in level_by_param["cog_z"]):
+                low_lap = float(level_by_param["cog_z"]["low"]["lap_time_s"])
+                high_lap = float(level_by_param["cog_z"]["high"]["lap_time_s"])
+                # Higher CoG should not improve lap-time realism metrics.
+                cog_sign_pass = bool(high_lap >= low_lap - 1e-6)
+
+            base_mu_nontrivial_pass = False
+            base_mu_delta = ""
+            if is_straight_like_track:
+                base_mu_nontrivial_pass = True
+                base_mu_delta = "n/a"
+            elif "base_mu" in level_by_param and ("low" in level_by_param["base_mu"]) and ("high" in level_by_param["base_mu"]):
+                low_lap = float(level_by_param["base_mu"]["low"]["lap_time_s"])
+                high_lap = float(level_by_param["base_mu"]["high"]["lap_time_s"])
+                base_mu_delta = abs(high_lap - low_lap)
+                base_mu_nontrivial_pass = bool(base_mu_delta > 1e-3)
+
+            normal_load_pass = all(float(r.get("normal_load_non_physical_events_total", 0.0)) == 0.0 for r in subset)
+            milestone3_gate_summary[(track_name, variant_name)] = {
+                "normal_load_pass": bool(normal_load_pass),
+                "cog_sign_pass": bool(cog_sign_pass),
+                "base_mu_nontrivial_pass": bool(base_mu_nontrivial_pass),
+                "base_mu_delta": base_mu_delta,
+                "base_mu_gate_enforced": bool(base_mu_gate_enforced),
             }
 
     md_path = os.path.join(output_dir, "ab_summary.md")
@@ -334,6 +388,10 @@ def run_suite(
             f.write("- Milestone 4 track gates: enabled (track-specific fallback and solver-success thresholds)\n")
         else:
             f.write("- Milestone 4 track gates: disabled\n")
+        if enforce_milestone3_gates:
+            f.write("- Milestone 3 gates: enabled (normal-load physics + sensitivity sign checks)\n")
+        else:
+            f.write("- Milestone 3 gates: disabled\n")
         if max_out_of_domain_count >= 0:
             f.write(f"- Tyre-domain gate: pass when tyre_out_of_domain_total <= {int(max_out_of_domain_count)}\n")
             f.write(f"- Tyre-domain gate failures (runs): {sum(tyre_domain_fail_counts.values())}\n")
@@ -373,6 +431,20 @@ def run_suite(
                         f"fallback_track_gate_fails={fallback_track_fail_counts.get((track_name, variant_name), 0)}, "
                         f"solver_success_gate_fails={solver_success_fail_counts.get((track_name, variant_name), 0)}\n"
                     )
+        f.write("\n")
+
+        f.write("## Milestone 3 Gate Status by Track/Variant\n\n")
+        for track_name in include_tracks:
+            for variant_name in variant_names:
+                stats = milestone3_gate_summary[(track_name, variant_name)]
+                f.write(
+                    f"- {track_name} / {variant_name}: "
+                    f"normal_load_pass={stats['normal_load_pass']}, "
+                    f"cog_sign_pass={stats['cog_sign_pass']}, "
+                    f"base_mu_nontrivial_pass={stats['base_mu_nontrivial_pass']}, "
+                    f"base_mu_delta={stats['base_mu_delta']}, "
+                    f"base_mu_gate_enforced={stats['base_mu_gate_enforced']}\n"
+                )
         f.write("\n")
 
         f.write("## Tyre-Domain Gate Failures by Track/Variant\n\n")
@@ -421,9 +493,19 @@ def run_suite(
 
     tyre_domain_fail_total = sum(tyre_domain_fail_counts.values()) if max_out_of_domain_count >= 0 else 0
     milestone4_fail_total = 0
+    milestone3_fail_total = 0
     if enforce_milestone4_gates:
         milestone4_fail_total = int(sum(fallback_track_fail_counts.values()) + sum(solver_success_fail_counts.values()))
-    return runs_csv, sens_csv, md_path, tyre_domain_fail_total, milestone4_fail_total
+    if enforce_milestone3_gates:
+        for track_name in include_tracks:
+            for variant_name in variant_names:
+                stats = milestone3_gate_summary[(track_name, variant_name)]
+                base_mu_gate_ok = True
+                if stats.get("base_mu_gate_enforced", False):
+                    base_mu_gate_ok = bool(stats["base_mu_nontrivial_pass"])
+                if not (stats["normal_load_pass"] and stats["cog_sign_pass"] and base_mu_gate_ok):
+                    milestone3_fail_total += 1
+    return runs_csv, sens_csv, md_path, tyre_domain_fail_total, milestone4_fail_total, milestone3_fail_total
 
 
 def main():
@@ -452,6 +534,11 @@ def main():
         action="store_true",
         help="Enable Milestone 4 track-specific hard gates for fallback rate and solver success",
     )
+    parser.add_argument(
+        "--enforce-milestone3-gates",
+        action="store_true",
+        help="Enable Milestone 3 hard gates for normal-load events and sensitivity sign checks",
+    )
     args = parser.parse_args()
 
     include_tracks = [t.strip() for t in args.tracks.split(",") if t.strip()]
@@ -459,7 +546,7 @@ def main():
     if not variant_names:
         raise ValueError("At least one variant is required")
 
-    runs_csv, sens_csv, md_path, tyre_domain_fail_total, milestone4_fail_total = run_suite(
+    runs_csv, sens_csv, md_path, tyre_domain_fail_total, milestone4_fail_total, milestone3_fail_total = run_suite(
         output_dir=args.output_dir,
         include_tracks=include_tracks,
         stale_threshold=args.stale_threshold,
@@ -467,6 +554,7 @@ def main():
         fallback_threshold=args.fallback_threshold,
         max_out_of_domain_count=args.max_out_of_domain_count,
         enforce_milestone4_gates=bool(args.enforce_milestone4_gates),
+        enforce_milestone3_gates=bool(args.enforce_milestone3_gates),
     )
 
     if args.max_out_of_domain_count >= 0 and tyre_domain_fail_total > 0:
@@ -482,6 +570,14 @@ def main():
         print(f"Gate violations: {milestone4_fail_total}")
         print("Track fallback thresholds: FSUK<=0.15, SkidpadF26<=0.15, StraightLineTrack<=0.05")
         print("Track solver-success thresholds: FSUK>=0.85, SkidpadF26>=0.85, StraightLineTrack>=0.95")
+        print(f"Runs CSV: {runs_csv}")
+        print(f"Summary Markdown: {md_path}")
+        raise SystemExit(1)
+
+    if args.enforce_milestone3_gates and milestone3_fail_total > 0:
+        print("A/B suite failed Milestone 3 gates")
+        print(f"Track/variant gate failures: {milestone3_fail_total}")
+        print("Milestone 3 gates: normal-load non-physical events must be zero, cog_z sign check must pass, base_mu sensitivity must be non-trivial")
         print(f"Runs CSV: {runs_csv}")
         print(f"Summary Markdown: {md_path}")
         raise SystemExit(1)

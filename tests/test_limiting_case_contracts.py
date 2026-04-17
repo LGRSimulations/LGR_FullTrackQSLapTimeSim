@@ -207,6 +207,36 @@ class LimitingCaseContractTests(unittest.TestCase):
         ):
             self.assertIn(key, tyre_domain)
 
+    def test_normal_load_diagnostics_exist_and_non_physical_count_zero(self):
+        vehicle, cfg = self._create_vehicle()
+        cfg.setdefault("ab_testing", {})["model_variant"] = "b1"
+        track = _build_straight_track(ds=10.0, n_points=8)
+        _, _, diagnostics = compute_speed_profile(track, vehicle, cfg)
+
+        for key in (
+            "corner_front_normal_load_per_tyre",
+            "corner_rear_normal_load_per_tyre",
+            "forward_front_normal_load_per_tyre",
+            "forward_rear_normal_load_per_tyre",
+            "backward_front_normal_load_per_tyre",
+            "backward_rear_normal_load_per_tyre",
+            "corner_non_physical_normal_load_events",
+            "forward_non_physical_normal_load_events",
+            "backward_non_physical_normal_load_events",
+            "normal_load_non_physical_events_total",
+        ):
+            self.assertIn(key, diagnostics)
+
+        n = len(track.points)
+        self.assertEqual(len(diagnostics["corner_front_normal_load_per_tyre"]), n)
+        self.assertEqual(len(diagnostics["corner_rear_normal_load_per_tyre"]), n)
+        self.assertEqual(len(diagnostics["forward_front_normal_load_per_tyre"]), n)
+        self.assertEqual(len(diagnostics["forward_rear_normal_load_per_tyre"]), n)
+        self.assertEqual(len(diagnostics["backward_front_normal_load_per_tyre"]), n)
+        self.assertEqual(len(diagnostics["backward_rear_normal_load_per_tyre"]), n)
+
+        self.assertEqual(int(diagnostics["normal_load_non_physical_events_total"]), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

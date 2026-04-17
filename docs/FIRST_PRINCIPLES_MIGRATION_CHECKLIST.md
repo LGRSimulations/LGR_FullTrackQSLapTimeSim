@@ -135,6 +135,19 @@ Make normal-load evolution emerge from geometry and force balance, not tuning sh
 - Base tyre grip parameter produces non-trivial constant-radius sensitivity:
   - |delta lap time| > 0.001 s in contract test.
 
+### Verification run (strict)
+
+```bash
+uv run python -m unittest tests.test_limiting_case_contracts -v
+uv run python src/ab_testing/run_ab_suite.py --tracks FSUK,SkidpadF26,StraightLineTrack --variants baseline --output-dir ab_test_outputs/m3_hard_gate --fallback-threshold 0.15 --stale-threshold 0.05 --max-out-of-domain-count 130000 --enforce-milestone3-gates
+```
+
+Notes:
+- Milestone 3 A/B gate checks enforce:
+  - zero non-physical normal-load events in runtime diagnostics,
+  - `cog_z` sign check on curved tracks (higher `cog_z` must not reduce lap time),
+  - non-trivial `base_mu` sensitivity on representative curved track FSUK (|delta lap time| > 0.001 s).
+
 ---
 
 ## Milestone 4: Numerical Robustness Without Physics Leakage
