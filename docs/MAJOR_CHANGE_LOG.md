@@ -12,6 +12,60 @@ Usage rules:
 
 ---
 
+Timestamp: 2026-04-18T12:10:00Z
+Owner: Copilot + Project Team
+Change ID: local-workbench-executable-scaffold-v1
+Scope: zip-friendly local app architecture, API service layer, browser UI scaffold, packaging scripts
+
+## 1) Problem
+
+### High-Level
+- Engineers needed a one-click local experience without manual JSON/script handling.
+- Existing workflow was script-first, which increased setup friction for wider internal use.
+
+### Low-Level
+- No unified app entrypoint existed for running simulator services behind a browser UI.
+- Lift/coast and lap analyses were script-specific and not exposed through a common service contract.
+
+## 2) Diagnosis
+- Evidence used:
+	- Team request for zip-based sharing and one-click execution.
+	- Existing script spread across `src/` and `tools/` with no common UI layer.
+- Root cause:
+	- Missing local service boundary and packaging-oriented launcher/build flow.
+- Alternatives ruled out:
+	- Browser-only static UI without backend service would duplicate physics logic and drift from simulator core.
+
+## 3) Solution and Implementation
+- Engineering intent:
+	- Keep simulator core as single source of truth while exposing lightweight local services and UI.
+- What changed:
+	- Added app scaffold under `src/app`:
+		- FastAPI web app and static UI shell
+		- Lap run service endpoint backed by core simulator
+		- Lift/coast data service endpoint adapted from existing analysis logic
+		- Metadata endpoint including deferred parameter visibility
+	- Added one-click launcher script: `tools/app/launch_sim_bt.ps1`.
+	- Added executable build script: `tools/app/build_windows_exe.ps1` (PyInstaller one-folder output).
+	- Added required dependencies and README usage/build instructions.
+- Why this is physically reasonable:
+	- All compute paths still call core simulator/powertrain models rather than duplicating simplified frontend logic.
+
+## 4) Impact and Explanation
+- Usability impact:
+	- Enables zip-shareable local app flow with browser interaction and low onboarding friction.
+- Maintainability impact:
+	- Establishes service-per-capability pattern for adding future pages (sweeps, diagnostics, strategy tools).
+- Limitations and next step:
+	- Current UI is scaffold-level and focuses on functional wiring; next step is richer charts/controls and artifact export UX.
+
+## Validation Gates (Required)
+- Local app entrypoint import/CLI check: PASS
+- FastAPI app creation smoke test: PASS
+- Lift/coast service data smoke test: PASS
+
+---
+
 Timestamp: 2026-04-18T10:15:00Z
 Owner: Copilot + Project Team
 Change ID: parameter-audit-defer-transient-params-v1

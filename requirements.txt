@@ -3,3 +3,6 @@ matplotlib
 numpy
 seaborn
 scipy
+fastapi
+uvicorn
+pyinstaller

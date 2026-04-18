@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LGR Sim Workbench</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <header>
+    <h1>LGR Sim Workbench</h1>
+    <p id="scope"></p>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>Lap Run</h2>
+      <label>Track Path (optional override)</label>
+      <input id="trackPath" type="text" placeholder="datasets/tracks/FSUK.txt" />
+
+      <label>Mass Override (kg, optional)</label>
+      <input id="massOverride" type="number" step="0.1" placeholder="300" />
+
+      <label>Aero CoP Override (m, optional)</label>
+      <input id="aeroCpOverride" type="number" step="0.01" placeholder="1.0" />
+
+      <button id="runLapBtn">Run Lap</button>
+      <pre id="lapOutput"></pre>
+    </section>
+
+    <section class="card">
+      <h2>Lift/Coast Sweep</h2>
+      <label>Power Limits kW (comma separated)</label>
+      <input id="powerLimits" type="text" value="10,20,30,40,50" />
+
+      <label>Energy Target (kWh)</label>
+      <input id="energyTarget" type="number" step="0.01" value="0.5" />
+
+      <button id="runLiftBtn">Run Lift/Coast</button>
+      <pre id="liftOutput"></pre>
+    </section>
+
+    <section class="card">
+      <h2>Deferred Parameters</h2>
+      <ul id="deferredList"></ul>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
