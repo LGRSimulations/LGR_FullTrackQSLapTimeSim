@@ -7,43 +7,89 @@
   <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body>
-  <header>
-    <h1>LGR Sim Workbench</h1>
-    <p id="scope"></p>
-  </header>
+
+  <div class="page-header">
+    <span class="page-title">LGR Lap Time Simulator</span>
+    <span class="page-subtitle">Formula Student · Full Track QS · F24</span>
+  </div>
+
+  <nav class="tab-bar">
+    <button class="tab active" data-tab="base-sim">Base Simulator</button>
+    <button class="tab" data-tab="tyre">Tyre Model</button>
+    <button class="tab" data-tab="aero">Aerodynamics</button>
+    <button class="tab" data-tab="geometry">Geometry</button>
+    <button class="tab" data-tab="performance">Performance</button>
+    <button class="tab" data-tab="lift-coast">Lift and Coast</button>
+    <button class="tab" data-tab="lessons">Lessons</button>
+    <button class="tab" data-tab="credits">Credits</button>
+  </nav>
 
   <main>
-    <section class="card">
-      <h2>Lap Run</h2>
-      <label>Track Path (optional override)</label>
-      <input id="trackPath" type="text" placeholder="datasets/tracks/FSUK.txt" />
 
-      <label>Mass Override (kg, optional)</label>
-      <input id="massOverride" type="number" step="0.1" placeholder="300" />
+    <section id="base-sim" class="tab-section active">
+      <div class="sim-panel">
 
-      <label>Aero CoP Override (m, optional)</label>
-      <input id="aeroCpOverride" type="number" step="0.01" placeholder="1.0" />
+        <div class="panel inputs-panel">
+          <div class="panel-label">Inputs</div>
+          <label class="field-label">Track Path</label>
+          <input id="trackPath" type="text" placeholder="datasets/tracks/FSUK.txt" />
+          <label class="field-label">Mass Override (kg)</label>
+          <input id="massOverride" type="number" step="0.1" placeholder="300" />
+          <label class="field-label">Aero CoP Override (m)</label>
+          <input id="aeroCpOverride" type="number" step="0.01" placeholder="1.0" />
+          <button id="runLapBtn">Run Simulation</button>
+        </div>
 
-      <button id="runLapBtn">Run Lap</button>
-      <pre id="lapOutput"></pre>
+        <div class="panel output-panel">
+          <div class="panel-label">Output</div>
+          <pre id="lapOutput"></pre>
+          <div class="meta-row">
+            <span class="scope-text" id="scope"></span>
+          </div>
+        </div>
+
+      </div>
+      <div class="chat-bar">
+        <input type="text" id="chatInput" placeholder="Ask about this result..." />
+        <button id="chatSend" disabled>Send</button>
+      </div>
     </section>
 
-    <section class="card">
-      <h2>Lift/Coast Sweep</h2>
-      <label>Power Limits kW (comma separated)</label>
-      <input id="powerLimits" type="text" value="10,20,30,40,50" />
-
-      <label>Energy Target (kWh)</label>
-      <input id="energyTarget" type="number" step="0.01" value="0.5" />
-
-      <button id="runLiftBtn">Run Lift/Coast</button>
-      <pre id="liftOutput"></pre>
+    <section id="tyre" class="tab-section">
+      <h2 class="section-title">Tyre Model Validation</h2>
+      <p class="section-sub">In development.</p>
     </section>
 
-    <section class="card">
-      <h2>Deferred Parameters</h2>
-      <ul id="deferredList"></ul>
+    <section id="aero" class="tab-section">
+      <h2 class="section-title">Aerodynamics</h2>
+      <p class="section-sub">In development.</p>
     </section>
+
+    <section id="geometry" class="tab-section">
+      <h2 class="section-title">Geometry</h2>
+      <p class="section-sub">In development.</p>
+    </section>
+
+    <section id="performance" class="tab-section">
+      <h2 class="section-title">Performance</h2>
+      <p class="section-sub">In development.</p>
+    </section>
+
+    <section id="lift-coast" class="tab-section">
+      <h2 class="section-title">Lift and Coast</h2>
+      <p class="section-sub">In development.</p>
+    </section>
+
+    <section id="lessons" class="tab-section">
+      <h2 class="section-title">Lessons</h2>
+      <p class="section-sub">In development.</p>
+    </section>
+
+    <section id="credits" class="tab-section">
+      <h2 class="section-title">Credits</h2>
+      <p class="section-sub">In development.</p>
+    </section>
+
   </main>
 
   <script src="/static/app.js"></script>
