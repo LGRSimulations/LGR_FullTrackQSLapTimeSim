@@ -2,6 +2,7 @@ import numpy as np
 import logging
 from scipy.optimize import root
 from scipy.constants import g
+from typing import Optional, Dict
 
 logger = logging.getLogger(__name__)
 
@@ -122,8 +123,12 @@ def find_vehicle_state_at_point(
     curvature: float,
     vehicle,
     normal_load_per_tyre: float = None,
+    normal_load_front_per_tyre: float = None,
+    normal_load_rear_per_tyre: float = None,
     straight_line_speed_cap: float = 200.0,
-    use_rollover_speed_cap: bool = True,
+    initial_guess: Optional[Dict[str, float]] = None,
+    v_upper_bound_mps: Optional[float] = None,
+    max_bisection_iters: int = 30,
 ):
     """
     Find the maximum feasible steady-state cornering state at a single track point.
@@ -181,11 +186,19 @@ def find_vehicle_state_at_point(
     
     # Handle straight sections (avoid division by zero)
     if abs(curvature) < 1e-4:
+        v_straight = float(straight_line_speed_cap)
+        if v_upper_bound_mps is not None and np.isfinite(v_upper_bound_mps):
+            v_straight = min(v_straight, float(v_upper_bound_mps))
         return {
             'success': True,
-            'v_car': float(straight_line_speed_cap),
+            'v_car': max(0.0, v_straight),
             'a_steer': 0.0,
-            'a_sideslip': 0.0
+            'a_sideslip': 0.0,
+            'failure_reason': 'none',
+            'residual_lat_abs': 0.0,
+            'residual_yaw_abs': 0.0,
+            'residual_lat_rel': 0.0,
+            'residual_yaw_rel': 0.0,
         }
     
 
@@ -212,15 +225,35 @@ def find_vehicle_state_at_point(
     # Rollover limit
     v_rollover = np.sqrt((t / (2 * h)) * g * R)
     
-    # Use rollover as hard cap unless explicitly disabled for diagnostics.
-    if use_rollover_speed_cap:
-        v_bound = v_rollover
-    else:
-        v_bound = 200.0
+    # Always enforce rollover cap to keep cornering bounds physically realistic.
+    v_bound = min(v_rollover, float(straight_line_speed_cap))
+
+    if v_upper_bound_mps is not None and np.isfinite(v_upper_bound_mps):
+        v_bound = min(float(v_bound), float(v_upper_bound_mps))
+    v_bound = max(0.0, float(v_bound))
+    if v_bound <= 0.0:
+        return {
+            'success': False,
+            'v_car': 0.0,
+            'a_steer': 0.0,
+            'a_sideslip': 0.0,
+            'failure_reason': 'invalid_speed_bound',
+            'residual_lat_abs': np.nan,
+            'residual_yaw_abs': np.nan,
+            'residual_lat_rel': np.nan,
+            'residual_yaw_rel': np.nan,
+        }
     
     # Bicycle model: delta approx L * K
     guess_delta = np.arctan(L * K)
     guess_beta = 0.0
+    if isinstance(initial_guess, dict):
+        try:
+            guess_delta = np.radians(float(initial_guess.get('a_steer', np.degrees(guess_delta))))
+            guess_beta = np.radians(float(initial_guess.get('a_sideslip', 0.0)))
+        except (TypeError, ValueError):
+            guess_delta = np.arctan(L * K)
+            guess_beta = 0.0
 
     # step 3: Bisection bounds
     v_low = 0.0
@@ -231,11 +264,21 @@ def find_vehicle_state_at_point(
         'success': False,
         'v_car': 0.0,
         'a_steer': 0.0,
-        'a_sideslip': 0.0
+        'a_sideslip': 0.0,
+        'failure_reason': 'no_feasible_solution',
+        'residual_lat_abs': np.nan,
+        'residual_yaw_abs': np.nan,
+        'residual_lat_rel': np.nan,
+        'residual_yaw_rel': np.nan,
     }
+    last_failure_reason = 'no_feasible_solution'
+    last_residual_lat_abs = np.nan
+    last_residual_yaw_abs = np.nan
+    last_residual_lat_rel = np.nan
+    last_residual_yaw_rel = np.nan
 
     # Bisection search 
-    for _ in range(30):
+    for _ in range(max(1, int(max_bisection_iters))):
         v_mid = (v_low + v_high) / 2.0
         
         # --- Step 4: Solver (Inner Loop: Root finding for delta, beta) ---
@@ -252,14 +295,24 @@ def find_vehicle_state_at_point(
             alpha_r = -beta + (b * K)
             
             # Tyre model expects degrees.
-            if normal_load_per_tyre is None:
-                Fy_f, Fy_r = vehicle.compute_tyre_forces(np.degrees(alpha_f), np.degrees(alpha_r))
+            if (normal_load_front_per_tyre is None) and (normal_load_rear_per_tyre is None):
+                if normal_load_per_tyre is None:
+                    Fy_f, Fy_r = vehicle.compute_tyre_forces(np.degrees(alpha_f), np.degrees(alpha_r))
+                else:
+                    Fy_f, Fy_r = vehicle.compute_tyre_forces(
+                        np.degrees(alpha_f),
+                        np.degrees(alpha_r),
+                        normal_load_front=normal_load_per_tyre,
+                        normal_load_rear=normal_load_per_tyre,
+                    )
             else:
+                front_load = normal_load_front_per_tyre if normal_load_front_per_tyre is not None else normal_load_per_tyre
+                rear_load = normal_load_rear_per_tyre if normal_load_rear_per_tyre is not None else normal_load_per_tyre
                 Fy_f, Fy_r = vehicle.compute_tyre_forces(
                     np.degrees(alpha_f),
                     np.degrees(alpha_r),
-                    normal_load_front=normal_load_per_tyre,
-                    normal_load_rear=normal_load_per_tyre,
+                    normal_load_front=front_load,
+                    normal_load_rear=rear_load,
                 )
             
             # Equations to solve - Step 4.iii 
@@ -282,6 +335,14 @@ def find_vehicle_state_at_point(
             # Keep checks scale-aware.
             lat_scale = max(1.0, abs(m * (v_mid**2) * K))
             yaw_scale = max(1.0, lat_scale * max(a, b))
+            res_lat_abs = float(abs(res_lat))
+            res_yaw_abs = float(abs(res_yaw))
+            res_lat_rel = float(res_lat_abs / lat_scale)
+            res_yaw_rel = float(res_yaw_abs / yaw_scale)
+            last_residual_lat_abs = res_lat_abs
+            last_residual_yaw_abs = res_yaw_abs
+            last_residual_lat_rel = res_lat_rel
+            last_residual_yaw_rel = res_yaw_rel
             residual_ok = (abs(res_lat) <= 1e-2 * lat_scale) and (abs(res_yaw) <= 1e-2 * yaw_scale)
             
             # Basic check (e.g. < 45 degrees)
@@ -295,7 +356,12 @@ def find_vehicle_state_at_point(
                     'success': True,
                     'v_car': v_mid,
                     'a_steer': np.degrees(delta_sol),
-                    'a_sideslip': np.degrees(beta_sol)
+                    'a_sideslip': np.degrees(beta_sol),
+                    'failure_reason': 'none',
+                    'residual_lat_abs': res_lat_abs,
+                    'residual_yaw_abs': res_yaw_abs,
+                    'residual_lat_rel': res_lat_rel,
+                    'residual_yaw_rel': res_yaw_rel,
                 }
                 
                 # Use this solution as the guess for the next higher speed (Step 4 note)
@@ -304,8 +370,20 @@ def find_vehicle_state_at_point(
             else:
                 # Converged to bs
                 v_high = v_mid
+                if not residual_ok:
+                    last_failure_reason = 'residual_not_met'
+                else:
+                    last_failure_reason = 'state_bounds_exceeded'
         else:
             # Solver failed to find equilibrium, car cannot corner at this speed
             v_high = v_mid
+            last_failure_reason = 'root_failed'
+
+    if not final_result['success']:
+        final_result['failure_reason'] = last_failure_reason
+        final_result['residual_lat_abs'] = last_residual_lat_abs
+        final_result['residual_yaw_abs'] = last_residual_yaw_abs
+        final_result['residual_lat_rel'] = last_residual_lat_rel
+        final_result['residual_yaw_rel'] = last_residual_yaw_rel
 
     return final_result

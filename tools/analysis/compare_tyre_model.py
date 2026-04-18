@@ -132,7 +132,7 @@ def image_to_data_uri(path):
     return f"data:image/png;base64,{encoded}"
 
 
-def load_model(lat_path, long_path):
+def load_model(lat_path, long_path, model_variant="baseline"):
     full_lat_path = os.path.abspath(lat_path)
     full_long_path = os.path.abspath(long_path)
     tyre_data_lat = LookupTableTyreModel._parse_lateral_file(full_lat_path)
@@ -143,8 +143,69 @@ def load_model(lat_path, long_path):
             "file_path_longit": long_path,
             "type": "lookup",
             "base_mu": 1.0,
+            "model_variant": model_variant,
         }
     ), tyre_data_lat, tyre_data_long
+
+
+def _max_abs_predicted_force(model, channel, slip_values, normal_load):
+    if channel == "lateral":
+        preds = [model.get_lateral_force(slip, normal_load=normal_load) for slip in slip_values]
+    else:
+        preds = [model.get_longitudinal_force(slip, normal_load=normal_load) for slip in slip_values]
+    if not preds:
+        return 0.0
+    return float(np.max(np.abs(np.asarray(preds, dtype=float))))
+
+
+def run_high_load_extrapolation_checks(model, tyre_data_lat, tyre_data_long, max_ratio_threshold, probe_scale=1.5):
+    rows = []
+
+    lat_df = tyre_data_lat.dropna(subset=["Slip Angle [deg]", "Lateral Force [N]", "Normal Load [N]"]).copy()
+    if not lat_df.empty:
+        lat_loads = pd.to_numeric(lat_df["Normal Load [N]"], errors="coerce").dropna().to_numpy(dtype=float)
+        max_load = float(np.max(lat_loads)) if len(lat_loads) else 0.0
+        probe_load = max_load * float(probe_scale)
+        observed_peak = float(np.max(np.abs(pd.to_numeric(lat_df["Lateral Force [N]"], errors="coerce").to_numpy(dtype=float))))
+        slip_values = pd.to_numeric(lat_df["Slip Angle [deg]"], errors="coerce").dropna().to_numpy(dtype=float)
+        predicted_peak = _max_abs_predicted_force(model, "lateral", slip_values, probe_load)
+        ratio = 0.0 if observed_peak <= 1e-9 else float(predicted_peak / observed_peak)
+        rows.append(
+            {
+                "channel": "lateral",
+                "max_measured_load_N": max_load,
+                "probe_load_N": probe_load,
+                "measured_peak_N": observed_peak,
+                "predicted_peak_at_probe_N": predicted_peak,
+                "growth_ratio": ratio,
+                "threshold": float(max_ratio_threshold),
+                "status": "PASS" if ratio <= float(max_ratio_threshold) else "FAIL",
+            }
+        )
+
+    long_df = tyre_data_long.dropna(subset=["Slip Ratio [%]", "Longitudinal Force [N]", "Normal Load [N]"]).copy()
+    if not long_df.empty:
+        long_loads = pd.to_numeric(long_df["Normal Load [N]"], errors="coerce").dropna().to_numpy(dtype=float)
+        max_load = float(np.max(long_loads)) if len(long_loads) else 0.0
+        probe_load = max_load * float(probe_scale)
+        observed_peak = float(np.max(np.abs(pd.to_numeric(long_df["Longitudinal Force [N]"], errors="coerce").to_numpy(dtype=float))))
+        slip_values = pd.to_numeric(long_df["Slip Ratio [%]"], errors="coerce").dropna().to_numpy(dtype=float)
+        predicted_peak = _max_abs_predicted_force(model, "longitudinal", slip_values, probe_load)
+        ratio = 0.0 if observed_peak <= 1e-9 else float(predicted_peak / observed_peak)
+        rows.append(
+            {
+                "channel": "longitudinal",
+                "max_measured_load_N": max_load,
+                "probe_load_N": probe_load,
+                "measured_peak_N": observed_peak,
+                "predicted_peak_at_probe_N": predicted_peak,
+                "growth_ratio": ratio,
+                "threshold": float(max_ratio_threshold),
+                "status": "PASS" if ratio <= float(max_ratio_threshold) else "FAIL",
+            }
+        )
+
+    return rows
 
 
 def evaluate_lateral(model, tyre_data_lat):
@@ -362,7 +423,21 @@ def dataframe_to_html(rows, float_columns=None):
     return df.to_html(index=False, classes="table table-striped table-sm", border=0, escape=True)
 
 
-def build_html_report(report_path, *, validation_passed, args, lateral_rmse_pct, longitudinal_rmse_pct, all_rows, zero_force_rows, image_paths, plotly_figures, summary_csv):
+def build_html_report(
+    report_path,
+    *,
+    validation_passed,
+    args,
+    lateral_rmse_pct,
+    longitudinal_rmse_pct,
+    all_rows,
+    zero_force_rows,
+    extrapolation_rows,
+    tyre_domain_rows,
+    image_paths,
+    plotly_figures,
+    summary_csv,
+):
     summary_rows = []
     for row in all_rows:
         summary_rows.append({
@@ -386,6 +461,30 @@ def build_html_report(report_path, *, validation_passed, args, lateral_rmse_pct,
             "value": "" if row["value"] is None else f"{row['value']:.4f}",
             "error": row["error"],
         })
+
+    extrapolation_table_rows = []
+    for row in extrapolation_rows:
+        extrapolation_table_rows.append(
+            {
+                "channel": row["channel"],
+                "max_measured_load_N": f"{row['max_measured_load_N']:.1f}",
+                "probe_load_N": f"{row['probe_load_N']:.1f}",
+                "measured_peak_N": f"{row['measured_peak_N']:.1f}",
+                "predicted_peak_at_probe_N": f"{row['predicted_peak_at_probe_N']:.1f}",
+                "growth_ratio": f"{row['growth_ratio']:.3f}",
+                "threshold": f"{row['threshold']:.3f}",
+                "status": row["status"],
+            }
+        )
+
+    tyre_domain_table_rows = []
+    for row in tyre_domain_rows:
+        tyre_domain_table_rows.append(
+            {
+                "metric": row["metric"],
+                "value": row["value"],
+            }
+        )
 
     image_cards = []
     for label, path in image_paths:
@@ -467,10 +566,10 @@ def build_html_report(report_path, *, validation_passed, args, lateral_rmse_pct,
             <p class='muted'>How the model works: it reads TTC force data at each normal load, finds the peak force for that load, and then uses a fitted Magic Formula curve shape to map slip to force. The reported errors show how close the model curve is to TTC data at each load. The same checks are repeated for lateral force <strong>Fy</strong> and longitudinal force <strong>Fx</strong>.</p>
             <p class='muted'>Colour coding uses matching hues per load. TTC points are shown in a lighter shade, and model curves are shown in a darker shade.</p>
             <div class='grid summary-grid'>
-                <div class='card'><div class='muted'>Validation</div><div class='metric {'pass' if validation_passed else 'fail'}'>{'PASS' if validation_passed else 'FAIL'}</div><small>Threshold: {args.rmse_threshold_pct:.2f}% of peak</small></div>
+                <div class='card'><div class='muted'>Validation</div><div class='metric {'pass' if validation_passed else 'fail'}'>{'PASS' if validation_passed else 'FAIL'}</div><small>RMSE threshold: {args.rmse_threshold_pct:.2f}% of peak</small></div>
                 <div class='card'><div class='muted'>Lateral mean RMSE</div><div class='metric'>{lateral_rmse_pct:.2f}%</div><small>as a percent of peak force</small></div>
                 <div class='card'><div class='muted'>Longitudinal mean RMSE</div><div class='metric'>{longitudinal_rmse_pct:.2f}%</div><small>as a percent of peak force</small></div>
-                <div class='card'><div class='muted'>Outputs</div><div class='metric'><small>CSV + PNG + HTML</small></div><small><code>{html.escape(os.path.basename(summary_csv))}</code></small></div>
+                <div class='card'><div class='muted'>Model Variant</div><div class='metric'><small>{html.escape(args.model_variant)}</small></div><small>High-load growth max ratio: {args.max_high_load_growth_ratio:.2f}</small></div>
             </div>
         </div>
 
@@ -546,6 +645,18 @@ def build_html_report(report_path, *, validation_passed, args, lateral_rmse_pct,
         </div>
 
         <div class='section card'>
+            <h2>High-Load Extrapolation Checks</h2>
+            <div class='table-wrap'>{dataframe_to_html(extrapolation_table_rows)}</div>
+            <p class='note'>Probe load is 1.5x the highest measured TTC normal load. Growth ratio compares predicted peak force at probe load to measured peak force at known TTC loads.</p>
+        </div>
+
+        <div class='section card'>
+            <h2>Tyre Validity-Domain Diagnostics</h2>
+            <div class='table-wrap'>{dataframe_to_html(tyre_domain_table_rows)}</div>
+            <p class='note'>Counts track slip/load requests outside the TTC-derived validity ranges observed by the runtime tyre model API.</p>
+        </div>
+
+        <div class='section card'>
             <h2>2D Plots</h2>
             <div class='grid image-grid'>
                 {''.join(image_cards)}
@@ -573,6 +684,9 @@ def main():
     parser.add_argument("--validate", action="store_true", help="Run pass/fail TTC verification against the current tyre model")
     parser.add_argument("--visualise", action="store_true", help="Generate the legacy TTC vs model visualisations")
     parser.add_argument("--rmse-threshold-pct", type=float, default=12.0, help="Fail validation if any load-bin RMSE exceeds this percent of peak force")
+    parser.add_argument("--model-variant", default="baseline", help="Tyre model variant (e.g. baseline, tyre_peak_load_clamp)")
+    parser.add_argument("--max-high-load-growth-ratio", type=float, default=1.35, help="Fail validation if predicted peak force at 1.5x max TTC load exceeds this ratio")
+    parser.add_argument("--max-out-of-domain-count", type=int, default=-1, help="Fail validation if out-of-domain usage count exceeds this value (negative disables gate)")
     args = parser.parse_args()
 
     ensure_dir(args.output_dir)
@@ -580,7 +694,9 @@ def main():
     configure_matplotlib_backend(args.visualise)
     plt = import_pyplot()
 
-    model, tyre_data_lat, tyre_data_long = load_model(args.lateral_csv, args.longitudinal_csv)
+    model, tyre_data_lat, tyre_data_long = load_model(args.lateral_csv, args.longitudinal_csv, model_variant=args.model_variant)
+    if hasattr(model, "reset_domain_diagnostics"):
+        model.reset_domain_diagnostics()
 
     lateral_rows = evaluate_lateral(model, tyre_data_lat)
     longitudinal_rows = evaluate_longitudinal(model, tyre_data_long)
@@ -665,7 +781,21 @@ def main():
     failed_rows = [
         row for row in all_rows if float(row["rmse_pct_of_peak"]) > float(args.rmse_threshold_pct)
     ]
-    validation_passed = len(failed_rows) == 0
+    extrapolation_rows = run_high_load_extrapolation_checks(
+        model,
+        tyre_data_lat,
+        tyre_data_long,
+        max_ratio_threshold=args.max_high_load_growth_ratio,
+        probe_scale=1.5,
+    )
+    tyre_domain_diag = model.get_domain_diagnostics() if hasattr(model, "get_domain_diagnostics") else {}
+    tyre_domain_rows = [{"metric": k, "value": v} for k, v in tyre_domain_diag.items()]
+
+    extrapolation_fail_rows = [row for row in extrapolation_rows if row["status"] != "PASS"]
+    out_of_domain_total = int(tyre_domain_diag.get("out_of_domain_total", 0)) if isinstance(tyre_domain_diag, dict) else 0
+    out_of_domain_gate_enabled = int(args.max_out_of_domain_count) >= 0
+    out_of_domain_gate_pass = (out_of_domain_total <= int(args.max_out_of_domain_count)) if out_of_domain_gate_enabled else True
+    validation_passed = (len(failed_rows) == 0) and (len(extrapolation_fail_rows) == 0) and out_of_domain_gate_pass
 
     html_report = os.path.join(args.output_dir, "tyre_model_verification.html")
     zero_force_lines, zero_force_rows = run_zero_force_checks(model)
@@ -704,6 +834,8 @@ def main():
         longitudinal_rmse_pct=longitudinal_rmse_pct,
         all_rows=all_rows,
         zero_force_rows=zero_force_rows,
+        extrapolation_rows=extrapolation_rows,
+        tyre_domain_rows=tyre_domain_rows,
         image_paths=image_paths,
         plotly_figures=plotly_figures,
         summary_csv=summary_csv,
@@ -715,6 +847,10 @@ def main():
     print(f"Lateral mean RMSE % peak: {lateral_rmse_pct:.2f}%")
     print(f"Longitudinal mean RMSE % peak: {longitudinal_rmse_pct:.2f}%")
     print(f"Validation threshold: {args.rmse_threshold_pct:.2f}% of peak")
+    print(f"High-load growth ratio threshold: {args.max_high_load_growth_ratio:.2f}")
+    print(f"Out-of-domain gate: {'disabled' if not out_of_domain_gate_enabled else f'<= {int(args.max_out_of_domain_count)}'}")
+    print(f"Out-of-domain total count: {out_of_domain_total}")
+    print(f"Model variant: {args.model_variant}")
     print(f"Validation result: {'PASS' if validation_passed else 'FAIL'}")
 
     if args.visualise:
@@ -727,6 +863,14 @@ def main():
         for row in failed_rows:
             print(
                 f"  {row['channel']} @ {row['normal_load_N']:.0f} N: RMSE%peak={row['rmse_pct_of_peak']:.2f}%"
+            )
+        for row in extrapolation_fail_rows:
+            print(
+                f"  {row['channel']} high-load growth ratio={row['growth_ratio']:.3f} (threshold={row['threshold']:.3f})"
+            )
+        if not out_of_domain_gate_pass:
+            print(
+                f"  out_of_domain_total={out_of_domain_total} exceeds threshold={int(args.max_out_of_domain_count)}"
             )
         raise SystemExit(1)
 

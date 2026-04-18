@@ -57,7 +57,7 @@ class SolverContractTests(unittest.TestCase):
         for cfg in (low_cfg, high_cfg):
             cfg["track"] = {"file_path": f"synthetic_constant_radius:{cfg_radius:.3f}"}
             cfg.setdefault("ab_testing", {})["model_variant"] = "baseline"
-            cfg.setdefault("solver", {})["use_rollover_speed_cap"] = False
+            cfg.setdefault("solver", {})["use_rollover_speed_cap"] = True
 
         low_vehicle = create_vehicle(low_cfg)
         high_vehicle = create_vehicle(high_cfg)

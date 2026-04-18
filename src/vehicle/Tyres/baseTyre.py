@@ -110,7 +110,13 @@ class LookupTableTyreModel(BaseTyreModel):
     B_LONG = 12.0    # Default longitudinal stiffness factor
     MIN_NORMAL_LOAD_N = 1e-9
     
-    def __init__(self, tyre_data_lat: pd.DataFrame, tyre_data_long: pd.DataFrame, base_mu: float = 1.0):
+    def __init__(
+        self,
+        tyre_data_lat: pd.DataFrame,
+        tyre_data_long: pd.DataFrame,
+        base_mu: float = 1.0,
+        clamp_peak_load_high: bool = False,
+    ):
         """
         Initialize lookup table tyre model.
         
@@ -122,14 +128,102 @@ class LookupTableTyreModel(BaseTyreModel):
         self.tyre_data_lat = tyre_data_lat
         self.tyre_data_long = tyre_data_long
         self.base_mu = float(base_mu)
+        self.clamp_peak_load_high = bool(clamp_peak_load_high)
         self._longitudinal_slip_data_is_ratio = True
         self._lat_shape = (self.B_LAT, self.C_LAT, self.E_LAT)
         self._long_shape = (self.B_LONG, self.C_LONG, self.E_LONG)
+        self._lat_slip_min_deg = np.nan
+        self._lat_slip_max_deg = np.nan
+        self._long_slip_min_ratio = np.nan
+        self._long_slip_max_ratio = np.nan
+        self._lat_load_min_N = np.nan
+        self._lat_load_max_N = np.nan
+        self._long_load_min_N = np.nan
+        self._long_load_max_N = np.nan
+        self._domain_diag = {
+            "lateral_calls": 0,
+            "longitudinal_calls": 0,
+            "combined_calls": 0,
+            "lateral_out_of_domain_slip": 0,
+            "lateral_out_of_domain_load": 0,
+            "longitudinal_out_of_domain_slip": 0,
+            "longitudinal_out_of_domain_load": 0,
+            "combined_out_of_domain_any": 0,
+            "clamped_high_load_lateral": 0,
+            "clamped_high_load_longitudinal": 0,
+        }
 
         # Build peak-vs-load interpolators (used by Pacejka D = peak)
         self._build_peak_interps()
         self._detect_longitudinal_slip_units()
+        self._initialize_validity_domains()
         self._fit_magic_formula_shapes()
+
+    def reset_domain_diagnostics(self):
+        for key in self._domain_diag:
+            self._domain_diag[key] = 0
+
+    def get_domain_diagnostics(self) -> Dict[str, float]:
+        diag = dict(self._domain_diag)
+        diag["lateral_valid_slip_range_deg"] = [
+            None if not np.isfinite(self._lat_slip_min_deg) else float(self._lat_slip_min_deg),
+            None if not np.isfinite(self._lat_slip_max_deg) else float(self._lat_slip_max_deg),
+        ]
+        diag["longitudinal_valid_slip_ratio_range"] = [
+            None if not np.isfinite(self._long_slip_min_ratio) else float(self._long_slip_min_ratio),
+            None if not np.isfinite(self._long_slip_max_ratio) else float(self._long_slip_max_ratio),
+        ]
+        diag["lateral_valid_load_range_N"] = [
+            None if not np.isfinite(self._lat_load_min_N) else float(self._lat_load_min_N),
+            None if not np.isfinite(self._lat_load_max_N) else float(self._lat_load_max_N),
+        ]
+        diag["longitudinal_valid_load_range_N"] = [
+            None if not np.isfinite(self._long_load_min_N) else float(self._long_load_min_N),
+            None if not np.isfinite(self._long_load_max_N) else float(self._long_load_max_N),
+        ]
+        diag["out_of_domain_total"] = int(
+            diag["lateral_out_of_domain_slip"]
+            + diag["lateral_out_of_domain_load"]
+            + diag["longitudinal_out_of_domain_slip"]
+            + diag["longitudinal_out_of_domain_load"]
+            + diag["combined_out_of_domain_any"]
+        )
+        return diag
+
+    def _initialize_validity_domains(self):
+        lat = self.tyre_data_lat.dropna(subset=["Slip Angle [deg]"])
+        if not lat.empty:
+            lat_slip = pd.to_numeric(lat["Slip Angle [deg]"], errors="coerce").dropna().to_numpy(dtype=float)
+            if len(lat_slip):
+                self._lat_slip_min_deg = float(np.min(lat_slip))
+                self._lat_slip_max_deg = float(np.max(lat_slip))
+
+        if hasattr(self, "_lat_loads") and len(self._lat_loads):
+            self._lat_load_min_N = float(np.min(self._lat_loads))
+            self._lat_load_max_N = float(np.max(self._lat_loads))
+
+        lon = self.tyre_data_long.dropna(subset=["Slip Ratio [%]"])
+        if not lon.empty:
+            lon_slip_raw = pd.to_numeric(lon["Slip Ratio [%]"], errors="coerce").dropna().to_numpy(dtype=float)
+            if len(lon_slip_raw):
+                if self._longitudinal_slip_data_is_ratio:
+                    lon_kappa = lon_slip_raw
+                else:
+                    lon_kappa = lon_slip_raw / 100.0
+                self._long_slip_min_ratio = float(np.min(lon_kappa))
+                self._long_slip_max_ratio = float(np.max(lon_kappa))
+
+        if hasattr(self, "_long_loads") and len(self._long_loads):
+            self._long_load_min_N = float(np.min(self._long_loads))
+            self._long_load_max_N = float(np.max(self._long_loads))
+
+    @staticmethod
+    def _outside_range(value: float, lo: float, hi: float) -> bool:
+        if not np.isfinite(value):
+            return False
+        if not np.isfinite(lo) or not np.isfinite(hi):
+            return False
+        return (value < lo) or (value > hi)
 
     def _detect_longitudinal_slip_units(self):
         """
@@ -308,6 +402,35 @@ class LookupTableTyreModel(BaseTyreModel):
             return sr / 100.0
         return sr
 
+    def _resolve_peak_load_input(self, normal_load: float, channel: str) -> float:
+        """
+        Resolve effective normal load used for peak interpolation.
+
+        Baseline behavior keeps linear extrapolation. Variant behavior can clamp
+        high-load extrapolation to the highest measured TTC load.
+        """
+        load = float(normal_load)
+        if not self.clamp_peak_load_high:
+            return load
+
+        if channel == 'lateral':
+            loads = getattr(self, '_lat_loads', np.array([]))
+        else:
+            loads = getattr(self, '_long_loads', np.array([]))
+
+        if loads is None or len(loads) == 0:
+            return load
+
+        max_load = float(np.nanmax(loads))
+        if np.isfinite(max_load):
+            if load > max_load:
+                if channel == 'lateral':
+                    self._domain_diag["clamped_high_load_lateral"] += 1
+                else:
+                    self._domain_diag["clamped_high_load_longitudinal"] += 1
+            return min(load, max_load)
+        return load
+
     def _pacejka(self, slip: float, D: float, C: float, B: float, E: float) -> float:
         """
         Pacejka Magic Formula: F = D * sin(C * arctan(B*slip - E*(B*slip - arctan(B*slip))))
@@ -345,17 +468,26 @@ class LookupTableTyreModel(BaseTyreModel):
         if normal_load is None or self._lat_peak_interp is None:
             raise ValueError("Normal load is required and lateral peak interpolator must be available")
 
+        self._domain_diag["lateral_calls"] += 1
+        slip_deg = float(slip_angle)
+        load_val = float(normal_load)
+        if self._outside_range(slip_deg, self._lat_slip_min_deg, self._lat_slip_max_deg):
+            self._domain_diag["lateral_out_of_domain_slip"] += 1
+        if self._outside_range(load_val, self._lat_load_min_N, self._lat_load_max_N):
+            self._domain_diag["lateral_out_of_domain_load"] += 1
+
         if self._is_zero_or_negative_load(normal_load):
             return 0.0
         
         # Get peak force D by interpolating at the given normal load
-        D = max(0.0, float(self._lat_peak_interp(normal_load)) * self.base_mu)
+        interp_load = self._resolve_peak_load_input(normal_load, 'lateral')
+        D = max(0.0, float(self._lat_peak_interp(interp_load)) * self.base_mu)
         
         # Compute B as function of D
         B = self._compute_B_lateral(D)
         
         # Convert slip angle to radians
-        alpha = np.radians(float(slip_angle))
+        alpha = np.radians(slip_deg)
         
         # Apply Pacejka formula
         c_lat = float(self._lat_shape[1])
@@ -379,17 +511,25 @@ class LookupTableTyreModel(BaseTyreModel):
         if normal_load is None or self._long_peak_interp is None:
             raise ValueError("Normal load is required and longitudinal peak interpolator must be available")
 
+        self._domain_diag["longitudinal_calls"] += 1
+        load_val = float(normal_load)
+
         if self._is_zero_or_negative_load(normal_load):
             return 0.0
         
         # Get peak force D by interpolating at the given normal load
-        D = max(0.0, float(self._long_peak_interp(normal_load)) * self.base_mu)
+        interp_load = self._resolve_peak_load_input(normal_load, 'longitudinal')
+        D = max(0.0, float(self._long_peak_interp(interp_load)) * self.base_mu)
         
         # Compute B as function of D
         B = self._compute_B_longitudinal(D)
 
         # Convert caller input to dimensionless slip ratio (supports percent and ratio inputs)
         kappa = self._coerce_slip_ratio_to_kappa(slip_ratio)
+        if self._outside_range(kappa, self._long_slip_min_ratio, self._long_slip_max_ratio):
+            self._domain_diag["longitudinal_out_of_domain_slip"] += 1
+        if self._outside_range(load_val, self._long_load_min_N, self._long_load_max_N):
+            self._domain_diag["longitudinal_out_of_domain_load"] += 1
         
         # Apply Pacejka formula
         c_long = float(self._long_shape[1])
@@ -432,7 +572,17 @@ class LookupTableTyreModel(BaseTyreModel):
                         raise FileNotFoundError(f"Longitudinal tyre data file not found: {full_long}")
                     tyre_data_long = cls._parse_longitudinal_file(full_long)
 
-                return cls(tyre_data_lat, tyre_data_long, base_mu=config.get('base_mu', 1.0))
+                model_variant = str(config.get('model_variant', '')).strip().lower()
+                clamp_peak_load_high = bool(config.get('clamp_peak_load_high', False))
+                if model_variant in {'b2', 'tyre_peak_load_clamp', 'tyre_load_clamp'}:
+                    clamp_peak_load_high = True
+
+                return cls(
+                    tyre_data_lat,
+                    tyre_data_long,
+                    base_mu=config.get('base_mu', 1.0),
+                    clamp_peak_load_high=clamp_peak_load_high,
+                )
 
         except Exception as e:
             import logging
@@ -489,7 +639,17 @@ class LookupTableTyreModel(BaseTyreModel):
                 raise ValueError(f"Unsupported file format: {file_path}")
                 
             # Return the model
-            return cls(tyre_data_lat, tyre_data_long, base_mu=config.get('base_mu', 1.0))
+            model_variant = str(config.get('model_variant', '')).strip().lower()
+            clamp_peak_load_high = bool(config.get('clamp_peak_load_high', False))
+            if model_variant in {'b2', 'tyre_peak_load_clamp', 'tyre_load_clamp'}:
+                clamp_peak_load_high = True
+
+            return cls(
+                tyre_data_lat,
+                tyre_data_long,
+                base_mu=config.get('base_mu', 1.0),
+                clamp_peak_load_high=clamp_peak_load_high,
+            )
             
         except Exception as e:
             import logging
@@ -512,6 +672,17 @@ class LookupTableTyreModel(BaseTyreModel):
         if normal_load is None:
             raise ValueError("Normal load is required for combined forces calculation")
 
+        self._domain_diag["combined_calls"] += 1
+        combined_out = False
+        if self._outside_range(float(slip_angle), self._lat_slip_min_deg, self._lat_slip_max_deg):
+            combined_out = True
+        if self._outside_range(float(self._coerce_slip_ratio_to_kappa(slip_ratio)), self._long_slip_min_ratio, self._long_slip_max_ratio):
+            combined_out = True
+        if self._outside_range(float(normal_load), self._lat_load_min_N, self._lat_load_max_N) or self._outside_range(float(normal_load), self._long_load_min_N, self._long_load_max_N):
+            combined_out = True
+        if combined_out:
+            self._domain_diag["combined_out_of_domain_any"] += 1
+
         if self._is_zero_or_negative_load(normal_load):
             return (0.0, 0.0)
         
@@ -520,8 +691,10 @@ class LookupTableTyreModel(BaseTyreModel):
         fx_pure = self.get_longitudinal_force(slip_ratio, normal_load)
         
         # Get peak forces for friction circle limit
-        D_lat = max(0.0, (float(self._lat_peak_interp(normal_load)) * self.base_mu)) if self._lat_peak_interp else abs(fy_pure)
-        D_long = max(0.0, (float(self._long_peak_interp(normal_load)) * self.base_mu)) if self._long_peak_interp else abs(fx_pure)
+        lat_interp_load = self._resolve_peak_load_input(normal_load, 'lateral')
+        long_interp_load = self._resolve_peak_load_input(normal_load, 'longitudinal')
+        D_lat = max(0.0, (float(self._lat_peak_interp(lat_interp_load)) * self.base_mu)) if self._lat_peak_interp else abs(fy_pure)
+        D_long = max(0.0, (float(self._long_peak_interp(long_interp_load)) * self.base_mu)) if self._long_peak_interp else abs(fx_pure)
         
         # Combined force magnitude
         total_force = np.sqrt(fx_pure**2 + fy_pure**2)

@@ -12,6 +12,24 @@ def _get_model_variant(config):
     return str(variant).strip().lower()
 
 
+def _get_scenario_context(config):
+    scenario_cfg = config.get('scenario', {}) if isinstance(config, dict) else {}
+    name = str(scenario_cfg.get('name', 'baseline')).strip() or 'baseline'
+    try:
+        grip_scale = float(scenario_cfg.get('grip_scale', 1.0))
+    except (TypeError, ValueError):
+        grip_scale = 1.0
+    try:
+        air_density_scale = float(scenario_cfg.get('air_density_scale', 1.0))
+    except (TypeError, ValueError):
+        air_density_scale = 1.0
+    return {
+        'name': name,
+        'grip_scale': grip_scale,
+        'air_density_scale': air_density_scale,
+    }
+
+
 def _is_b1_variant(config):
     variant = _get_model_variant(config)
     return variant in {'b1', 'load_transfer', 'dynamic_normal_load'}
@@ -27,9 +45,118 @@ def _get_straight_speed_cap(config):
         return 200.0
 
 
-def _get_use_rollover_speed_cap(config):
+def _compute_rollover_speed_cap(curvature, vehicle):
+    if abs(curvature) < 1e-9:
+        return np.inf
+    g = 9.81
+    track = max(float(getattr(vehicle.params, 'front_track_width', 1.2)), 1e-6)
+    cog_z = max(float(getattr(vehicle.params, 'cog_z', 0.28)), 1e-6)
+    radius = 1.0 / abs(curvature)
+    return float(np.sqrt((track / (2.0 * cog_z)) * g * radius))
+
+
+def _compute_tyre_lateral_speed_cap(curvature, vehicle, normal_load_per_tyre, config):
+    """Estimate lateral speed cap from tyre lateral force envelope."""
+    if abs(curvature) < 1e-9:
+        return np.inf
+    try:
+        slip_angle_cap = float(config.get('solver', {}).get('tyre_lateral_cap_slip_angle_deg', 10.0))
+    except (TypeError, ValueError, AttributeError):
+        slip_angle_cap = 10.0
+
+    try:
+        mu_scale = float(vehicle.params.base_mu) / max(getattr(vehicle, 'base_mu_reference', 1.0), 1e-6)
+        fy_per_tyre = abs(vehicle.tyre_model.get_lateral_force(slip_angle_cap, normal_load=normal_load_per_tyre)) * mu_scale
+        a_lat_cap = (fy_per_tyre * 4.0) / max(float(vehicle.params.mass), 1e-6)
+        if a_lat_cap <= 0.0 or (not np.isfinite(a_lat_cap)):
+            return np.inf
+        return float(np.sqrt(a_lat_cap / abs(curvature)))
+    except Exception:
+        return np.inf
+
+
+def _compute_constrained_fallback_speed(curvature, base_mu, physical_cap_speed, previous_speed, config):
+    g = 9.81
+    if abs(curvature) > 1e-6:
+        v_mu = float(np.sqrt(max(base_mu, 0.0) * g / abs(curvature)))
+    else:
+        v_mu = float(physical_cap_speed)
+
     solver_cfg = config.get('solver', {}) if isinstance(config, dict) else {}
-    return bool(solver_cfg.get('use_rollover_speed_cap', True))
+    continuity_factor = float(solver_cfg.get('fallback_continuity_cap_factor', 1.08))
+    min_continuity_cap = float(solver_cfg.get('fallback_min_speed_cap_mps', 3.0))
+
+    if previous_speed is None or (not np.isfinite(previous_speed)):
+        continuity_cap = np.inf
+    else:
+        continuity_cap = max(min_continuity_cap, float(previous_speed) * continuity_factor)
+
+    return float(min(v_mu, float(physical_cap_speed), continuity_cap))
+
+
+def _build_retry_tiers(previous_solution, straight_speed_cap, rollover_cap):
+    """Build solve-attempt tiers from aggressive to conservative."""
+    base_cap = float(straight_speed_cap)
+    if np.isfinite(rollover_cap):
+        base_cap = min(base_cap, float(rollover_cap))
+
+    prev_speed = None
+    if isinstance(previous_solution, dict):
+        try:
+            prev_speed = float(previous_solution.get('v_car', np.nan))
+        except (TypeError, ValueError):
+            prev_speed = None
+    if prev_speed is not None and not np.isfinite(prev_speed):
+        prev_speed = None
+
+    tiers = [
+        {
+            'name': 'base',
+            'initial_guess': None,
+            'v_upper_bound_mps': base_cap,
+        }
+    ]
+
+    if previous_solution is not None:
+        warm_cap = base_cap
+        if prev_speed is not None:
+            warm_cap = min(base_cap, max(5.0, prev_speed * 1.20))
+        tiers.append(
+            {
+                'name': 'warm_start',
+                'initial_guess': {
+                    'a_steer': float(previous_solution.get('a_steer', 0.0)),
+                    'a_sideslip': float(previous_solution.get('a_sideslip', 0.0)),
+                },
+                'v_upper_bound_mps': warm_cap,
+            }
+        )
+
+    conservative_cap = base_cap * 0.90
+    if prev_speed is not None:
+        conservative_cap = min(conservative_cap, max(5.0, prev_speed * 0.95))
+    tiers.append(
+        {
+            'name': 'conservative_bound',
+            'initial_guess': previous_solution if isinstance(previous_solution, dict) else None,
+            'v_upper_bound_mps': max(5.0, conservative_cap),
+        }
+    )
+    return tiers
+
+
+def _split_aero_load_by_cp(vehicle, aero_total):
+    """Split total aero load between front and rear axles using aero CoP."""
+    L = max(float(getattr(vehicle.params, 'wheelbase', 1.6)), 1e-6)
+    cp = float(getattr(vehicle.params, 'aero_centre_of_pressure', L * 0.5))
+    cp_clamped = min(max(cp, 0.0), L)
+
+    # Static equilibrium about axles: front share decreases as CoP moves rearward.
+    rear_frac = cp_clamped / L
+    front_frac = 1.0 - rear_frac
+    aero_front = float(aero_total) * front_frac
+    aero_rear = float(aero_total) * rear_frac
+    return aero_front, aero_rear
 
 
 def _compute_normal_loads_for_longitudinal(vehicle, v_car, a_long, config):
@@ -46,6 +173,9 @@ def _compute_normal_loads_for_longitudinal(vehicle, v_car, a_long, config):
             'rear_per_tyre': base,
             'mean_per_tyre': base,
             'total_normal_load': base * 4.0,
+            'non_physical_event': False,
+            'front_per_tyre_raw': base,
+            'rear_per_tyre_raw': base,
         }
 
     m = vehicle.params.mass
@@ -59,13 +189,33 @@ def _compute_normal_loads_for_longitudinal(vehicle, v_car, a_long, config):
     f_down = max(0.0, vehicle.compute_downforce(v_car))
     total = m * g + f_down
 
-    front_axle = total * front_frac
-    rear_axle = total * rear_frac
+    static_front = (m * g) * front_frac
+    static_rear = (m * g) * rear_frac
+    aero_front, aero_rear = _split_aero_load_by_cp(vehicle, f_down)
+
+    front_axle = static_front + aero_front
+    rear_axle = static_rear + aero_rear
 
     # Positive longitudinal acceleration shifts load rearward.
     delta_long = (m * a_long * h) / L
-    front_axle -= delta_long
-    rear_axle += delta_long
+    # Bound transferable load so axle normals remain physically feasible.
+    min_axle_load = 0.05 * total
+    delta_min = -(rear_axle - min_axle_load)
+    delta_max = front_axle - min_axle_load
+    delta_long_bounded = float(np.clip(delta_long, delta_min, delta_max))
+    transfer_clamped = not np.isclose(delta_long_bounded, float(delta_long), rtol=0.0, atol=1e-12)
+
+    front_axle -= delta_long_bounded
+    rear_axle += delta_long_bounded
+
+    front_axle_raw = float(front_axle)
+    rear_axle_raw = float(rear_axle)
+    non_physical_event = (
+        (not np.isfinite(front_axle_raw))
+        or (not np.isfinite(rear_axle_raw))
+        or (front_axle_raw < 0.0)
+        or (rear_axle_raw < 0.0)
+    )
 
     # Clamp to keep solver numerically safe in extreme states.
     front_axle = max(0.0, front_axle)
@@ -76,19 +226,57 @@ def _compute_normal_loads_for_longitudinal(vehicle, v_car, a_long, config):
         'rear_per_tyre': rear_axle / 2.0,
         'mean_per_tyre': (front_axle + rear_axle) / 4.0,
         'total_normal_load': front_axle + rear_axle,
+        'non_physical_event': bool(non_physical_event),
+        'front_per_tyre_raw': front_axle_raw / 2.0,
+        'rear_per_tyre_raw': rear_axle_raw / 2.0,
+        'transfer_clamped': bool(transfer_clamped),
     }
 
 
-def _compute_corner_normal_load_per_tyre(vehicle, v_car, config):
-    """Cornering solve normal load proxy (baseline static, B1 includes aero load)."""
-    base = vehicle.compute_static_normal_load()
-    if not _is_b1_variant(config):
-        return base
+def _compute_total_force_caps(vehicle, front_load, rear_load, config, peak_slip_ratio):
+    """Compute pure-slip total longitudinal and lateral tyre force caps."""
+    solver_cfg = config.get('solver', {}) if isinstance(config, dict) else {}
+    lateral_cap_slip_angle = float(solver_cfg.get('lateral_combined_slip_angle_deg', 10.0))
 
-    m = vehicle.params.mass
-    g = 9.81
-    f_down = max(0.0, vehicle.compute_downforce(v_car))
-    return (m * g + f_down) / 4.0
+    mu_scale = float(vehicle.params.base_mu) / max(getattr(vehicle, 'base_mu_reference', 1.0), 1e-6)
+
+    # Longitudinal pure cap from front/rear tyres at requested peak slip ratio.
+    f_long_front = abs(vehicle.tyre_model.get_longitudinal_force(
+        slip_ratio=peak_slip_ratio,
+        normal_load=front_load,
+    ) * mu_scale) * 2.0
+    f_long_rear = abs(vehicle.tyre_model.get_longitudinal_force(
+        slip_ratio=peak_slip_ratio,
+        normal_load=rear_load,
+    ) * mu_scale) * 2.0
+    fx_cap_total = f_long_front + f_long_rear
+
+    # Lateral pure cap proxy using fixed representative slip angle.
+    f_lat_front = abs(vehicle.tyre_model.get_lateral_force(
+        slip_angle=lateral_cap_slip_angle,
+        normal_load=front_load,
+    ) * mu_scale) * 2.0
+    f_lat_rear = abs(vehicle.tyre_model.get_lateral_force(
+        slip_angle=lateral_cap_slip_angle,
+        normal_load=rear_load,
+    ) * mu_scale) * 2.0
+    fy_cap_total = f_lat_front + f_lat_rear
+
+    return float(fx_cap_total), float(fy_cap_total)
+
+
+def _longitudinal_budget_scale_from_lateral_demand(fy_demand_total, fy_cap_total):
+    """Friction-ellipse budget scale for longitudinal authority under lateral demand."""
+    if fy_cap_total <= 1e-9:
+        return 0.0
+    ratio = float(fy_demand_total) / float(fy_cap_total)
+    ratio = min(max(ratio, 0.0), 1.0)
+    return float(np.sqrt(max(0.0, 1.0 - ratio * ratio)))
+
+
+def _compute_corner_normal_load_state(vehicle, v_car, config):
+    """Cornering solve load state (front/rear per-tyre) at approximately steady longitudinal accel."""
+    return _compute_normal_loads_for_longitudinal(vehicle, v_car=v_car, a_long=0.0, config=config)
 
 def optimise_speed_at_points(track_points, vehicle, config):
     """
@@ -106,18 +294,60 @@ def optimise_speed_at_points(track_points, vehicle, config):
     solver_success = []
     fallback_used = []
     fallback_speed = []
+    retry_count = []
+    solve_method = []
+    physical_cap_speed = []
+    failure_reason = []
+    tier_failure_reasons = []
+    residual_lat_abs = []
+    residual_yaw_abs = []
+    residual_lat_rel = []
+    residual_yaw_rel = []
+    corner_front_normal_load_per_tyre = []
+    corner_rear_normal_load_per_tyre = []
+    corner_non_physical_normal_load = []
+    corner_transfer_clamped = []
     straight_speed_cap = _get_straight_speed_cap(config)
-    use_rollover_speed_cap = _get_use_rollover_speed_cap(config)
+    previous_solution = None
     for point in track_points:
         curvature = point.curvature
-        corner_load_per_tyre = _compute_corner_normal_load_per_tyre(vehicle, 20.0, config)
-        result = find_vehicle_state_at_point(
-            curvature,
-            vehicle,
-            normal_load_per_tyre=corner_load_per_tyre,
-            straight_line_speed_cap=straight_speed_cap,
-            use_rollover_speed_cap=use_rollover_speed_cap,
-        )
+        corner_load_state = _compute_corner_normal_load_state(vehicle, 20.0, config)
+        corner_load_front = float(corner_load_state['front_per_tyre'])
+        corner_load_rear = float(corner_load_state['rear_per_tyre'])
+        corner_load_mean = float(corner_load_state['mean_per_tyre'])
+        rollover_cap = _compute_rollover_speed_cap(curvature, vehicle)
+        tyre_lateral_cap = _compute_tyre_lateral_speed_cap(curvature, vehicle, corner_load_mean, config)
+        cap = float(straight_speed_cap)
+        if np.isfinite(rollover_cap):
+            cap = min(cap, float(rollover_cap))
+        if np.isfinite(tyre_lateral_cap):
+            cap = min(cap, float(tyre_lateral_cap))
+        cap = max(0.0, float(cap))
+        physical_cap_speed.append(float(cap))
+
+        tiers = _build_retry_tiers(previous_solution, straight_speed_cap, rollover_cap)
+        result = {'success': False, 'v_car': 0.0, 'a_steer': 0.0, 'a_sideslip': 0.0}
+        used_method = 'none'
+        attempts = 0
+        per_tier_fail_reasons = []
+        for tier in tiers:
+            attempts += 1
+            tier_result = find_vehicle_state_at_point(
+                curvature,
+                vehicle,
+                normal_load_front_per_tyre=corner_load_front,
+                normal_load_rear_per_tyre=corner_load_rear,
+                straight_line_speed_cap=straight_speed_cap,
+                initial_guess=tier.get('initial_guess'),
+                v_upper_bound_mps=tier.get('v_upper_bound_mps'),
+            )
+            if tier_result.get('success'):
+                result = tier_result
+                used_method = tier['name']
+                break
+            tier_reason = str(tier_result.get('failure_reason', 'unknown'))
+            per_tier_fail_reasons.append(f"{tier['name']}:{tier_reason}")
+
         base_mu = getattr(vehicle.params, 'base_mu')
         if result['success']:
             logger.info(f"Optimized v_car: {result['v_car']:.2f} m/s for curvature={curvature:.4f}")
@@ -125,24 +355,76 @@ def optimise_speed_at_points(track_points, vehicle, config):
             solver_success.append(True)
             fallback_used.append(False)
             fallback_speed.append(0.0)
+            retry_count.append(max(0, attempts - 1))
+            solve_method.append(used_method)
+            failure_reason.append('none')
+            tier_failure_reasons.append(';'.join(per_tier_fail_reasons))
+            residual_lat_abs.append(float(result.get('residual_lat_abs', np.nan)))
+            residual_yaw_abs.append(float(result.get('residual_yaw_abs', np.nan)))
+            residual_lat_rel.append(float(result.get('residual_lat_rel', np.nan)))
+            residual_yaw_rel.append(float(result.get('residual_yaw_rel', np.nan)))
+            corner_load_state = _compute_normal_loads_for_longitudinal(vehicle, float(result['v_car']), 0.0, config)
+            corner_front_normal_load_per_tyre.append(float(corner_load_state['front_per_tyre']))
+            corner_rear_normal_load_per_tyre.append(float(corner_load_state['rear_per_tyre']))
+            corner_non_physical_normal_load.append(bool(corner_load_state.get('non_physical_event', False)))
+            corner_transfer_clamped.append(bool(corner_load_state.get('transfer_clamped', False)))
+            previous_solution = {
+                'v_car': float(result['v_car']),
+                'a_steer': float(result['a_steer']),
+                'a_sideslip': float(result['a_sideslip']),
+            }
         else:
             logger.warning(f"Could not find equilibrium state for curvature={curvature:.4f}")
             logger.warning(f"This is point at coordinates x={point.x}, y={point.y}, z={point.z}")
-            g = 9.81
-            if abs(curvature) > 1e-6:
-                v_fallback = np.sqrt(base_mu * g / abs(curvature))
-            else:
-                v_fallback = 200.0
+            previous_speed = point_speeds[-1] if point_speeds else None
+            v_fallback = _compute_constrained_fallback_speed(
+                curvature=curvature,
+                base_mu=base_mu,
+                physical_cap_speed=cap,
+                previous_speed=previous_speed,
+                config=config,
+            )
             logger.warning(f"Fallback: using v_fallback={v_fallback:.2f} m/s based on base_mu={base_mu}")
             point_speeds.append(v_fallback)
             solver_success.append(False)
             fallback_used.append(True)
             fallback_speed.append(v_fallback)
+            retry_count.append(attempts)
+            solve_method.append('fallback')
+            if per_tier_fail_reasons:
+                final_reason = per_tier_fail_reasons[-1].split(':', 1)[-1]
+            else:
+                final_reason = str(result.get('failure_reason', 'unknown'))
+            failure_reason.append(final_reason)
+            tier_failure_reasons.append(';'.join(per_tier_fail_reasons))
+            residual_lat_abs.append(float(result.get('residual_lat_abs', np.nan)))
+            residual_yaw_abs.append(float(result.get('residual_yaw_abs', np.nan)))
+            residual_lat_rel.append(float(result.get('residual_lat_rel', np.nan)))
+            residual_yaw_rel.append(float(result.get('residual_yaw_rel', np.nan)))
+            corner_load_state = _compute_normal_loads_for_longitudinal(vehicle, float(v_fallback), 0.0, config)
+            corner_front_normal_load_per_tyre.append(float(corner_load_state['front_per_tyre']))
+            corner_rear_normal_load_per_tyre.append(float(corner_load_state['rear_per_tyre']))
+            corner_non_physical_normal_load.append(bool(corner_load_state.get('non_physical_event', False)))
+            corner_transfer_clamped.append(bool(corner_load_state.get('transfer_clamped', False)))
+            previous_solution = None
 
     diagnostics = {
         'corner_solver_success': solver_success,
         'corner_fallback_used': fallback_used,
         'corner_fallback_speed': fallback_speed,
+        'corner_retry_count': retry_count,
+        'corner_solve_method': solve_method,
+        'corner_physical_cap_speed': physical_cap_speed,
+        'corner_failure_reason': failure_reason,
+        'corner_tier_failure_reasons': tier_failure_reasons,
+        'corner_solver_lat_residual_abs': residual_lat_abs,
+        'corner_solver_yaw_residual_abs': residual_yaw_abs,
+        'corner_solver_lat_residual_rel': residual_lat_rel,
+        'corner_solver_yaw_residual_rel': residual_yaw_rel,
+        'corner_front_normal_load_per_tyre': corner_front_normal_load_per_tyre,
+        'corner_rear_normal_load_per_tyre': corner_rear_normal_load_per_tyre,
+        'corner_non_physical_normal_load_events': int(sum(1 for x in corner_non_physical_normal_load if x)),
+        'corner_normal_load_transfer_clamped_events': int(sum(1 for x in corner_transfer_clamped if x)),
     }
     return point_speeds, diagnostics
 
@@ -165,8 +447,14 @@ def forward_pass(track, vehicle, point_speeds, config):
     limiting_modes = ['initial'] * n_points
     powertrain_forces = [0.0] * n_points
     tyre_limit_forces = [0.0] * n_points
+    tyre_lateral_caps = [0.0] * n_points
+    combined_budget_scale = [1.0] * n_points
     net_long_forces = [0.0] * n_points
     normal_load_per_tyre = [vehicle.compute_static_normal_load()] * n_points
+    front_normal_load_per_tyre = [vehicle.compute_static_normal_load()] * n_points
+    rear_normal_load_per_tyre = [vehicle.compute_static_normal_load()] * n_points
+    non_physical_normal_load_flags = [False] * n_points
+    transfer_clamped_flags = [False] * n_points
     peak_slip_ratio = float(config.get('ab_testing', {}).get('peak_slip_ratio_accel', 12.0))
 
     for i in range(1, n_points):
@@ -193,18 +481,23 @@ def forward_pass(track, vehicle, point_speeds, config):
         front_load = load_state['front_per_tyre']
         rear_load = load_state['rear_per_tyre']
         normal_load_per_tyre[i] = load_state['mean_per_tyre']
+        front_normal_load_per_tyre[i] = float(front_load)
+        rear_normal_load_per_tyre[i] = float(rear_load)
+        non_physical_normal_load_flags[i] = bool(load_state.get('non_physical_event', False))
+        transfer_clamped_flags[i] = bool(load_state.get('transfer_clamped', False))
 
-        # Tyre-limited wheel force at fixed peak slip ratio with variant-aware normal load.
-        mu_scale = float(vehicle.params.base_mu) / max(getattr(vehicle, 'base_mu_reference', 1.0), 1e-6)
-        f_drive_front = vehicle.tyre_model.get_longitudinal_force(
-            slip_ratio=peak_slip_ratio,
-            normal_load=front_load
-        ) * mu_scale
-        f_drive_per_tyre = vehicle.tyre_model.get_longitudinal_force(
-            slip_ratio=peak_slip_ratio,
-            normal_load=rear_load
-        ) * mu_scale
-        f_traction_tyre_limit = abs(f_drive_front) * 2.0 + abs(f_drive_per_tyre) * 2.0
+        fx_cap_total, fy_cap_total = _compute_total_force_caps(
+            vehicle=vehicle,
+            front_load=front_load,
+            rear_load=rear_load,
+            config=config,
+            peak_slip_ratio=peak_slip_ratio,
+        )
+
+        curvature = abs(track.points[i].curvature)
+        fy_demand_total = vehicle.params.mass * (v_calc**2) * curvature
+        budget_scale = _longitudinal_budget_scale_from_lateral_demand(fy_demand_total, fy_cap_total)
+        f_traction_tyre_limit = fx_cap_total * budget_scale
 
         # Net longitudinal force after tyre slip limit and drag.
         f_traction = min(f_traction_powertrain, f_traction_tyre_limit)
@@ -213,6 +506,8 @@ def forward_pass(track, vehicle, point_speeds, config):
 
         powertrain_forces[i] = f_traction_powertrain
         tyre_limit_forces[i] = f_traction_tyre_limit
+        tyre_lateral_caps[i] = fy_cap_total
+        combined_budget_scale[i] = budget_scale
         net_long_forces[i] = f_x
         if f_traction_powertrain < f_traction_tyre_limit:
             limiting_modes[i] = 'power_limited'
@@ -233,8 +528,14 @@ def forward_pass(track, vehicle, point_speeds, config):
         'forward_limiting_mode': limiting_modes,
         'forward_powertrain_force': powertrain_forces,
         'forward_tyre_force_limit': tyre_limit_forces,
+        'forward_tyre_lateral_cap': tyre_lateral_caps,
+        'forward_combined_budget_scale': combined_budget_scale,
         'forward_net_long_force': net_long_forces,
         'forward_normal_load_per_tyre': normal_load_per_tyre,
+        'forward_front_normal_load_per_tyre': front_normal_load_per_tyre,
+        'forward_rear_normal_load_per_tyre': rear_normal_load_per_tyre,
+        'forward_non_physical_normal_load_events': int(sum(1 for x in non_physical_normal_load_flags if x)),
+        'forward_normal_load_transfer_clamped_events': int(sum(1 for x in transfer_clamped_flags if x)),
     }
     return speeds, diagnostics
 
@@ -258,7 +559,13 @@ def backward_pass(track, vehicle, point_speeds, config):
     limiting_modes = ['terminal'] * n_points
     brake_force_limits = [0.0] * n_points
     brake_decel_limits = [0.0] * n_points
+    brake_lateral_caps = [0.0] * n_points
+    brake_combined_budget_scale = [1.0] * n_points
     normal_load_per_tyre = [vehicle.compute_static_normal_load()] * n_points
+    front_normal_load_per_tyre = [vehicle.compute_static_normal_load()] * n_points
+    rear_normal_load_per_tyre = [vehicle.compute_static_normal_load()] * n_points
+    non_physical_normal_load_flags = [False] * n_points
+    transfer_clamped_flags = [False] * n_points
     peak_slip_ratio = float(config.get('ab_testing', {}).get('peak_slip_ratio_brake', 12.0))
 
     for i in range(n_points-2, -1, -1):
@@ -275,24 +582,29 @@ def backward_pass(track, vehicle, point_speeds, config):
         front_load = load_state['front_per_tyre']
         rear_load = load_state['rear_per_tyre']
         normal_load_per_tyre[i] = load_state['mean_per_tyre']
+        front_normal_load_per_tyre[i] = float(front_load)
+        rear_normal_load_per_tyre[i] = float(rear_load)
+        non_physical_normal_load_flags[i] = bool(load_state.get('non_physical_event', False))
+        transfer_clamped_flags[i] = bool(load_state.get('transfer_clamped', False))
 
-        mu_scale = float(vehicle.params.base_mu) / max(getattr(vehicle, 'base_mu_reference', 1.0), 1e-6)
-        f_brake_front = vehicle.tyre_model.get_longitudinal_force(
-            slip_ratio=-peak_slip_ratio,
-            normal_load=front_load
-        ) * mu_scale
-        f_brake_rear = vehicle.tyre_model.get_longitudinal_force(
-            slip_ratio=-peak_slip_ratio,
-            normal_load=rear_load
-        ) * mu_scale
-        f_brake_total = abs(f_brake_front) * 2 + abs(f_brake_rear) * 2
-
-        # Peak longitudinal deceleration available from tyres (m/s^2)
-        a_limit = f_brake_total / vehicle.params.mass
+        fx_cap_total, fy_cap_total = _compute_total_force_caps(
+            vehicle=vehicle,
+            front_load=front_load,
+            rear_load=rear_load,
+            config=config,
+            peak_slip_ratio=-peak_slip_ratio,
+        )
 
         # Lateral acceleration demanded at this point by the corner geometry (m/s^2)
         curvature = abs(track.points[i].curvature)
         a_lat = v_next**2 * curvature
+
+        fy_demand_total = vehicle.params.mass * a_lat
+        budget_scale = _longitudinal_budget_scale_from_lateral_demand(fy_demand_total, fy_cap_total)
+        f_brake_total = fx_cap_total * budget_scale
+
+        # Peak longitudinal deceleration available from tyres (m/s^2)
+        a_limit = f_brake_total / vehicle.params.mass
 
         # Friction circle: longitudinal budget is reduced by lateral demand.
         # a_long^2 + a_lat^2 <= a_limit^2  =>  a_long = sqrt(a_limit^2 - a_lat^2)
@@ -304,6 +616,8 @@ def backward_pass(track, vehicle, point_speeds, config):
         a_brake += f_drag / vehicle.params.mass
         brake_force_limits[i] = f_brake_total
         brake_decel_limits[i] = a_brake
+        brake_lateral_caps[i] = fy_cap_total
+        brake_combined_budget_scale[i] = budget_scale
         if a_lat_clamped >= a_limit * 0.99:
             limiting_modes[i] = 'lateral_saturated'
         else:
@@ -322,7 +636,13 @@ def backward_pass(track, vehicle, point_speeds, config):
         'backward_limiting_mode': limiting_modes,
         'backward_brake_force_limit': brake_force_limits,
         'backward_brake_decel_limit': brake_decel_limits,
+        'backward_tyre_lateral_cap': brake_lateral_caps,
+        'backward_combined_budget_scale': brake_combined_budget_scale,
         'backward_normal_load_per_tyre': normal_load_per_tyre,
+        'backward_front_normal_load_per_tyre': front_normal_load_per_tyre,
+        'backward_rear_normal_load_per_tyre': rear_normal_load_per_tyre,
+        'backward_non_physical_normal_load_events': int(sum(1 for x in non_physical_normal_load_flags if x)),
+        'backward_normal_load_transfer_clamped_events': int(sum(1 for x in transfer_clamped_flags if x)),
     }
     return speeds, diagnostics
 
@@ -331,6 +651,9 @@ def compute_speed_profile(track, vehicle, config):
     Compute final speed profile using forward and backward passes for all track points.
     Parallelises the optimisation of cornering speeds at each point.
     """
+    if hasattr(vehicle, 'tyre_model') and hasattr(vehicle.tyre_model, 'reset_domain_diagnostics'):
+        vehicle.tyre_model.reset_domain_diagnostics()
+
     # Pass 1: Find ultimate speeds possible given vehicle model
     point_speeds, corner_diag = optimise_speed_at_points(track.points, vehicle, config)
     # Pass 2: Forward pass propagating accel limits
@@ -345,5 +668,18 @@ def compute_speed_profile(track, vehicle, config):
         **forward_diag,
         **backward_diag,
         'model_variant': _get_model_variant(config),
+        'scenario': _get_scenario_context(config),
     }
+    diagnostics['normal_load_non_physical_events_total'] = int(
+        diagnostics.get('corner_non_physical_normal_load_events', 0)
+        + diagnostics.get('forward_non_physical_normal_load_events', 0)
+        + diagnostics.get('backward_non_physical_normal_load_events', 0)
+    )
+    diagnostics['normal_load_transfer_clamped_events_total'] = int(
+        diagnostics.get('corner_normal_load_transfer_clamped_events', 0)
+        + diagnostics.get('forward_normal_load_transfer_clamped_events', 0)
+        + diagnostics.get('backward_normal_load_transfer_clamped_events', 0)
+    )
+    if hasattr(vehicle, 'tyre_model') and hasattr(vehicle.tyre_model, 'get_domain_diagnostics'):
+        diagnostics['tyre_domain'] = vehicle.tyre_model.get_domain_diagnostics()
     return final_speeds, point_speeds, diagnostics
