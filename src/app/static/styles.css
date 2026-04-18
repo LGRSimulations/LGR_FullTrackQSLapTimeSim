@@ -37,7 +37,6 @@ body {
 .tab {
   background: #E8ECF0;
   border: 1px solid #A7AEB6;
-  border-bottom: 1px solid #A7AEB6;
   padding: 5px 14px;
   font-family: 'Courier New', Courier, monospace;
   font-size: 0.7rem;
@@ -109,6 +108,14 @@ input[type="number"] {
   outline: none;
 }
 input:focus { border-color: #006B5C; }
+input[type="text"]:hover,
+input[type="number"]:hover { background: #E8ECF0; }
+input[type="text"]:disabled,
+input[type="number"]:disabled {
+  background: #E8ECF0;
+  color: #A7AEB6;
+  cursor: not-allowed;
+}
 
 button {
   font-family: 'Courier New', Courier, monospace;
