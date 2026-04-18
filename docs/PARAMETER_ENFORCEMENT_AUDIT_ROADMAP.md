@@ -122,8 +122,8 @@ For each parameter, capture:
 | `cog_longitudinal_pos` | `vehicle.load_vehicle_parameters` | Static front/rear gravity load split in longitudinal and corner states | Shifts baseline front/rear normal loads and traction balance | No dedicated monotonic contract yet | PARTIAL |
 | `max_cog_z` | `vehicle.load_vehicle_parameters` | `estimate_effective_cog_z` feasibility margin | Lower threshold should tighten feasibility envelope | No dedicated gate with strict threshold assertion | PARTIAL |
 | `roll_stiffness` | `vehicle.load_vehicle_parameters` | Roll-angle computation and rollover margin checks | Higher stiffness reduces roll angle for fixed lateral load | Milestone A/B focused sensitivity channel | PARTIAL |
-| `suspension_stiffness` | `vehicle.load_vehicle_parameters` | Not wired into runtime equations yet | Should affect heave/roll response if active | No direct runtime enforcement test | GAP |
-| `damping_coefficient` | `vehicle.load_vehicle_parameters` | Not wired into runtime equations yet | Should affect transient damping if active | No direct runtime enforcement test | GAP |
+| `suspension_stiffness` | `vehicle.load_vehicle_parameters` | Deferred in current quasi-static solver architecture | Should affect heave/roll response in a transient-capable model | Deferred for production v1 scope | DEFERRED |
+| `damping_coefficient` | `vehicle.load_vehicle_parameters` | Deferred in current quasi-static solver architecture | Should affect transient damping in a transient-capable model | Deferred for production v1 scope | DEFERRED |
 | `max_roll_angle_deg` | `vehicle.load_vehicle_parameters` | `check_roll_constraint` and rollover feasibility checks | Lower threshold should reduce feasible lateral envelope | Milestone A/B focused sensitivity channel | PARTIAL |
 | `wheel_radius` | `vehicle.load_vehicle_parameters` | RPM conversion and wheel-torque-to-force conversion | Larger radius lowers wheel force and changes RPM mapping | `tests.test_parameter_enforcement_contracts` | OK |
 | `final_drive_ratio` | `vehicle.load_vehicle_parameters` | Wheel torque and RPM mapping (`compute_engine_rpm`, wheel torque path) | Higher ratio raises wheel torque and engine RPM at fixed speed | `tests.test_parameter_enforcement_contracts` | OK |
@@ -211,7 +211,7 @@ Checks:
 - If connected, directional checks are enforced by contracts.
 
 Note:
-- If any parameter is currently loaded but not physically used, mark as `GAP` and either wire into equations or remove from active tuning surface.
+- For production v1, transient-only parameters that are not representable in the current quasi-static architecture are marked `DEFERRED` with explicit rationale and removed from active tuning decisions.
 
 ---
 
@@ -250,7 +250,7 @@ The audit is complete when all conditions hold:
 
 ## Immediate Next Steps (Actionable)
 
-1. Close Phase 5 gaps by either wiring `suspension_stiffness` and `damping_coefficient` into runtime equations or marking them `DEFERRED` with explicit rationale.
+1. Keep `suspension_stiffness` and `damping_coefficient` as `DEFERRED` for production v1 and exclude them from active setup/tuning recommendations.
 2. Add direct monotonic contracts for geometry/load parameters currently `PARTIAL` (`wheelbase`, `cog_longitudinal_pos`, `max_cog_z`, track widths, roll stiffness).
 3. Re-run strict gate command and log outcomes for baseline plus at least one non-baseline scenario.
 4. Promote remaining `PARTIAL` rows to `OK` once dedicated contracts are merged and passing.
