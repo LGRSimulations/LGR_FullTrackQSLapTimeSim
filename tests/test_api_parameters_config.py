@@ -2,6 +2,8 @@ import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from app.services.lap_service import get_parameters, get_config
+from fastapi.testclient import TestClient
+from app.web import create_app
 
 
 def test_get_parameters_excludes_comments():
@@ -19,10 +21,6 @@ def test_get_config_has_expected_keys():
     assert "track" in data
     assert "powertrain" in data
     assert "tyre_model" in data
-
-
-from fastapi.testclient import TestClient
-from app.web import create_app
 
 
 def test_http_get_parameters():
