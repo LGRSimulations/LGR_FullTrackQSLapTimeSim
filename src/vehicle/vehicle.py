@@ -334,6 +334,43 @@ from vehicle.Tyres.baseTyre import create_tyre_model
 from .Powertrain.basePowertrain import create_powertrain_model
 import json
 import os
+
+
+def params_from_dict(data: dict) -> vehicle_parameters:
+    """
+    Create vehicle_parameters from a dictionary.
+
+    Args:
+        data: Dictionary with nested structure (general, aerodynamics, geometry, etc)
+
+    Returns:
+        vehicle_parameters object
+    """
+    return vehicle_parameters(
+        name=data['general']['name'],
+        mass=data['general']['mass'],
+        base_mu=data['general']['base_mu'],
+        frontal_area=data['aerodynamics']['frontal_area'],
+        drag_coefficient=data['aerodynamics']['drag_coefficient'],
+        downforce_coefficient=data['aerodynamics']['downforce_coefficient'],
+        aero_centre_of_pressure=data['aerodynamics']['aero_cp'],
+        wheelbase=data['geometry']['wheelbase'],
+        front_track_width=data['geometry']['front_track_width'],
+        rear_track_width=data['geometry']['rear_track_width'],
+        cog_z=data['geometry']['cog_z'],
+        cog_longitudinal_pos=data['geometry']['cog_longitudinal_pos'],
+        max_cog_z=data['geometry']['max_cog_z'],
+        wheel_radius=data['drivetrain']['wheel_radius'],
+        final_drive_ratio=data['drivetrain']['final_drive_ratio'],
+        gear_ratios=data['drivetrain']['gear_ratios'],
+        transmission_efficiency=data['drivetrain']['transmission_efficiency'],
+        roll_stiffness=data['vehicle_dynamics']['roll_stiffness'],
+        suspension_stiffness=data['vehicle_dynamics']['suspension_stiffness'],
+        damping_coefficient=data['vehicle_dynamics']['damping_coefficient'],
+        max_roll_angle_deg=data['vehicle_dynamics']['max_roll_angle_deg'],
+    )
+
+
 def load_vehicle_parameters(file_path: str) -> vehicle_parameters:
     """
     Load vehicle parameters from a JSON configuration file.
@@ -375,10 +412,11 @@ def load_vehicle_parameters(file_path: str) -> vehicle_parameters:
 
 def create_vehicle(config) -> Vehicle:
     """Create vehicle from configuration file."""
-    # Get vehicle parameters file_path from config
-    params_filepath = config.get('vehicle_parameters', 'parameters.json')
-    # Load parameters from file
-    params = load_vehicle_parameters(params_filepath)
+    vp = config.get('vehicle_parameters', 'parameters.json')
+    if isinstance(vp, dict):
+        params = params_from_dict(vp)
+    else:
+        params = load_vehicle_parameters(vp)
     power_unit = create_powertrain_model(config.get('powertrain', {}))
     tyre_config = dict(config.get('tyre_model', {}))
     tyre_config.setdefault('base_mu', params.base_mu)
