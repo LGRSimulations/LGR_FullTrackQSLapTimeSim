@@ -96,6 +96,170 @@ function initVizPanel() {
   });
 }
 
+function storeTelemetry(data) {
+  const runId = `run_${Date.now()}`;
+  telemetryState.runs[runId] = {
+    meta: {
+      lap_time_s: data.lap_time_s,
+      max_abs_g_lat: data.max_abs_g_lat,
+      max_abs_g_long: data.max_abs_g_long,
+      track_file_path: data.track_file_path,
+    },
+    telemetry: data.telemetry,
+  };
+  telemetryState.activeRunId = runId;
+}
+
+function renderViz() {
+  const run = telemetryState.runs[telemetryState.activeRunId];
+  if (!run) return;
+  renderSummaryStrip(run.meta);
+  const activeTab = VIZ_TABS.find(t => t.key === telemetryState.activeTabKey);
+  if (activeTab) activeTab.render();
+}
+
+function renderSummaryStrip(meta) {
+  document.getElementById('stat-lap-time').textContent = meta.lap_time_s.toFixed(2);
+  document.getElementById('stat-max-lat-g').textContent = meta.max_abs_g_lat.toFixed(2);
+  document.getElementById('stat-max-long-g').textContent = meta.max_abs_g_long.toFixed(2);
+  const trackName = meta.track_file_path.split('/').pop().replace(/\.[^.]+$/, '');
+  document.getElementById('stat-track').textContent = trackName;
+  const status = document.getElementById('run-status');
+  status.textContent = 'RUN OK';
+  status.className = 'run-status ok';
+  document.getElementById('csvDownloadBtn').disabled = false;
+}
+
+function renderTelemetryTab() {
+  const run = telemetryState.runs[telemetryState.activeRunId];
+  if (!run) return;
+
+  const area = document.getElementById('vizChartArea');
+  area.innerHTML = '';
+
+  Object.keys(_chartInstances).forEach(k => {
+    if (_chartInstances[k]) {
+      _chartInstances[k].destroy();
+      delete _chartInstances[k];
+    }
+  });
+
+  const { telemetry } = run;
+
+  telemetryState.activePanes.forEach(key => {
+    const ch = CHANNEL_REGISTRY[key];
+    if (!ch) return;
+
+    const pane = document.createElement('div');
+    pane.className = `chart-pane ${ch.flex === 2 ? 'chart-pane--lg' : 'chart-pane--sm'}`;
+    pane.id = `pane-${key}`;
+
+    const header = document.createElement('div');
+    header.className = 'chart-pane-header';
+    header.style.borderLeft = `3px solid ${ch.color}`;
+    header.innerHTML =
+      `<span class="chart-pane-title" style="color:${ch.color}">${ch.label}</span>` +
+      `<span class="chart-pane-unit">${ch.unit}</span>`;
+
+    const body = document.createElement('div');
+    body.className = 'chart-pane-body';
+
+    const canvas = document.createElement('canvas');
+    canvas.id = `chart-${key}`;
+    body.appendChild(canvas);
+
+    pane.appendChild(header);
+    pane.appendChild(body);
+    area.appendChild(pane);
+
+    _chartInstances[key] = new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels: telemetry.distances_m,
+        datasets: [{
+          data: telemetry[key],
+          borderColor: ch.color,
+          borderWidth: 1.5,
+          pointRadius: 0,
+          fill: false,
+          tension: 0,
+        }],
+      },
+      options: {
+        animation: false,
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: {
+            type: 'linear',
+            grid: { color: '#E8ECF0' },
+            ticks: { color: '#A7AEB6', font: { size: 9 }, maxTicksLimit: 8 },
+            title: { display: true, text: 'Distance (m)', color: '#A7AEB6', font: { size: 9 } },
+          },
+          y: {
+            grid: { color: '#E8ECF0' },
+            ticks: { color: '#A7AEB6', font: { size: 9 }, maxTicksLimit: 5 },
+          },
+        },
+      },
+    });
+  });
+}
+
+function renderGGTab() {
+  const run = telemetryState.runs[telemetryState.activeRunId];
+  if (!run) return;
+
+  const area = document.getElementById('vizChartArea');
+  area.innerHTML = '';
+
+  if (_chartInstances['gg']) {
+    _chartInstances['gg'].destroy();
+    delete _chartInstances['gg'];
+  }
+
+  const { g_lat, g_long } = run.telemetry;
+
+  const container = document.createElement('div');
+  container.className = 'gg-chart-container';
+  const canvas = document.createElement('canvas');
+  canvas.id = 'chart-gg';
+  container.appendChild(canvas);
+  area.appendChild(container);
+
+  _chartInstances['gg'] = new Chart(canvas, {
+    type: 'scatter',
+    data: {
+      datasets: [{
+        data: g_lat.map((lat, i) => ({ x: lat, y: g_long[i] })),
+        borderColor: '#4e9af1',
+        backgroundColor: 'rgba(78,154,241,0.35)',
+        pointRadius: 2,
+        pointHoverRadius: 3,
+      }],
+    },
+    options: {
+      animation: false,
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: {
+          title: { display: true, text: 'Lat G', color: '#A7AEB6', font: { size: 10 } },
+          grid: { color: '#E8ECF0' },
+          ticks: { color: '#A7AEB6', font: { size: 9 } },
+        },
+        y: {
+          title: { display: true, text: 'Long G', color: '#A7AEB6', font: { size: 10 } },
+          grid: { color: '#E8ECF0' },
+          ticks: { color: '#A7AEB6', font: { size: 9 } },
+        },
+      },
+    },
+  });
+}
+
 function populateParameters(p) {
   document.getElementById('p-general-name').value = p.general?.name ?? '';
   document.getElementById('p-general-mass').value = p.general?.mass ?? '';
