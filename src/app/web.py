@@ -1,12 +1,14 @@
 from pathlib import Path
 
-from fastapi import FastAPI
+from cryptography.fernet import InvalidToken
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.schemas import LapRunRequest, LiftCoastRequest
+from app.schemas import LapRunRequest, LiftCoastRequest, ChatRequest
 from app.services.lap_service import metadata, run_lap
 from app.services.lift_coast_service import run_lift_coast
+from app.services.chat_service import chat
 
 
 def create_app() -> FastAPI:
@@ -47,5 +49,12 @@ def create_app() -> FastAPI:
             dt=req.dt,
             parameter_overrides=req.parameter_overrides,
         )
+
+    @app.post("/api/chat")
+    def chat_endpoint(req: ChatRequest) -> dict:
+        try:
+            return chat(question=req.question, history=req.history)
+        except (FileNotFoundError, InvalidToken):
+            raise HTTPException(status_code=503, detail="Chat is not configured.")
 
     return app

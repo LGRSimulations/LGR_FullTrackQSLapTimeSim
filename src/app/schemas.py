@@ -13,3 +13,18 @@ class LiftCoastRequest(BaseModel):
     energy_target_kwh: float = 0.5
     dt: float = 0.05
     parameter_overrides: dict[str, Any] = Field(default_factory=dict)
+
+
+class ChatSource(BaseModel):
+    file: str
+    section: str
+
+
+class ChatRequest(BaseModel):
+    question: str
+    history: list[dict] = Field(default_factory=list)
+
+
+class ChatResponse(BaseModel):
+    answer: str
+    sources: list[ChatSource]
