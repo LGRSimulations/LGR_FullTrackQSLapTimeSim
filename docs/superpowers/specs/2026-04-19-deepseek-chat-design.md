@@ -74,9 +74,13 @@ class ChatRequest(BaseModel):
 ### Response schema
 
 ```python
+class ChatSource(BaseModel):
+    file: str     # e.g. "Tyre-Model.md"
+    section: str  # e.g. "Where base_mu fits"
+
 class ChatResponse(BaseModel):
     answer: str
-    sources: list[str]  # section names cited
+    sources: list[ChatSource]
 ```
 
 ### Retrieval chain
@@ -142,7 +146,9 @@ The panel does not close when the user switches tabs. It closes only when the us
 
 ### Message thread
 
-User messages right-aligned, assistant messages left-aligned. Each assistant message has a `sources` row below it showing the cited section names as small grey pills. If no sections were retrieved, the sources row is hidden.
+User messages right-aligned, assistant messages left-aligned. Each assistant message has a `sources` row below it showing the cited section names as small clickable pills. Clicking a pill closes the chat panel, switches to the Lesson Guide tab, and loads the lesson file that contains that section. If no sections were retrieved, the sources row is hidden.
+
+The `sources` list returned by the backend includes the filename (e.g. `Tyre-Model.md`) so the frontend can match it against the `.lesson-item[data-src]` attributes already in the sidebar to trigger the correct lesson load.
 
 ### Conversation history
 
