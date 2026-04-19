@@ -31,6 +31,8 @@
 
         <div class="panel inputs-panel">
 
+          <button id="runLapBtn">Run Simulation</button>
+
           <div class="inner-tab-bar">
             <button class="inner-tab active" data-inner-tab="params-tab">Parameters</button>
             <button class="inner-tab" data-inner-tab="config-tab">Config</button>
@@ -158,15 +160,47 @@
 
           </div>
 
-          <button id="runLapBtn">Run Simulation</button>
         </div>
 
-        <div class="panel output-panel">
-          <div class="panel-label">Output</div>
-          <pre id="lapOutput"></pre>
-          <div class="meta-row">
-            <span class="scope-text" id="scope"></span>
+        <div class="viz-panel">
+
+          <div class="summary-strip">
+            <div class="stat-item">
+              <span class="stat-label">Lap Time</span>
+              <span class="stat-value" id="stat-lap-time">--</span>
+              <span class="stat-unit">s</span>
+            </div>
+            <div class="stat-divider"></div>
+            <div class="stat-item">
+              <span class="stat-label">Max Lat G</span>
+              <span class="stat-value" id="stat-max-lat-g">--</span>
+              <span class="stat-unit">g</span>
+            </div>
+            <div class="stat-divider"></div>
+            <div class="stat-item">
+              <span class="stat-label">Max Long G</span>
+              <span class="stat-value" id="stat-max-long-g">--</span>
+              <span class="stat-unit">g</span>
+            </div>
+            <div class="stat-divider"></div>
+            <div class="stat-item">
+              <span class="stat-label">Track</span>
+              <span class="stat-value stat-value--sm" id="stat-track">--</span>
+            </div>
+            <span id="run-status" class="run-status"></span>
+            <button id="csvDownloadBtn" class="csv-btn" disabled>Download CSV</button>
           </div>
+
+          <div id="runError" class="run-error" style="display:none"></div>
+
+          <div class="chart-workspace">
+            <div class="channel-list" id="channelList"></div>
+            <div class="chart-area">
+              <div class="viz-tab-bar" id="vizTabBar"></div>
+              <div id="vizChartArea" class="viz-chart-area"></div>
+            </div>
+          </div>
+
         </div>
 
       </div>
@@ -231,6 +265,7 @@
   <link rel="stylesheet" href="/static/katex/katex.min.css" />
   <script src="/static/marked.min.js"></script>
   <script src="/static/katex/katex.min.js"></script>
+  <script src="/static/chart.umd.min.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>
