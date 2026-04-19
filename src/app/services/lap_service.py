@@ -1,8 +1,7 @@
 import copy
 import json
-from pathlib import Path
 
-from app.paths import config_path, resolve_track_path
+from app.paths import config_path, parameters_path, resolve_track_path
 
 
 def _load_base_config() -> dict:
@@ -10,36 +9,38 @@ def _load_base_config() -> dict:
         return json.load(f)
 
 
-def _apply_aliases(overrides: dict) -> dict:
-    alias_map = {
-        "aero_cp": "aero_centre_of_pressure",
-    }
-    fixed = {}
-    for key, value in overrides.items():
-        fixed[alias_map.get(key, key)] = value
-    return fixed
+def _load_base_parameters() -> dict:
+    with open(parameters_path(), "r", encoding="utf-8") as f:
+        data = json.load(f)
+    data.pop("_comments", None)
+    return data
 
 
-def run_lap(parameter_overrides: dict | None = None, track_file_path: str | None = None) -> dict:
-    # Local imports keep startup light and avoid importing heavy libs for metadata endpoints.
+def get_parameters() -> dict:
+    return _load_base_parameters()
+
+
+def get_config() -> dict:
+    return _load_base_config()
+
+
+def run_lap(parameters: dict | None = None, config: dict | None = None) -> dict:
     from simulator.simulator import run_lap_time_simulation
     from track.track import load_track
     from vehicle.vehicle import create_vehicle
 
-    cfg = _load_base_config()
-    cfg = copy.deepcopy(cfg)
-
-    if track_file_path:
-        cfg.setdefault("track", {})["file_path"] = resolve_track_path(track_file_path)
+    if config is None:
+        cfg = copy.deepcopy(_load_base_config())
     else:
-        cfg.setdefault("track", {})["file_path"] = resolve_track_path(cfg["track"]["file_path"])
+        cfg = copy.deepcopy(config)
+
+    if parameters is not None:
+        cfg["vehicle_parameters"] = parameters
+
+    track_file_path = cfg.get("track", {}).get("file_path", "datasets/tracks/FSUK.txt")
+    cfg.setdefault("track", {})["file_path"] = resolve_track_path(track_file_path)
 
     vehicle = create_vehicle(cfg)
-
-    for key, value in _apply_aliases(parameter_overrides or {}).items():
-        if hasattr(vehicle.params, key):
-            setattr(vehicle.params, key, value)
-
     track = load_track(cfg["track"]["file_path"], cfg.get("debug_mode", False))
     result = run_lap_time_simulation(track, vehicle, cfg, display=False)
 
@@ -61,9 +62,7 @@ def run_lap(parameter_overrides: dict | None = None, track_file_path: str | None
 
 def metadata() -> dict:
     cfg = _load_base_config()
-    params_file = Path(config_path()).with_name("parameters.json")
-    with open(params_file, "r", encoding="utf-8") as f:
-        params_json = json.load(f)
+    params_json = _load_base_parameters()
 
     return {
         "app_name": "LGR Sim Workbench",
