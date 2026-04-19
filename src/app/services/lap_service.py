@@ -49,8 +49,13 @@ def run_lap(parameters: dict | None = None, config: dict | None = None) -> dict:
     track = load_track(cfg["track"]["file_path"], cfg.get("debug_mode", False))
     result = run_lap_time_simulation(track, vehicle, cfg, display=False)
 
-    max_abs_g_lat = max([abs(float(g)) for g in result.g_lat_channel], default=0.0)
-    max_abs_g_long = max([abs(float(g)) for g in result.g_long_channel], default=0.0)
+    distances_m = [float(p.distance) for p in track.points]
+    speeds_kmh = [float(s) * 3.6 for s in result.final_speeds]
+    g_lat = [0.0] + [float(g) for g in result.g_lat_channel]
+    g_long = [0.0] + [float(g) for g in result.g_long_channel]
+
+    max_abs_g_lat = max((abs(g) for g in g_lat), default=0.0)
+    max_abs_g_long = max((abs(g) for g in g_long), default=0.0)
 
     return {
         "lap_time_s": float(result.lap_time),
@@ -61,6 +66,12 @@ def run_lap(parameters: dict | None = None, config: dict | None = None) -> dict:
         "diagnostics": {
             "fallback_rate": float(result.diagnostics.get("fallback_rate", 0.0)),
             "corner_fallback_count": int(sum(1 for x in result.diagnostics.get("corner_fallback_used", []) if x)),
+        },
+        "telemetry": {
+            "distances_m": distances_m,
+            "speeds_kmh": speeds_kmh,
+            "g_lat": g_lat,
+            "g_long": g_long,
         },
     }
 
