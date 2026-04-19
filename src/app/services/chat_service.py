@@ -103,6 +103,7 @@ def chat(question: str, history: list[dict]) -> dict:
         "Be concise and precise. Do not use em dashes or semicolons.\n\n"
         f"Reference notes:\n\n{context}"
     )
+    history = history[-16:]
     messages = [
         {"role": "system", "content": system},
         *history,

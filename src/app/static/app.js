@@ -246,7 +246,10 @@ function appendChatMessage(role, content, sources) {
 
 function navigateToLesson(file) {
   const item = document.querySelector(`.lesson-item[data-src="${file}"]`);
-  if (!item) return;
+  if (!item) {
+    showToast('This lesson is not yet available in the guide.');
+    return;
+  }
   toggleChatPanel(false);
   const lessonsTab = document.querySelector('.tab[data-tab="lessons"]');
   if (lessonsTab) lessonsTab.click();
