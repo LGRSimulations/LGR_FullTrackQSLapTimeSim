@@ -174,6 +174,9 @@ Examples
 
 These are deliberate tradeoffs for speed and robustness in lap sweeps.
 
+## Next lesson
+- [Powertrain Model and Wheel Force Flow](Powertrain-Model.md)
+
 ## References
 - Pacejka, H. B. Tire and Vehicle Dynamics
 - Bakker, Nyborg, Pacejka 1987 SAE tyre modelling paper https://www.theoryinpracticeengineering.com/resources/tires/pacejka87.pdf

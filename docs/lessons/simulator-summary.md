@@ -177,8 +177,11 @@ Lap integration channels are then computed from this final speed trace.
 3. Check limiter mode mix in diagnostics
 4. Check model health flags for non-physical load or heavy clamping
 
+## Next lesson
+- [Vehicle Modelling Diagnostics and Trust Checks](Vehicle-Modelling-Diagnostics.md)
+
 ## Related lessons
-- [Track Geometry and Sampling for Vehicle Dynamics](Track-Geometry-and-Sampling.md)
 - [Vehicle Modelling Capstone](Vehicle-Modelling.md)
 - [Vehicle Modelling Diagnostics and Trust Checks](Vehicle-Modelling-Diagnostics.md)
+- [Track Geometry and Sampling for Vehicle Dynamics](Track-Geometry-and-Sampling.md)
 - [Lessons Index](README.md)

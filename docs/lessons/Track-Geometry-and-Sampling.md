@@ -1,7 +1,7 @@
 # Track Geometry and Sampling for Vehicle Dynamics
 
 ## Read this after
-Read [Simulator Basics](Simulator-Basics.md) first.
+Read [Vehicle Modelling Diagnostics and Trust Checks](Vehicle-Modelling-Diagnostics.md) first.
 
 ## Goal
 By the end, you should know
@@ -104,8 +104,12 @@ Code path for integration channels
 This page explains geometry and sampling effects only.
 It does not include full filtering or advanced track reconstruction methods.
 
+## Next lesson
+- [Lessons Index](README.md)
+
 ## Related lessons
 - [Simulator Basics](Simulator-Basics.md)
+- [Simulator Summary and Core Solver](simulator-summary.md)
 - [Vehicle Modelling Capstone](Vehicle-Modelling.md)
 - [Vehicle Modelling Diagnostics and Trust Checks](Vehicle-Modelling-Diagnostics.md)
 - [Lessons Index](README.md)

@@ -152,9 +152,15 @@ This is a good reminder that aero setup is always a tradeoff problem.
 This page keeps the aero story simple.
 It does not cover full ride-height aero maps or transient aero effects.
 
+## Next lesson
+- [Vehicle Modelling Capstone](Vehicle-Modelling.md)
+
 ## Related lessons
 - [Simulator Basics](Simulator-Basics.md)
 - [Tyre Model Intro](Tyre-Model.md)
 - [Powertrain Model and Wheel Force Flow](Powertrain-Model.md)
 - [Vehicle Modelling Capstone](Vehicle-Modelling.md)
+- [Simulator Summary and Core Solver](simulator-summary.md)
+- [Vehicle Modelling Diagnostics and Trust Checks](Vehicle-Modelling-Diagnostics.md)
+- [Track Geometry and Sampling for Vehicle Dynamics](Track-Geometry-and-Sampling.md)
 - [Lessons Index](README.md)

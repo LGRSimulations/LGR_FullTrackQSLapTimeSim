@@ -1,7 +1,10 @@
 # Vehicle Modelling Diagnostics and Trust Checks
 
 ## Read this after
-Read [Vehicle Modelling Capstone](Vehicle-Modelling.md) first.
+Read these first
+
+- [Vehicle Modelling Capstone](Vehicle-Modelling.md)
+- [Simulator Summary and Core Solver](simulator-summary.md)
 
 ## Why this page exists
 This page helps you decide if a lap result is credible.
@@ -164,9 +167,12 @@ Current run channel range
 4. Make one subsystem change
 5. Re-run and compare limiter mix plus lap time together
 
+## Next lesson
+- [Track Geometry and Sampling for Vehicle Dynamics](Track-Geometry-and-Sampling.md)
+
 ## Related lessons
-- [Simulator Summary and Core Solver](simulator-summary.md)
 - [Vehicle Modelling Capstone](Vehicle-Modelling.md)
+- [Simulator Summary and Core Solver](simulator-summary.md)
 - [Track Geometry and Sampling for Vehicle Dynamics](Track-Geometry-and-Sampling.md)
 - [Aerodynamics Model Intro](Aero-Model.md)
 - [Tyre Model Deep Dive](Tyre-Model-Deep-Dive.md)

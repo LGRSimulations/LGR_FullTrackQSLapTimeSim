@@ -1,5 +1,8 @@
 # Powertrain Model and Wheel Force Flow
 
+## Read this after
+Read [Tyre Model Intro](Tyre-Model.md) first.
+
 ## Audience
 This note is for developers who need to understand how the simulator turns RPM and gearing into longitudinal force.
 
@@ -140,8 +143,15 @@ It does not currently model
 
 This tradeoff keeps runtime fast and stable for sweep-heavy lap studies.
 
+## Next lesson
+- [Aerodynamics Model Intro](Aero-Model.md)
+
 ## Related Lessons
 - [Simulator Basics](Simulator-Basics.md)
 - [Tyre Model Intro](Tyre-Model.md)
 - [Aerodynamics Model Intro](Aero-Model.md)
+- [Vehicle Modelling Capstone](Vehicle-Modelling.md)
+- [Simulator Summary and Core Solver](simulator-summary.md)
+- [Vehicle Modelling Diagnostics and Trust Checks](Vehicle-Modelling-Diagnostics.md)
+- [Track Geometry and Sampling for Vehicle Dynamics](Track-Geometry-and-Sampling.md)
 - [Lessons Index](README.md)

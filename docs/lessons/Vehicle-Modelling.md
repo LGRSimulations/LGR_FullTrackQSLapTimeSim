@@ -1,6 +1,6 @@
 # Vehicle Modelling Capstone
 
-## Before you start
+## Read this after
 Read [Aerodynamics Model Intro](Aero-Model.md) first.
 
 ## What you will learn
@@ -208,10 +208,16 @@ Code path
 - [tests/test_tyre_force_contracts.py](../../tests/test_tyre_force_contracts.py)
 - diagnostics returned by `run_lap_time_simulation`
 
-## Continue learning
+## Next lesson
+- [Simulator Summary and Core Solver](simulator-summary.md)
+
+## Related lessons
 - [Simulator Basics](Simulator-Basics.md)
 - [Tyre Model Intro](Tyre-Model.md)
-- [Tyre Model Deep Dive](Tyre-Model-Deep-Dive.md)
 - [Powertrain Model and Wheel Force Flow](Powertrain-Model.md)
 - [Aerodynamics Model Intro](Aero-Model.md)
+- [Simulator Summary and Core Solver](simulator-summary.md)
+- [Vehicle Modelling Diagnostics and Trust Checks](Vehicle-Modelling-Diagnostics.md)
+- [Track Geometry and Sampling for Vehicle Dynamics](Track-Geometry-and-Sampling.md)
+- [Tyre Model Deep Dive](Tyre-Model-Deep-Dive.md)
 - [Lessons Index](README.md)

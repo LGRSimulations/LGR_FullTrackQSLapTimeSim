@@ -148,8 +148,16 @@ Key runtime files
 This page stays intentionally basic.
 For equations, combined slip details, and model limits, read [Tyre Model Deep Dive](Tyre-Model-Deep-Dive.md).
 
+## Next lesson
+- [Powertrain Model and Wheel Force Flow](Powertrain-Model.md)
+
 ## Related lessons
 - [Simulator Basics](Simulator-Basics.md)
-- [Tyre Model Deep Dive](Tyre-Model-Deep-Dive.md)
 - [Powertrain Model and Wheel Force Flow](Powertrain-Model.md)
 - [Aerodynamics Model Intro](Aero-Model.md)
+- [Vehicle Modelling Capstone](Vehicle-Modelling.md)
+- [Simulator Summary and Core Solver](simulator-summary.md)
+- [Vehicle Modelling Diagnostics and Trust Checks](Vehicle-Modelling-Diagnostics.md)
+- [Track Geometry and Sampling for Vehicle Dynamics](Track-Geometry-and-Sampling.md)
+- [Tyre Model Deep Dive](Tyre-Model-Deep-Dive.md)
+- [Lessons Index](README.md)

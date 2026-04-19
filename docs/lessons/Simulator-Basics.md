@@ -108,9 +108,19 @@ How to use results well
 
 ## Suggested reading order
 1. [Tyre Model Intro](Tyre-Model.md)
-2. [Tyre Model Deep Dive](Tyre-Model-Deep-Dive.md)
-3. [Powertrain Model and Wheel Force Flow](Powertrain-Model.md)
-4. [Aerodynamics Model Intro](Aero-Model.md)
+2. [Powertrain Model and Wheel Force Flow](Powertrain-Model.md)
+3. [Aerodynamics Model Intro](Aero-Model.md)
+4. [Vehicle Modelling Capstone](Vehicle-Modelling.md)
+5. [Simulator Summary and Core Solver](simulator-summary.md)
+6. [Vehicle Modelling Diagnostics and Trust Checks](Vehicle-Modelling-Diagnostics.md)
+7. [Track Geometry and Sampling for Vehicle Dynamics](Track-Geometry-and-Sampling.md)
+
+Optional side path after Tyre Model Intro
+
+- [Tyre Model Deep Dive](Tyre-Model-Deep-Dive.md)
+
+## Next lesson
+- [Tyre Model Intro](Tyre-Model.md)
 
 ## Related references
 - [Parameter Enforcement Audit Roadmap](../PARAMETER_ENFORCEMENT_AUDIT_ROADMAP.md)
