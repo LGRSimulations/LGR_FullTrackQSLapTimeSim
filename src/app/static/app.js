@@ -44,7 +44,31 @@ async function runLap() {
   out.textContent = JSON.stringify(data, null, 2);
 }
 
+async function loadLesson(filename, title) {
+  const body = document.getElementById('lessonBody');
+  const label = document.getElementById('lessonTitle');
+  body.textContent = 'Loading...';
+  label.textContent = title;
+  const res = await fetch('/lessons/' + filename);
+  const md = await res.text();
+  body.innerHTML = marked.parse(md);
+}
+
+function initLessons() {
+  const items = document.querySelectorAll('.lesson-item');
+  items.forEach(item => {
+    item.addEventListener('click', () => {
+      items.forEach(i => i.classList.remove('active'));
+      item.classList.add('active');
+      loadLesson(item.dataset.src, item.textContent.trim());
+    });
+  });
+  const first = document.querySelector('.lesson-item');
+  if (first) loadLesson(first.dataset.src, first.textContent.trim());
+}
+
 document.getElementById('runLapBtn').addEventListener('click', runLap);
 
 initTabs();
+initLessons();
 loadMetadata();

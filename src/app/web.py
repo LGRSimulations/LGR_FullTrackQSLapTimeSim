@@ -13,7 +13,9 @@ def create_app() -> FastAPI:
     app = FastAPI(title="LGR Sim Workbench", version="0.1.0")
 
     static_root = Path(__file__).resolve().parent / "static"
+    lessons_root = Path(__file__).resolve().parents[2] / "docs" / "lessons"
     app.mount("/static", StaticFiles(directory=str(static_root)), name="static")
+    app.mount("/lessons", StaticFiles(directory=str(lessons_root)), name="lessons")
 
     @app.get("/")
     def index() -> FileResponse:

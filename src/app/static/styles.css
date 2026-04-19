@@ -215,3 +215,78 @@ pre#lapOutput {
   font-size: 0.8rem;
   color: #A7AEB6;
 }
+
+/* Lesson Guide */
+.lessons-layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 12px;
+  height: calc(100vh - 120px);
+}
+.lessons-sidebar {
+  background: #FFFFFF;
+  border: 1px solid #A7AEB6;
+  padding: 12px;
+  overflow-y: auto;
+}
+.lesson-list {
+  list-style: none;
+  margin-top: 8px;
+}
+.lesson-item {
+  padding: 6px 8px;
+  font-size: 0.75rem;
+  color: #101215;
+  cursor: pointer;
+  border-left: 2px solid transparent;
+}
+.lesson-item:hover { background: #E8ECF0; }
+.lesson-item.active {
+  border-left: 2px solid #C1122F;
+  color: #006B5C;
+  font-weight: bold;
+}
+.lessons-content {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+.lesson-body {
+  flex: 1;
+  font-size: 0.85rem;
+  line-height: 1.7;
+  color: #101215;
+  overflow-y: auto;
+}
+.lesson-body h1, .lesson-body h2, .lesson-body h3 {
+  font-family: 'Space Mono', 'Courier New', monospace;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: #101215;
+  margin: 1.2em 0 0.4em;
+}
+.lesson-body h1 { font-size: 0.95rem; border-bottom: 2px solid #006B5C; padding-bottom: 4px; }
+.lesson-body h2 { font-size: 0.85rem; border-bottom: 1px solid #E8ECF0; padding-bottom: 3px; }
+.lesson-body h3 { font-size: 0.8rem; color: #006B5C; }
+.lesson-body p { margin-bottom: 0.8em; }
+.lesson-body ul, .lesson-body ol { margin: 0.5em 0 0.8em 1.2em; }
+.lesson-body li { margin-bottom: 0.3em; }
+.lesson-body code {
+  background: #E8ECF0;
+  padding: 1px 5px;
+  font-size: 0.8rem;
+  border: 1px solid #A7AEB6;
+}
+.lesson-body pre {
+  background: #101215;
+  color: #A7AEB6;
+  padding: 10px;
+  overflow-x: auto;
+  margin: 0.8em 0;
+}
+.lesson-body pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.8rem;
+}

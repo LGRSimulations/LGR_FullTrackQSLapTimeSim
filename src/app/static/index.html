@@ -20,6 +20,7 @@
     <button class="tab" data-tab="powertrain">Powertrain</button>
     <button class="tab" data-tab="energy">Energy Management</button>
     <button class="tab" data-tab="validation">Validation</button>
+    <button class="tab" data-tab="lessons">Lesson Guide</button>
   </nav>
 
   <main>
@@ -78,8 +79,24 @@
       <p class="section-sub">In development.</p>
     </section>
 
+    <section id="lessons" class="tab-section">
+      <div class="lessons-layout">
+        <nav class="lessons-sidebar">
+          <div class="panel-label">Lessons</div>
+          <ul class="lesson-list" id="lessonList">
+            <li class="lesson-item active" data-src="Simulator-Basics.md">Simulator Basics</li>
+          </ul>
+        </nav>
+        <div class="panel lessons-content">
+          <div class="panel-label" id="lessonTitle">Simulator Basics</div>
+          <div class="lesson-body" id="lessonBody">Loading...</div>
+        </div>
+      </div>
+    </section>
+
   </main>
 
+  <script src="/static/marked.min.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>
