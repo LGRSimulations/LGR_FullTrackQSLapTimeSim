@@ -80,7 +80,7 @@ def chat(question: str, history: list[dict]) -> dict:
     )
 
     try:
-        cleaned = raw.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
+        cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip())
         selected = json.loads(cleaned)
         if not isinstance(selected, list):
             raise ValueError
