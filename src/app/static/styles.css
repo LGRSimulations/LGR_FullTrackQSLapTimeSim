@@ -296,3 +296,48 @@ pre#lapOutput {
   padding: 0;
   font-size: 0.8rem;
 }
+
+/* Lesson link types */
+.lesson-body a { text-decoration: none; }
+
+a.code-link {
+  color: #006B5C;
+  border-bottom: 1px dashed #006B5C;
+  font-family: 'Space Mono', 'Courier New', monospace;
+  font-size: 0.78rem;
+}
+a.code-link::after {
+  content: ' ↗';
+  font-size: 0.65rem;
+  opacity: 0.6;
+}
+a.code-link:hover { background: #E8ECF0; }
+
+a.md-link {
+  color: #C1122F;
+  border-bottom: 1px solid #C1122F;
+}
+a.md-link:hover { background: #FFF0F0; }
+
+/* Toast notification */
+#lgr-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(12px);
+  background: #101215;
+  color: #F4F6F8;
+  padding: 8px 16px;
+  font-size: 0.8rem;
+  border-left: 3px solid #C1122F;
+  opacity: 0;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  pointer-events: none;
+  z-index: 9999;
+  white-space: nowrap;
+  font-family: 'Inter', sans-serif;
+}
+#lgr-toast.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}

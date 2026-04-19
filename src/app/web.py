@@ -21,9 +21,15 @@ def create_app() -> FastAPI:
     def index() -> FileResponse:
         return FileResponse(static_root / "index.html")
 
+    workspace_root = Path(__file__).resolve().parents[2]
+
     @app.get("/api/health")
     def health() -> dict:
         return {"status": "ok"}
+
+    @app.get("/api/workspace")
+    def get_workspace() -> dict:
+        return {"root": str(workspace_root).replace("\\", "/")}
 
     @app.get("/api/metadata")
     def get_metadata() -> dict:
