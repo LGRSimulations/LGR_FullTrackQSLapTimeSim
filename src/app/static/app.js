@@ -11,10 +11,187 @@ function initTabs() {
   });
 }
 
+function initInnerTabs() {
+  document.querySelectorAll('.inner-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      const panel = tab.closest('.panel');
+      panel.querySelectorAll('.inner-tab').forEach(t => t.classList.remove('active'));
+      panel.querySelectorAll('.inner-tab-section').forEach(s => s.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById(tab.dataset.innerTab).classList.add('active');
+    });
+  });
+}
+
 function parseNumber(value) {
   if (value === null || value === undefined || value === '') return null;
   const num = Number(value);
   return Number.isFinite(num) ? num : null;
+}
+
+function populateParameters(p) {
+  document.getElementById('p-general-name').value = p.general?.name ?? '';
+  document.getElementById('p-general-mass').value = p.general?.mass ?? '';
+  document.getElementById('p-general-base_mu').value = p.general?.base_mu ?? '';
+  document.getElementById('p-aero-frontal_area').value = p.aerodynamics?.frontal_area ?? '';
+  document.getElementById('p-aero-drag_coefficient').value = p.aerodynamics?.drag_coefficient ?? '';
+  document.getElementById('p-aero-downforce_coefficient').value = p.aerodynamics?.downforce_coefficient ?? '';
+  document.getElementById('p-aero-aero_cp').value = p.aerodynamics?.aero_cp ?? '';
+  document.getElementById('p-geom-wheelbase').value = p.geometry?.wheelbase ?? '';
+  document.getElementById('p-geom-front_track_width').value = p.geometry?.front_track_width ?? '';
+  document.getElementById('p-geom-rear_track_width').value = p.geometry?.rear_track_width ?? '';
+  document.getElementById('p-geom-cog_z').value = p.geometry?.cog_z ?? '';
+  document.getElementById('p-geom-cog_longitudinal_pos').value = p.geometry?.cog_longitudinal_pos ?? '';
+  document.getElementById('p-geom-max_cog_z').value = p.geometry?.max_cog_z ?? '';
+  document.getElementById('p-vd-roll_stiffness').value = p.vehicle_dynamics?.roll_stiffness ?? '';
+  document.getElementById('p-vd-suspension_stiffness').value = p.vehicle_dynamics?.suspension_stiffness ?? '';
+  document.getElementById('p-vd-damping_coefficient').value = p.vehicle_dynamics?.damping_coefficient ?? '';
+  document.getElementById('p-vd-max_roll_angle_deg').value = p.vehicle_dynamics?.max_roll_angle_deg ?? '';
+  document.getElementById('p-dt-wheel_radius').value = p.drivetrain?.wheel_radius ?? '';
+  document.getElementById('p-dt-final_drive_ratio').value = p.drivetrain?.final_drive_ratio ?? '';
+  document.getElementById('p-dt-gear_ratios').value = (p.drivetrain?.gear_ratios ?? []).join(', ');
+  document.getElementById('p-dt-transmission_efficiency').value = p.drivetrain?.transmission_efficiency ?? '';
+}
+
+function populateConfig(c) {
+  document.getElementById('c-powertrain-path').value = c.powertrain?.powertrain ?? '';
+  document.getElementById('c-powertrain-type').value = c.powertrain?.type ?? '';
+  document.getElementById('c-track-file_path').value = c.track?.file_path ?? '';
+  document.getElementById('c-tyre-file_path_longit').value = c.tyre_model?.file_path_longit ?? '';
+  document.getElementById('c-tyre-file_path_lateral').value = c.tyre_model?.file_path_lateral ?? '';
+  document.getElementById('c-tyre-type').value = c.tyre_model?.type ?? '';
+  document.getElementById('c-sim-debug_mode').checked = c.debug_mode ?? false;
+  document.getElementById('c-sim-full_telemetry_mode').checked = c.full_telemetry_mode ?? true;
+  document.getElementById('c-ambient-air_density').value = c.ambient_conditions?.air_density ?? '';
+}
+
+async function loadParametersAndConfig() {
+  const [pRes, cRes] = await Promise.all([
+    fetch('/api/parameters'),
+    fetch('/api/config'),
+  ]);
+  const params = await pRes.json();
+  const cfg = await cRes.json();
+  populateParameters(params);
+  populateConfig(cfg);
+}
+
+function collectParameters() {
+  const errors = [];
+
+  function getFloat(id, label) {
+    const el = document.getElementById(id);
+    const val = parseFloat(el.value);
+    if (isNaN(val)) {
+      el.classList.add('field-error');
+      errors.push(`${label} must be a number`);
+    } else {
+      el.classList.remove('field-error');
+    }
+    return val;
+  }
+
+  function getString(id) {
+    const el = document.getElementById(id);
+    el.classList.remove('field-error');
+    return el.value.trim();
+  }
+
+  function getArray(id, label) {
+    const el = document.getElementById(id);
+    const parts = el.value.split(',').map(s => parseFloat(s.trim()));
+    if (parts.some(isNaN)) {
+      el.classList.add('field-error');
+      errors.push(`${label} must be comma-separated numbers`);
+    } else {
+      el.classList.remove('field-error');
+    }
+    return parts;
+  }
+
+  const params = {
+    general: {
+      name: getString('p-general-name'),
+      mass: getFloat('p-general-mass', 'Mass'),
+      base_mu: getFloat('p-general-base_mu', 'Base mu'),
+    },
+    aerodynamics: {
+      frontal_area: getFloat('p-aero-frontal_area', 'Frontal area'),
+      drag_coefficient: getFloat('p-aero-drag_coefficient', 'Drag coefficient'),
+      downforce_coefficient: getFloat('p-aero-downforce_coefficient', 'Downforce coefficient'),
+      aero_cp: getFloat('p-aero-aero_cp', 'Aero CoP'),
+    },
+    geometry: {
+      wheelbase: getFloat('p-geom-wheelbase', 'Wheelbase'),
+      front_track_width: getFloat('p-geom-front_track_width', 'Front track width'),
+      rear_track_width: getFloat('p-geom-rear_track_width', 'Rear track width'),
+      cog_z: getFloat('p-geom-cog_z', 'CoG Z'),
+      cog_longitudinal_pos: getFloat('p-geom-cog_longitudinal_pos', 'CoG longitudinal position'),
+      max_cog_z: getFloat('p-geom-max_cog_z', 'Max CoG Z'),
+    },
+    vehicle_dynamics: {
+      roll_stiffness: getFloat('p-vd-roll_stiffness', 'Roll stiffness'),
+      suspension_stiffness: getFloat('p-vd-suspension_stiffness', 'Suspension stiffness'),
+      damping_coefficient: getFloat('p-vd-damping_coefficient', 'Damping coefficient'),
+      max_roll_angle_deg: getFloat('p-vd-max_roll_angle_deg', 'Max roll angle'),
+    },
+    drivetrain: {
+      wheel_radius: getFloat('p-dt-wheel_radius', 'Wheel radius'),
+      final_drive_ratio: getFloat('p-dt-final_drive_ratio', 'Final drive ratio'),
+      gear_ratios: getArray('p-dt-gear_ratios', 'Gear ratios'),
+      transmission_efficiency: getFloat('p-dt-transmission_efficiency', 'Transmission efficiency'),
+    },
+  };
+
+  return { params, errors };
+}
+
+function collectConfig() {
+  const errors = [];
+
+  function getString(id) {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('field-error');
+    return el ? el.value.trim() : '';
+  }
+
+  function getFloat(id, label) {
+    const el = document.getElementById(id);
+    const val = parseFloat(el.value);
+    if (isNaN(val)) {
+      el.classList.add('field-error');
+      errors.push(`${label} must be a number`);
+    } else {
+      el.classList.remove('field-error');
+    }
+    return val;
+  }
+
+  function getBool(id) {
+    return document.getElementById(id).checked;
+  }
+
+  const cfg = {
+    powertrain: {
+      powertrain: getString('c-powertrain-path'),
+      type: getString('c-powertrain-type'),
+    },
+    track: {
+      file_path: getString('c-track-file_path'),
+    },
+    tyre_model: {
+      file_path_longit: getString('c-tyre-file_path_longit'),
+      file_path_lateral: getString('c-tyre-file_path_lateral'),
+      type: getString('c-tyre-type'),
+    },
+    debug_mode: getBool('c-sim-debug_mode'),
+    full_telemetry_mode: getBool('c-sim-full_telemetry_mode'),
+    ambient_conditions: {
+      air_density: getFloat('c-ambient-air_density', 'Air density'),
+    },
+  };
+
+  return { cfg, errors };
 }
 
 async function loadMetadata() {
@@ -24,21 +201,23 @@ async function loadMetadata() {
 }
 
 async function runLap() {
-  const trackPath = document.getElementById('trackPath').value.trim();
-  const mass = parseNumber(document.getElementById('massOverride').value);
-  const aeroCp = parseNumber(document.getElementById('aeroCpOverride').value);
-
-  const parameter_overrides = {};
-  if (mass !== null) parameter_overrides.mass = mass;
-  if (aeroCp !== null) parameter_overrides.aero_cp = aeroCp;
+  const { params, errors: paramErrors } = collectParameters();
+  const { cfg, errors: cfgErrors } = collectConfig();
+  const allErrors = [...paramErrors, ...cfgErrors];
 
   const out = document.getElementById('lapOutput');
+
+  if (allErrors.length > 0) {
+    out.textContent = 'Fix input errors before running.\n\n' + allErrors.join('\n');
+    return;
+  }
+
   out.textContent = 'Running...';
 
   const res = await fetch('/api/lap/run', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ parameter_overrides, track_file_path: trackPath || null }),
+    body: JSON.stringify({ parameters: params, config: cfg }),
   });
   const data = await res.json();
   out.textContent = JSON.stringify(data, null, 2);
@@ -316,8 +495,10 @@ document.getElementById('chatQuestion').addEventListener('keydown', e => {
 });
 
 initTabs();
+initInnerTabs();
 initLessons();
 loadMetadata();
+loadParametersAndConfig();
 positionChatPanel();
 toggleChatPanel(true);
 window.addEventListener('resize', positionChatPanel);
