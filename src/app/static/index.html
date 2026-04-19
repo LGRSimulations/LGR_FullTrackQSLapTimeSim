@@ -21,6 +21,7 @@
     <button class="tab" data-tab="energy">Energy Management</button>
     <button class="tab" data-tab="validation">Validation</button>
     <button class="tab" data-tab="lessons">Lesson Guide</button>
+    <button id="askBtn" class="ask-btn">Ask</button>
   </nav>
 
   <main>
@@ -98,6 +99,18 @@
     </section>
 
   </main>
+
+  <div id="chatPanel" class="chat-panel hidden">
+    <div class="chat-panel-header">
+      <span class="panel-label" style="margin-bottom:0">Lesson Assistant</span>
+      <button id="chatClose" class="chat-close-btn">Close</button>
+    </div>
+    <div class="chat-messages" id="chatMessages"></div>
+    <div class="chat-input-bar">
+      <input type="text" id="chatQuestion" placeholder="Ask about the simulator..." />
+      <button id="chatSubmit">Send</button>
+    </div>
+  </div>
 
   <link rel="stylesheet" href="/static/katex/katex.min.css" />
   <script src="/static/marked.min.js"></script>

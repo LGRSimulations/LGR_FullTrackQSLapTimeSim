@@ -198,10 +198,113 @@ function initLessons() {
   if (first) loadLesson(first.dataset.src, first.textContent.trim());
 }
 
+// ── Chat Panel ───────────────────────────────────────────────────────────────
+
+let chatHistory = [];
+
+function positionChatPanel() {
+  const tabBar = document.querySelector('.tab-bar');
+  const top = tabBar.getBoundingClientRect().bottom;
+  const panel = document.getElementById('chatPanel');
+  panel.style.top = top + 'px';
+  panel.style.height = `calc(100vh - ${top}px)`;
+}
+
+function toggleChatPanel(forceOpen) {
+  const panel = document.getElementById('chatPanel');
+  const btn = document.getElementById('askBtn');
+  const open = forceOpen !== undefined ? forceOpen : panel.classList.contains('hidden');
+  panel.classList.toggle('hidden', !open);
+  btn.classList.toggle('active', open);
+  if (open) document.getElementById('chatQuestion').focus();
+}
+
+function appendChatMessage(role, content, sources) {
+  const thread = document.getElementById('chatMessages');
+  const msg = document.createElement('div');
+  msg.className = `chat-msg ${role}`;
+  msg.textContent = content;
+
+  if (sources && sources.length > 0) {
+    const pillRow = document.createElement('div');
+    pillRow.className = 'chat-sources';
+    sources.forEach(src => {
+      const pill = document.createElement('span');
+      pill.className = 'chat-source-pill';
+      pill.textContent = src.section;
+      pill.title = src.file;
+      pill.addEventListener('click', () => navigateToLesson(src.file));
+      pillRow.appendChild(pill);
+    });
+    msg.appendChild(pillRow);
+  }
+
+  thread.appendChild(msg);
+  thread.scrollTop = thread.scrollHeight;
+  return msg;
+}
+
+function navigateToLesson(file) {
+  toggleChatPanel(false);
+  const lessonsTab = document.querySelector('.tab[data-tab="lessons"]');
+  if (lessonsTab) lessonsTab.click();
+  const item = document.querySelector(`.lesson-item[data-src="${file}"]`);
+  if (item) item.click();
+}
+
+async function sendChatMessage() {
+  const input = document.getElementById('chatQuestion');
+  const btn = document.getElementById('chatSubmit');
+  const question = input.value.trim();
+  if (!question) return;
+
+  input.value = '';
+  input.disabled = true;
+  btn.disabled = true;
+
+  appendChatMessage('user', question);
+  const loading = appendChatMessage('assistant', '...');
+
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question, history: chatHistory }),
+    });
+
+    loading.remove();
+
+    if (res.status === 503) {
+      appendChatMessage('assistant', 'Chat is not configured. Contact your distributor for a key file.');
+    } else if (!res.ok) {
+      appendChatMessage('assistant', 'Something went wrong. Try again.');
+    } else {
+      const data = await res.json();
+      appendChatMessage('assistant', data.answer, data.sources);
+      chatHistory.push({ role: 'user', content: question });
+      chatHistory.push({ role: 'assistant', content: data.answer });
+    }
+  } catch {
+    loading.remove();
+    appendChatMessage('assistant', 'Could not reach the server. Try again.');
+  } finally {
+    input.disabled = false;
+    btn.disabled = false;
+    input.focus();
+  }
+}
+
 // ── Boot ────────────────────────────────────────────────────────────────────
 
 document.getElementById('runLapBtn').addEventListener('click', runLap);
+document.getElementById('askBtn').addEventListener('click', () => toggleChatPanel());
+document.getElementById('chatClose').addEventListener('click', () => toggleChatPanel(false));
+document.getElementById('chatSubmit').addEventListener('click', sendChatMessage);
+document.getElementById('chatQuestion').addEventListener('keydown', e => {
+  if (e.key === 'Enter') sendChatMessage();
+});
 
 initTabs();
 initLessons();
 loadMetadata();
+positionChatPanel();
