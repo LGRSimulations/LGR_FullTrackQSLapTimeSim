@@ -1,16 +1,13 @@
 import json
 from pathlib import Path
 
-import pytest
-from cryptography.fernet import Fernet
-
-from app.services.chat_service import FERNET_SECRET, _decrypt_key, _load_index, _load_section_content
+from app.services.chat_service import _read_key, _load_index, _load_section_content
 
 
-def test_decrypt_key_roundtrip(tmp_path):
-    enc_path = tmp_path / "test.enc"
-    enc_path.write_bytes(Fernet(FERNET_SECRET).encrypt(b"sk-test-key-abc"))
-    assert _decrypt_key(enc_path) == "sk-test-key-abc"
+def test_read_key(tmp_path):
+    key_file = tmp_path / "deepseek_key"
+    key_file.write_text("sk-test-key-abc\n", encoding="utf-8")
+    assert _read_key(key_file) == "sk-test-key-abc"
 
 
 def test_load_index_returns_required_fields(tmp_path):

@@ -3,17 +3,15 @@ import re
 from pathlib import Path
 
 import httpx
-from cryptography.fernet import Fernet
 
 from app.paths import repo_root
 
-FERNET_SECRET = b"REMOVED"
 DEEPSEEK_URL = "https://api.deepseek.com/chat/completions"
 DEEPSEEK_MODEL = "deepseek-chat"
 
 
 def _key_path() -> Path:
-    return repo_root() / "config" / "deepseek_key.enc"
+    return repo_root() / "config" / "deepseek_key"
 
 
 def _index_path() -> Path:
@@ -24,9 +22,9 @@ def _lessons_dir() -> Path:
     return repo_root() / "docs" / "lessons"
 
 
-def _decrypt_key(key_path: Path | None = None) -> str:
+def _read_key(key_path: Path | None = None) -> str:
     path = key_path or _key_path()
-    return Fernet(FERNET_SECRET).decrypt(path.read_bytes()).decode()
+    return path.read_text(encoding="utf-8").strip()
 
 
 def _load_index(index_path: Path | None = None) -> list[dict]:
@@ -62,7 +60,7 @@ def _call_deepseek(messages: list[dict], api_key: str, max_tokens: int = 600) ->
 
 
 def chat(question: str, history: list[dict]) -> dict:
-    api_key = _decrypt_key()
+    api_key = _read_key()
     index = _load_index()
 
     index_lines = "\n".join(

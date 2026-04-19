@@ -1,21 +1,18 @@
+"""Write a DeepSeek API key to config/deepseek_key for the chat service."""
 import sys
 from pathlib import Path
 
-from cryptography.fernet import Fernet
-
-FERNET_SECRET = b"REMOVED"
+CONFIG_DIR = Path(__file__).resolve().parents[1] / "config"
+KEY_PATH = CONFIG_DIR / "deepseek_key"
 
 
 def main() -> None:
     if len(sys.argv) != 2:
         print("Usage: python tools/encrypt_api_key.py <deepseek-api-key>")
         sys.exit(1)
-    plain = sys.argv[1].strip().encode()
-    token = Fernet(FERNET_SECRET).encrypt(plain)
-    out = Path(__file__).resolve().parents[1] / "config" / "deepseek_key.enc"
-    out.parent.mkdir(exist_ok=True)
-    out.write_bytes(token)
-    print(f"Saved to {out}")
+    CONFIG_DIR.mkdir(exist_ok=True)
+    KEY_PATH.write_text(sys.argv[1].strip(), encoding="utf-8")
+    print(f"Saved to {KEY_PATH}")
 
 
 if __name__ == "__main__":

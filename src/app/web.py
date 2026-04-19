@@ -1,7 +1,6 @@
 from pathlib import Path
 
 import httpx
-from cryptography.fernet import InvalidToken
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -55,7 +54,7 @@ def create_app() -> FastAPI:
     def chat_endpoint(req: ChatRequest) -> ChatResponse:
         try:
             return chat(question=req.question, history=req.history)
-        except (FileNotFoundError, InvalidToken):
+        except FileNotFoundError:
             raise HTTPException(status_code=503, detail="Chat is not configured.")
         except httpx.HTTPError as exc:
             raise HTTPException(status_code=502, detail=str(exc))

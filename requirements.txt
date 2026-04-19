@@ -6,5 +6,4 @@ scipy
 fastapi
 uvicorn
 pyinstaller
-cryptography
 httpx
