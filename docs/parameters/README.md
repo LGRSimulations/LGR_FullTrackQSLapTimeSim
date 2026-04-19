@@ -7,6 +7,10 @@ Purpose: central index for parameter-level engineering notes.
 1. [Aero CoP](Aero-CoP.md)
 2. [Deferred Parameters (Production v1)](Deferred-Parameters.md)
 
+## Lessons
+
+Tyre model learning notes live in [docs/lessons](../lessons/README.md).
+
 ## Usage
 
 For each parameter page, document:
