@@ -17,8 +17,14 @@ def split_sections(text: str, filename: str) -> list[dict]:
     heading = None
     level = 0
     buf: list[str] = []
+    in_fence = False
 
     for line in text.splitlines():
+        if line.strip().startswith("```"):
+            in_fence = not in_fence
+        if in_fence:
+            buf.append(line)
+            continue
         m = re.match(r'^(#{1,3})\s+(.+)', line)
         if m:
             if heading:
@@ -79,7 +85,12 @@ def main() -> None:
         print(f"Processing {md_file.name}...")
         for sec in split_sections(md_file.read_text(encoding="utf-8"), md_file.name):
             print(f"  -> {sec['section']}")
-            summary = summarize(sec, api_key)
+            try:
+                summary = summarize(sec, api_key)
+            except httpx.HTTPError as exc:
+                OUT_PATH.write_text(json.dumps(entries, indent=2, ensure_ascii=False), encoding="utf-8")
+                print(f"\nAborted after {len(entries)} sections. Partial index saved to {OUT_PATH}")
+                raise SystemExit(1) from exc
             entries.append({
                 "file": sec["file"],
                 "section": sec["section"],
