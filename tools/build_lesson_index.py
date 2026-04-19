@@ -73,17 +73,30 @@ def summarize(section: dict, api_key: str) -> str:
 
 
 def main() -> None:
-    if len(sys.argv) != 2:
-        print("Usage: python tools/build_lesson_index.py <deepseek-api-key>")
+    args = sys.argv[1:]
+    resume = "--resume" in args
+    args = [a for a in args if a != "--resume"]
+    if len(args) != 1:
+        print("Usage: python tools/build_lesson_index.py [--resume] <deepseek-api-key>")
         sys.exit(1)
-    api_key = sys.argv[1]
+    api_key = args[0]
 
-    entries = []
+    already_indexed: set[tuple[str, str]] = set()
+    entries: list[dict] = []
+    if resume and OUT_PATH.exists():
+        existing = json.loads(OUT_PATH.read_text(encoding="utf-8"))
+        entries = existing
+        already_indexed = {(e["file"], e["section"]) for e in existing}
+        print(f"Resuming from existing index ({len(entries)} sections already indexed).")
+
     for md_file in sorted(LESSONS_DIR.glob("*.md")):
         if md_file.name in SKIP_FILES:
             continue
         print(f"Processing {md_file.name}...")
         for sec in split_sections(md_file.read_text(encoding="utf-8"), md_file.name):
+            if (sec["file"], sec["section"]) in already_indexed:
+                print(f"  -> {sec['section']} (skipped)")
+                continue
             print(f"  -> {sec['section']}")
             try:
                 summary = summarize(sec, api_key)
