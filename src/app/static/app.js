@@ -245,11 +245,12 @@ function appendChatMessage(role, content, sources) {
 }
 
 function navigateToLesson(file) {
+  const item = document.querySelector(`.lesson-item[data-src="${file}"]`);
+  if (!item) return;
   toggleChatPanel(false);
   const lessonsTab = document.querySelector('.tab[data-tab="lessons"]');
   if (lessonsTab) lessonsTab.click();
-  const item = document.querySelector(`.lesson-item[data-src="${file}"]`);
-  if (item) item.click();
+  item.click();
 }
 
 async function sendChatMessage() {
@@ -301,10 +302,11 @@ document.getElementById('askBtn').addEventListener('click', () => toggleChatPane
 document.getElementById('chatClose').addEventListener('click', () => toggleChatPanel(false));
 document.getElementById('chatSubmit').addEventListener('click', sendChatMessage);
 document.getElementById('chatQuestion').addEventListener('keydown', e => {
-  if (e.key === 'Enter') sendChatMessage();
+  if (e.key === 'Enter' && !e.target.disabled) sendChatMessage();
 });
 
 initTabs();
 initLessons();
 loadMetadata();
 positionChatPanel();
+window.addEventListener('resize', positionChatPanel);
