@@ -216,6 +216,7 @@ function toggleChatPanel(forceOpen) {
   const open = forceOpen !== undefined ? forceOpen : panel.classList.contains('hidden');
   panel.classList.toggle('hidden', !open);
   btn.classList.toggle('active', open);
+  btn.textContent = open ? 'Close' : 'Ask';
   if (open) document.getElementById('chatQuestion').focus();
 }
 
@@ -308,8 +309,7 @@ async function sendChatMessage() {
 // ── Boot ────────────────────────────────────────────────────────────────────
 
 document.getElementById('runLapBtn').addEventListener('click', runLap);
-document.getElementById('askBtn').addEventListener('click', () => toggleChatPanel(true));
-document.getElementById('chatClose').addEventListener('click', () => toggleChatPanel(false));
+document.getElementById('askBtn').addEventListener('click', () => toggleChatPanel());
 document.getElementById('chatSubmit').addEventListener('click', sendChatMessage);
 document.getElementById('chatQuestion').addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.target.disabled) sendChatMessage();
