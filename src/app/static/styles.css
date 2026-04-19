@@ -10,11 +10,17 @@
   font-weight: 700;
   font-style: normal;
 }
+@font-face {
+  font-family: 'Inter';
+  src: url('/static/fonts/Inter-Latin.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+}
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-  font-family: 'Space Mono', 'Courier New', monospace;
+  font-family: 'Inter', sans-serif;
   background: #F4F6F8;
   color: #101215;
 }
@@ -51,7 +57,7 @@ body {
   background: #E8ECF0;
   border: 1px solid #A7AEB6;
   padding: 5px 14px;
-  font-family: 'Space Mono', 'Courier New', monospace;
+  font-family: 'Inter', sans-serif;
   font-size: 0.7rem;
   letter-spacing: 1.5px;
   text-transform: uppercase;
@@ -113,8 +119,8 @@ input[type="text"],
 input[type="number"] {
   width: 100%;
   padding: 6px 8px;
-  font-family: 'Space Mono', 'Courier New', monospace;
-  font-size: 0.8rem;
+  font-family: 'Inter', sans-serif;
+  font-size: 0.85rem;
   background: #F4F6F8;
   border: 1px solid #A7AEB6;
   color: #101215;
@@ -131,9 +137,9 @@ input[type="number"]:disabled {
 }
 
 button {
-  font-family: 'Space Mono', 'Courier New', monospace;
+  font-family: 'Inter', sans-serif;
   font-size: 0.75rem;
-  letter-spacing: 1.5px;
+  letter-spacing: 1px;
   text-transform: uppercase;
   cursor: pointer;
   border: none;
