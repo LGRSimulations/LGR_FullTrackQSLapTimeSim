@@ -1,271 +1,154 @@
-# Tyre Model and Pacejka Flow
+# Tyre Model Intro
+
+## Read this after
+Start with [Simulator Basics](Simulator-Basics.md).
 
 ## Audience
-This note is for developers who need a low-level understanding of the tyre model.
+This note is for new readers.
 
 ## Goal
-Explain what first principles says about tyre force, what Magic Formula means in literature, and how this repository computes and applies tyre forces in code.
+By the end, you should know
 
-This page uses static diagram images so it renders in any Markdown viewer.
+- what the tyre model is trying to represent
+- what main inputs create tyre force
+- where `base_mu` and `wheel_radius` fit
+- how tyre force is used by the simulator
 
-## Quick Answer to the First-Principles Question
-Your statement is mostly correct, with one important extension.
+## One minute mental model
+The tyre model is the grip translator.
+It takes slip and normal load, then returns force at the contact patch.
 
-- At the contact patch, the tyre-road interaction is a distributed stress field over area.
-- The physically meaningful net output is the integrated resultant force and resultant moment.
-- In vehicle dynamics, we resolve that net force into components Fx, Fy, and Fz because the equations of motion are axis based.
-- Fx and Fy are not separate physical inventions. They are component views of the same physical resultant.
+Simple analogy
 
-So the right wording is
+- powertrain asks for force
+- tyre decides how much is physically possible
+- the solver moves the car using that allowed force
 
-- First principles gives a resultant force and moment from contact patch stresses.
-- Practical simulation resolves the resultant into Fx and Fy to compute vehicle motion.
+## Two key inputs you will see everywhere
 
-## First Principles View
-At contact patch level, the tyre transmits distributed tractions.
-If $A$ is contact patch area and $\mathbf{t}(x,y)$ is local traction vector, then
+### Slip angle
+Slip angle is the difference between
 
-$$
-\mathbf{F} = \int_A \mathbf{t}(x,y)\,dA
-$$
+- where the wheel is pointing
+- where the tyre is actually moving
 
-and the net moment about point $O$ is
+Small slip angle usually gives small lateral force.
+Larger slip angle usually gives more lateral force up to a peak, then it saturates.
 
-$$
-\mathbf{M}_O = \int_A \mathbf{r}(x,y) \times \mathbf{t}(x,y)\,dA
-$$
+![Fy vs slip angle predicted by the simulator tyre model](figures/tyre_model_intro/fy_vs_slip_angle_from_sim.png)
 
-For lap simulation, we usually need in-plane force components and their magnitude
+This plot comes from the current simulator tyre model at fixed normal load 900 N per tyre.
 
-$$
-F_{xy} = \sqrt{F_x^2 + F_y^2}
-$$
+### Slip ratio
+Slip ratio compares wheel circumferential speed and vehicle forward speed.
 
-This is why literature commonly reports tyre behavior in terms of $F_x(\kappa, \alpha, F_z, \gamma)$, $F_y(\kappa, \alpha, F_z, \gamma)$, and often $M_z$.
+- near zero means free rolling
+- positive usually means drive slip
+- negative usually means brake slip
 
-### Force Shape In One View
-![Tyre force shape flow](figures/tyre_force_shape_flow.png)
+As with slip angle, force grows first and then saturates.
 
-Text fallback
-```
-Slip input -> Pacejka style curve -> Tyre force output
-Normal load -> Load lookup table -> Peak force scale D -> Pacejka style curve
-```
+![Fx vs slip ratio predicted by the simulator tyre model](figures/tyre_model_intro/fx_vs_slip_ratio_from_sim.png)
 
-## Where Pacejka Fits in Literature
-The Magic Formula is an empirical or semi-empirical model.
-It is fit to measured tyre data rather than derived from full contact patch material mechanics.
+This plot also comes from the current simulator tyre model at fixed normal load 900 N per tyre.
+Script path
 
-That is standard practice in vehicle dynamics because it gives good fidelity per compute cost for handling and lap simulation.
+- [tools/analysis/generate_tyre_intro_figures.py](../../tools/analysis/generate_tyre_intro_figures.py)
 
-A common pure-slip form is
+## Start from real behaviour
+Tyre force does not grow forever.
+As slip increases, force rises, reaches a peak, then saturates.
 
-$$
-F(x) = D \sin\left(C \arctan\left(Bx - E\left(Bx - \arctan(Bx)\right)\right)\right)
-$$
+If this is your first tyre model, use this picture
 
-Where
+- slip is like dragging a rubber eraser across a desk
+- more mismatch gives more force first
+- after a point, extra mismatch gives less useful extra force
 
-- $x$ is slip input
-- $D$ is peak scale
-- $B$ is stiffness shaping
-- $C$ is curve shape
-- $E$ is peak shoulder curvature shaping
+This is why tyre models are nonlinear.
 
-In this repository, the model uses TTC-derived data to set load-sensitive peak scaling and fits global shape parameters for lateral and longitudinal channels.
+## Inputs and outputs in this simulator
+Main inputs
 
-### Curve Meaning
-![Tyre curve meaning](figures/tyre_curve_meaning.png)
+- slip angle for lateral force
+- slip ratio for longitudinal force
+- normal load per tyre
 
-Text fallback
-```
-Low slip -> Force rises quickly -> Near peak -> Force saturates -> Combined slip limit
-```
+Main outputs
 
-## Resultant Force and Component Forces
-The contact patch does produce one net force vector, and in-plane magnitude matters.
+- lateral force $F_y$
+- longitudinal force $F_x$
+- a combined limited force pair when demand is too high
 
-$$
-F_{resultant} = \sqrt{F_x^2 + F_y^2}
-$$
+Implementation path
 
-Vehicle models still use $F_x$ and $F_y$ explicitly because chassis equations require directional components for
+- [src/vehicle/Tyres/baseTyre.py](../../src/vehicle/Tyres/baseTyre.py)
 
-- force balance
-- yaw moment balance
-- acceleration integration
+## Why literature uses Pacejka style curves
+The model used here follows a Pacejka style Magic Formula approach.
+This is an empirical model family fit to measured tyre data.
 
-So both views are needed and both are physically valid.
+In beginner terms
 
-### Resultant View
-![Tyre resultant force vector](figures/tyre_resultant_force.png)
+- slip tells us where we are on the curve
+- load scales the force ceiling
+- shape terms control how sharp the rise and saturation look
 
-Text fallback
-```
-Pure Fx + Pure Fy -> Resultant force budget -> Combined slip scaling -> Final tyre force pair
-```
+## Where base_mu fits
+`base_mu` is a global tyre capability scale in this codebase.
 
-## Combined Slip in Literature vs This Model
-Literature uses several combined-slip approaches.
-Two common families are
+Analogy
 
-- friction circle or ellipse constraints
-- Magic Formula combined-slip weighting functions
+Think of `base_mu` as a grip volume knob for the same tyre curve family.
+Turn it up and the force ceiling rises.
+Turn it down and the force ceiling falls.
 
-This code uses a friction-circle style magnitude cap built from load-dependent pure-channel peaks.
+So
 
-In [src/vehicle/Tyres/baseTyre.py](../../src/vehicle/Tyres/baseTyre.py), the combined path computes
+- higher `base_mu` means more available tyre force
+- lower `base_mu` means less available tyre force
 
-$$
-F_{total} = \sqrt{F_x^2 + F_y^2}
-$$
+## Where wheel_radius fits and why loaded radius matters
+`wheel_radius` belongs to kinematics and powertrain conversion.
+It links wheel speed, engine speed, and torque to contact patch force.
 
-$$
-F_{cap} = 0.9 \cdot \sqrt{D_{lat}^2 + D_{long}^2}
-$$
+Literature slip kinematics use effective rolling radius.
+That is usually closer to loaded radius than free static geometric radius.
 
-If $F_{total} > F_{cap}$, both channels are scaled by
+Analogy
 
-$$
-scale = \frac{F_{cap}}{F_{total}}, \quad F_x' = scale\,F_x, \quad F_y' = scale\,F_y
-$$
+Think of a basketball with a person leaning on it.
+The catalog radius did not change, but rolling behaviour on the floor did change.
+Tyres behave similarly under load.
 
-This preserves force direction while enforcing a combined budget.
-It is a pragmatic approximation, not a full MF combined-slip law.
+That is why loaded effective radius is the healthier assumption for simulation.
 
-## Worked Example with Resultant Force
+## How tyre force is used in this simulator
+Tyre force is one part of the full chain.
 
-### Real-world intuition
-On corner exit, the tyre is asked for both lateral and drive force.
+1. Powertrain requests longitudinal force.
+2. Tyre model limits force based on slip and load.
+3. Lateral demand consumes part of combined grip budget.
+4. Drag reduces net longitudinal acceleration.
+5. Corner solve uses tyre force and yaw balance.
 
-Assume pure channel demands
-
-- $F_y = 3800$ N
-- $F_x = 2600$ N
-
-Then
+In the forward pass
 
 $$
-F_{resultant} = \sqrt{3800^2 + 2600^2} \approx 4604\,\text{N}
+F_{x,net} = \min(F_{x,power}, F_{x,tyre\_limit}) - F_{drag}
 $$
 
-If available combined grip is below this demand, the tyre must return a reduced pair.
+Key runtime files
 
-### This model path
-The combined-force routine in [src/vehicle/Tyres/baseTyre.py](../../src/vehicle/Tyres/baseTyre.py)
+- [src/simulator/util/calcSpeedProfile.py](../../src/simulator/util/calcSpeedProfile.py)
+- [src/simulator/util/vehicleDynamics.py](../../src/simulator/util/vehicleDynamics.py)
+- [src/vehicle/vehicle.py](../../src/vehicle/vehicle.py)
 
-1. Computes pure $F_y$ from slip angle and normal load.
-2. Computes pure $F_x$ from slip ratio and normal load.
-3. Computes load-based peak scales $D_{lat}$ and $D_{long}$.
-4. Computes $F_{cap}$ and scales if needed.
+## What this intro does not cover
+This page stays intentionally basic.
+For equations, combined slip details, and model limits, read [Tyre Model Deep Dive](Tyre-Model-Deep-Dive.md).
 
-### Numeric example in code terms
-Assume
-
-- $D_{lat} = 4000$ N
-- $D_{long} = 3200$ N
-
-Then
-
-$$
-F_{cap} = 0.9 \cdot \sqrt{4000^2 + 3200^2} \approx 4610\,\text{N}
-$$
-
-With $F_x = 2600$ N and $F_y = 3800$ N, demand is about $4604$ N, so no scaling.
-
-If pure $F_x$ rises to $3200$ N with $F_y = 3800$ N
-
-$$
-F_{total} = \sqrt{3800^2 + 3200^2} \approx 4964\,\text{N}
-$$
-
-Now cap is exceeded
-
-$$
-scale = \frac{4610}{4964} \approx 0.929
-$$
-
-Returned forces are about
-
-- $F_x' \approx 2973$ N
-- $F_y' \approx 3530$ N
-
-Reference for verification workflow style
-
-- [tools/analysis/compare_tyre_model.py](../../tools/analysis/compare_tyre_model.py)
-
-## How This Repository Builds Tyre Force
-Runtime path
-
-1. [src/vehicle/vehicle.py](../../src/vehicle/vehicle.py) loads parameters and constructs the tyre model.
-2. [src/vehicle/Tyres/baseTyre.py](../../src/vehicle/Tyres/baseTyre.py) provides pure and combined force methods.
-3. [src/simulator/util/vehicleDynamics.py](../../src/simulator/util/vehicleDynamics.py) uses tyre forces in corner equilibrium.
-4. [src/simulator/util/calcSpeedProfile.py](../../src/simulator/util/calcSpeedProfile.py) uses tyre limits for speed profile bounds.
-
-### Runtime Flow
-![Tyre runtime flow](figures/tyre_runtime_flow.png)
-
-Text fallback
-```
-parameters json -> vehicle.py -> LookupTableTyreModel
-LookupTableTyreModel -> vehicleDynamics corner solve -> Lap time result
-LookupTableTyreModel -> calcSpeedProfile speed cap -> Lap time result
-```
-
-## What the Lookup Tables Provide
-The lookup tables make peak force load sensitive.
-That is the key step beyond fixed-$\mu$ assumptions.
-
-Current behavior
-
-- Lateral peak scale comes from normal-load versus lateral-force data.
-- Longitudinal peak scale comes from normal-load versus longitudinal-force data.
-- Longitudinal slip units are auto-detected as ratio-like or percent-like.
-
-## Validation and Guardrails
-Related checks and history
-
-- [docs/MAJOR_CHANGE_LOG.md](../../docs/MAJOR_CHANGE_LOG.md)
-- [docs/PARAMETER_ENFORCEMENT_AUDIT_ROADMAP.md](../../docs/PARAMETER_ENFORCEMENT_AUDIT_ROADMAP.md)
-- [tools/analysis/compare_tyre_model.py](../../tools/analysis/compare_tyre_model.py)
-- [tests/test_tyre_force_contracts.py](../../tests/test_tyre_force_contracts.py)
-- [tests/test_limiting_case_contracts.py](../../tests/test_limiting_case_contracts.py)
-- [tests/test_tyre_validity_domain_contracts.py](../../tests/test_tyre_validity_domain_contracts.py)
-
-Current guardrails include
-
-- validity-domain diagnostics
-- out-of-domain counters
-- high-load clamp variant for extrapolation control
-- A/B verification for growth behavior
-
-## Known Limits Relative to Full Tyre Literature
-This model is not a full transient thermo-mechanical tyre model.
-It does not currently model
-
-- relaxation length dynamics
-- explicit aligning moment $M_z$ output in this simplified path
-- full temperature and pressure state evolution
-- detailed carcass and belt dynamics
-- full MF combined-slip weighting formulations
-
-The tradeoff is deliberate.
-The benefit is stable and fast behavior for lap-time simulation sweeps.
-
-## Developer Checklist
-Before changing tyre logic, check
-
-1. Do we still preserve load-to-peak behavior with normal load
-2. Do we still preserve a defensible combined-slip envelope
-3. Did the factory path stay aligned with the production model
-4. Did verification docs and contracts get updated when force envelopes changed
-
-## References for Further Reading
-- Pacejka, H. B. Tire and Vehicle Dynamics
-- Bakker, Nyborg, Pacejka 1987 SAE tyre modeling paper https://www.theoryinpracticeengineering.com/resources/tires/pacejka87.pdf
-- MathWorks Tire-Road Interaction Magic Formula documentation https://www.mathworks.com/help/sdl/ref/tireroadinteractionmagicformula.html
-- x-engineer longitudinal Magic Formula summary https://x-engineer.org/automotive-engineering/chassis/vehicle-dynamics/tire-model-for-longitudinal-forces/
-
-## Related Lessons
-- [Lessons Index](README.md)
-- [How We Added Rollover Constraints and Made It Realistic](../how we added rollover constraints and made it realistic.md)
+## Related lessons
+- [Simulator Basics](Simulator-Basics.md)
+- [Tyre Model Deep Dive](Tyre-Model-Deep-Dive.md)
+- [Powertrain Model and Wheel Force Flow](Powertrain-Model.md)

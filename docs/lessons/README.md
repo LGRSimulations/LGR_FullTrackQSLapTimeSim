@@ -4,7 +4,10 @@ Purpose: short learning notes for developers who need to understand how the simu
 
 ## Available Lessons
 
-1. [Tyre Model and Pacejka Flow](Tyre-Model.md)
+1. [Simulator Basics](Simulator-Basics.md)
+2. [Tyre Model Intro](Tyre-Model.md)
+3. [Tyre Model Deep Dive](Tyre-Model-Deep-Dive.md)
+4. [Powertrain Model and Wheel Force Flow](Powertrain-Model.md)
 
 ## Style
 
