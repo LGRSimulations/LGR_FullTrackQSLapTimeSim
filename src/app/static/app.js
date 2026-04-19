@@ -260,6 +260,51 @@ function renderGGTab() {
   });
 }
 
+function toggleChannel(key) {
+  const idx = telemetryState.activePanes.indexOf(key);
+  if (idx === -1) {
+    telemetryState.activePanes.push(key);
+  } else {
+    telemetryState.activePanes.splice(idx, 1);
+  }
+  document.querySelectorAll('.channel-item').forEach(el => {
+    el.classList.toggle('inactive', !telemetryState.activePanes.includes(el.dataset.channelKey));
+  });
+  if (telemetryState.activeTabKey === 'telemetry' && telemetryState.activeRunId) {
+    renderTelemetryTab();
+  }
+}
+
+function downloadCSV() {
+  const run = telemetryState.runs[telemetryState.activeRunId];
+  if (!run) return;
+  const { telemetry, meta } = run;
+
+  const channelKeys = Object.keys(CHANNEL_REGISTRY);
+  const headers = ['distance_m', ...channelKeys.map(k =>
+    `${CHANNEL_REGISTRY[k].label.toLowerCase().replace(/\s+/g, '_')}_${CHANNEL_REGISTRY[k].unit.replace('/', '_per_')}`,
+  )];
+
+  const allKeys = ['distances_m', ...channelKeys];
+  const n = telemetry.distances_m.length;
+  const rows = [headers.join(',')];
+  for (let i = 0; i < n; i++) {
+    rows.push(allKeys.map(k => {
+      const val = telemetry[k]?.[i];
+      return val !== undefined ? Number(val).toFixed(4) : '';
+    }).join(','));
+  }
+
+  const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const trackName = meta.track_file_path.split('/').pop().replace(/\.[^.]+$/, '');
+  a.href = url;
+  a.download = `lgr_lap_${trackName}_${meta.lap_time_s.toFixed(2)}s.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function populateParameters(p) {
   document.getElementById('p-general-name').value = p.general?.name ?? '';
   document.getElementById('p-general-mass').value = p.general?.mass ?? '';
@@ -306,8 +351,11 @@ async function loadParametersAndConfig() {
     populateParameters(await pRes.json());
     populateConfig(await cRes.json());
   } catch {
-    document.getElementById('lapOutput').textContent =
-      'Could not load defaults. Check that the server is running.';
+    const errorEl = document.getElementById('runError');
+    if (errorEl) {
+      errorEl.textContent = 'Could not load defaults. Check that the server is running.';
+      errorEl.style.display = 'block';
+    }
   }
 }
 
@@ -450,14 +498,19 @@ async function runLap() {
   const { cfg, errors: cfgErrors } = collectConfig();
   const allErrors = [...paramErrors, ...cfgErrors];
 
-  const out = document.getElementById('lapOutput');
+  const errorEl = document.getElementById('runError');
 
   if (allErrors.length > 0) {
-    out.textContent = 'Fix input errors before running.\n\n' + allErrors.join('\n');
+    errorEl.textContent = allErrors.join('\n');
+    errorEl.style.display = 'block';
     return;
   }
+  errorEl.style.display = 'none';
 
-  out.textContent = 'Running...';
+  const status = document.getElementById('run-status');
+  status.textContent = 'Running...';
+  status.className = 'run-status';
+
   try {
     const res = await fetch('/api/lap/run', {
       method: 'POST',
@@ -466,12 +519,19 @@ async function runLap() {
     });
     const data = await res.json();
     if (!res.ok) {
-      out.textContent = 'Run failed.\n\n' + (data.detail ?? JSON.stringify(data, null, 2));
+      status.textContent = 'RUN FAILED';
+      status.className = 'run-status error';
+      errorEl.textContent = data.detail ?? JSON.stringify(data, null, 2);
+      errorEl.style.display = 'block';
     } else {
-      out.textContent = JSON.stringify(data, null, 2);
+      storeTelemetry(data);
+      renderViz();
     }
   } catch {
-    out.textContent = 'Could not reach the server. Try again.';
+    status.textContent = 'RUN FAILED';
+    status.className = 'run-status error';
+    errorEl.textContent = 'Could not reach the server. Try again.';
+    errorEl.style.display = 'block';
   }
 }
 
