@@ -465,3 +465,25 @@ a.md-link:hover { background: #FFF0F0; }
   color: #A7AEB6;
   cursor: not-allowed;
 }
+
+.chat-loading {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  padding: 14px 10px;
+}
+.chat-loading span {
+  display: block;
+  width: 3px;
+  height: 12px;
+  background: #A7AEB6;
+  border-radius: 2px;
+  transform-origin: bottom;
+  animation: chat-bar 0.8s ease-in-out infinite;
+}
+.chat-loading span:nth-child(2) { animation-delay: 0.15s; }
+.chat-loading span:nth-child(3) { animation-delay: 0.30s; }
+@keyframes chat-bar {
+  0%, 100% { transform: scaleY(0.3); }
+  50%       { transform: scaleY(1); }
+}

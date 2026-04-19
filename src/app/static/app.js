@@ -267,7 +267,15 @@ async function sendChatMessage() {
   btn.disabled = true;
 
   appendChatMessage('user', question);
-  const loading = appendChatMessage('assistant', '...');
+  const loading = (() => {
+    const thread = document.getElementById('chatMessages');
+    const el = document.createElement('div');
+    el.className = 'chat-msg assistant chat-loading';
+    el.innerHTML = '<span></span><span></span><span></span>';
+    thread.appendChild(el);
+    thread.scrollTop = thread.scrollHeight;
+    return el;
+  })();
 
   try {
     const res = await fetch('/api/chat', {
