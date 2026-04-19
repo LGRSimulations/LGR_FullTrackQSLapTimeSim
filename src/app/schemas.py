@@ -4,8 +4,8 @@ from pydantic import BaseModel, Field
 
 
 class LapRunRequest(BaseModel):
-    parameter_overrides: dict[str, Any] = Field(default_factory=dict)
-    track_file_path: str | None = None
+    parameters: dict[str, Any] | None = None
+    config: dict[str, Any] | None = None
 
 
 class LiftCoastRequest(BaseModel):
