@@ -773,7 +773,6 @@ input.field-error {
   flex-direction: column;
   padding: 4px;
   gap: 4px;
-  overflow-y: auto;
   min-height: 0;
 }
 
@@ -784,8 +783,8 @@ input.field-error {
   min-height: 80px;
 }
 
-.chart-pane--lg { flex: 2; }
-.chart-pane--sm { flex: 1; }
+.chart-pane--lg { flex: 2; min-height: 160px; }
+.chart-pane--sm { flex: 1; min-height: 100px; }
 
 .chart-pane-header {
   display: flex;

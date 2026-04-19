@@ -97,6 +97,7 @@ function initVizPanel() {
 }
 
 function storeTelemetry(data) {
+  telemetryState.runs = {};
   const runId = `run_${Date.now()}`;
   telemetryState.runs[runId] = {
     meta: {
@@ -122,7 +123,7 @@ function renderSummaryStrip(meta) {
   document.getElementById('stat-lap-time').textContent = meta.lap_time_s.toFixed(2);
   document.getElementById('stat-max-lat-g').textContent = meta.max_abs_g_lat.toFixed(2);
   document.getElementById('stat-max-long-g').textContent = meta.max_abs_g_long.toFixed(2);
-  const trackName = meta.track_file_path.split('/').pop().replace(/\.[^.]+$/, '');
+  const trackName = meta.track_file_path.replace(/\\/g, '/').split('/').pop().replace(/\.[^.]+$/, '');
   document.getElementById('stat-track').textContent = trackName;
   const status = document.getElementById('run-status');
   status.textContent = 'RUN OK';
@@ -214,10 +215,12 @@ function renderGGTab() {
   const area = document.getElementById('vizChartArea');
   area.innerHTML = '';
 
-  if (_chartInstances['gg']) {
-    _chartInstances['gg'].destroy();
-    delete _chartInstances['gg'];
-  }
+  Object.keys(_chartInstances).forEach(k => {
+    if (_chartInstances[k]) {
+      _chartInstances[k].destroy();
+      delete _chartInstances[k];
+    }
+  });
 
   const { g_lat, g_long } = run.telemetry;
 
@@ -298,7 +301,7 @@ function downloadCSV() {
   const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  const trackName = meta.track_file_path.split('/').pop().replace(/\.[^.]+$/, '');
+  const trackName = meta.track_file_path.replace(/\\/g, '/').split('/').pop().replace(/\.[^.]+$/, '');
   a.href = url;
   a.download = `lgr_lap_${trackName}_${meta.lap_time_s.toFixed(2)}s.csv`;
   a.click();
