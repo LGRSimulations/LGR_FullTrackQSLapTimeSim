@@ -1,3 +1,23 @@
+const CHANNEL_REGISTRY = {
+  speeds_kmh: { label: 'Speed',  unit: 'km/h', color: '#4e9af1', group: 'Speed',    flex: 2 },
+  g_lat:      { label: 'Lat G',  unit: 'g',    color: '#f1a24e', group: 'G-Forces', flex: 1 },
+  g_long:     { label: 'Long G', unit: 'g',    color: '#e05d5d', group: 'G-Forces', flex: 1 },
+};
+
+const VIZ_TABS = [
+  { key: 'telemetry', label: 'Telemetry',   render: () => renderTelemetryTab() },
+  { key: 'gg',        label: 'G-G Diagram', render: () => renderGGTab() },
+];
+
+let telemetryState = {
+  runs: {},
+  activeRunId: null,
+  activePanes: ['speeds_kmh', 'g_lat', 'g_long'],
+  activeTabKey: 'telemetry',
+};
+
+let _chartInstances = {};
+
 function initTabs() {
   const tabs = document.querySelectorAll('.tab');
   const sections = document.querySelectorAll('.tab-section');
@@ -20,6 +40,59 @@ function initInnerTabs() {
       tab.classList.add('active');
       document.getElementById(tab.dataset.innerTab).classList.add('active');
     });
+  });
+}
+
+function initVizPanel() {
+  const list = document.getElementById('channelList');
+
+  const listHeader = document.createElement('div');
+  listHeader.className = 'channel-list-header';
+  listHeader.textContent = 'Channels';
+  list.appendChild(listHeader);
+
+  const groups = {};
+  Object.entries(CHANNEL_REGISTRY).forEach(([key, ch]) => {
+    if (!groups[ch.group]) groups[ch.group] = [];
+    groups[ch.group].push(key);
+  });
+
+  Object.entries(groups).forEach(([group, keys]) => {
+    const groupHeader = document.createElement('div');
+    groupHeader.className = 'channel-group-header';
+    groupHeader.textContent = group;
+    list.appendChild(groupHeader);
+
+    keys.forEach(key => {
+      const ch = CHANNEL_REGISTRY[key];
+      const item = document.createElement('div');
+      item.className = 'channel-item' + (telemetryState.activePanes.includes(key) ? '' : ' inactive');
+      item.dataset.channelKey = key;
+      item.innerHTML =
+        `<div class="channel-dot" style="background:${ch.color}"></div>` +
+        `<div><span class="channel-item-name">${ch.label}</span>` +
+        `<span class="channel-item-unit">${ch.unit}</span></div>`;
+      item.addEventListener('click', () => toggleChannel(key));
+      list.appendChild(item);
+    });
+  });
+
+  const tabBar = document.getElementById('vizTabBar');
+  VIZ_TABS.forEach(tab => {
+    const btn = document.createElement('button');
+    btn.className = 'viz-tab' + (tab.key === telemetryState.activeTabKey ? ' active' : '');
+    btn.textContent = tab.label;
+    btn.addEventListener('click', () => {
+      telemetryState.activeTabKey = tab.key;
+      tabBar.querySelectorAll('.viz-tab').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      if (telemetryState.activeRunId) {
+        tab.render();
+      } else {
+        document.getElementById('vizChartArea').innerHTML = '';
+      }
+    });
+    tabBar.appendChild(btn);
   });
 }
 
@@ -204,7 +277,8 @@ function collectConfig() {
 async function loadMetadata() {
   const res = await fetch('/api/metadata');
   const data = await res.json();
-  document.getElementById('scope').textContent = data.model_scope ?? '';
+  const el = document.getElementById('scope');
+  if (el) el.textContent = data.model_scope ?? '';
 }
 
 async function runLap() {
@@ -502,6 +576,7 @@ async function sendChatMessage() {
 // ── Boot ────────────────────────────────────────────────────────────────────
 
 document.getElementById('runLapBtn').addEventListener('click', runLap);
+document.getElementById('csvDownloadBtn').addEventListener('click', downloadCSV);
 document.getElementById('askBtn').addEventListener('click', () => toggleChatPanel());
 document.getElementById('chatSubmit').addEventListener('click', sendChatMessage);
 document.getElementById('chatQuestion').addEventListener('keydown', e => {
@@ -510,6 +585,7 @@ document.getElementById('chatQuestion').addEventListener('keydown', e => {
 
 initTabs();
 initInnerTabs();
+initVizPanel();
 initLessons();
 loadMetadata();
 loadParametersAndConfig();
