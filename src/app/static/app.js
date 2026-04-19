@@ -23,12 +23,6 @@ function initInnerTabs() {
   });
 }
 
-function parseNumber(value) {
-  if (value === null || value === undefined || value === '') return null;
-  const num = Number(value);
-  return Number.isFinite(num) ? num : null;
-}
-
 function populateParameters(p) {
   document.getElementById('p-general-name').value = p.general?.name ?? '';
   document.getElementById('p-general-mass').value = p.general?.mass ?? '';
@@ -66,14 +60,17 @@ function populateConfig(c) {
 }
 
 async function loadParametersAndConfig() {
-  const [pRes, cRes] = await Promise.all([
-    fetch('/api/parameters'),
-    fetch('/api/config'),
-  ]);
-  const params = await pRes.json();
-  const cfg = await cRes.json();
-  populateParameters(params);
-  populateConfig(cfg);
+  try {
+    const [pRes, cRes] = await Promise.all([
+      fetch('/api/parameters'),
+      fetch('/api/config'),
+    ]);
+    populateParameters(await pRes.json());
+    populateConfig(await cRes.json());
+  } catch {
+    document.getElementById('lapOutput').textContent =
+      'Could not load defaults. Check that the server is running.';
+  }
 }
 
 function collectParameters() {
@@ -213,14 +210,21 @@ async function runLap() {
   }
 
   out.textContent = 'Running...';
-
-  const res = await fetch('/api/lap/run', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ parameters: params, config: cfg }),
-  });
-  const data = await res.json();
-  out.textContent = JSON.stringify(data, null, 2);
+  try {
+    const res = await fetch('/api/lap/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ parameters: params, config: cfg }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      out.textContent = 'Run failed.\n\n' + (data.detail ?? JSON.stringify(data, null, 2));
+    } else {
+      out.textContent = JSON.stringify(data, null, 2);
+    }
+  } catch {
+    out.textContent = 'Could not reach the server. Try again.';
+  }
 }
 
 // ── Lesson link handling ────────────────────────────────────────────────────
