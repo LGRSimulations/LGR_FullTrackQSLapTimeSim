@@ -152,3 +152,4 @@ For equations, combined slip details, and model limits, read [Tyre Model Deep Di
 - [Simulator Basics](Simulator-Basics.md)
 - [Tyre Model Deep Dive](Tyre-Model-Deep-Dive.md)
 - [Powertrain Model and Wheel Force Flow](Powertrain-Model.md)
+- [Aerodynamics Model Intro](Aero-Model.md)

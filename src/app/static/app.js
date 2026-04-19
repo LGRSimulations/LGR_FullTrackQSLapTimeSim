@@ -140,6 +140,32 @@ async function processLessonLinks(container, lessonFile) {
   });
 }
 
+// ── Math pre-processing ──────────────────────────────────────────────────────
+// Extract math before marked.js sees it to prevent _ and ^ mangling.
+
+function renderMarkdownWithMath(md) {
+  const stash = [];
+
+  const save = (math, display) => {
+    const key = `\x02MATH${stash.length}\x03`;
+    stash.push({ key, math, display });
+    return key;
+  };
+
+  const processed = md
+    .replace(/\$\$([\s\S]*?)\$\$/g, (_, m) => save(m, true))
+    .replace(/\$([^\$\n]+?)\$/g, (_, m) => save(m, false));
+
+  let html = marked.parse(processed);
+
+  for (const { key, math, display } of stash) {
+    const rendered = katex.renderToString(math, { displayMode: display, throwOnError: false });
+    html = html.replace(key, rendered);
+  }
+
+  return html;
+}
+
 // ── Lessons ─────────────────────────────────────────────────────────────────
 
 async function loadLesson(filename, title) {
@@ -149,7 +175,13 @@ async function loadLesson(filename, title) {
   label.textContent = title;
   const res = await fetch('/lessons/' + filename);
   const md = await res.text();
-  body.innerHTML = marked.parse(md);
+  body.innerHTML = renderMarkdownWithMath(md);
+  body.querySelectorAll('img[src]').forEach(img => {
+    const src = img.getAttribute('src');
+    if (src && !src.startsWith('http') && !src.startsWith('/')) {
+      img.setAttribute('src', '/lessons/' + src);
+    }
+  });
   processLessonLinks(body, filename);
 }
 

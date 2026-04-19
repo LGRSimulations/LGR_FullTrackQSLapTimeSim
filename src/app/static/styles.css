@@ -290,6 +290,24 @@ pre#lapOutput {
   overflow-x: auto;
   margin: 0.8em 0;
 }
+.lesson-body .katex {
+  font-size: 1.5rem;
+}
+.lesson-body .katex-display {
+  margin: 1em 0;
+  overflow-x: auto;
+  font-size: 1.5rem;
+}
+.lesson-body img {
+  max-width: 100%;
+  max-height: 55vh;
+  width: auto;
+  height: auto;
+  display: block;
+  border: 1px solid #A7AEB6;
+  margin: 1em auto;
+  background: #F4F6F8;
+}
 .lesson-body pre code {
   background: none;
   border: none;

@@ -136,10 +136,12 @@ It does not currently model
 - traction control actuation
 - engine inertia and transient torque dynamics
 - thermal derating and fuel constraints
+- no delay for gear shift. sim always uses best-case gear
 
 This tradeoff keeps runtime fast and stable for sweep-heavy lap studies.
 
 ## Related Lessons
 - [Simulator Basics](Simulator-Basics.md)
 - [Tyre Model Intro](Tyre-Model.md)
+- [Aerodynamics Model Intro](Aero-Model.md)
 - [Lessons Index](README.md)

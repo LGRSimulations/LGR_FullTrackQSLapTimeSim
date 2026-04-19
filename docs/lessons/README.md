@@ -8,6 +8,7 @@ Purpose: short learning notes for developers who need to understand how the simu
 2. [Tyre Model Intro](Tyre-Model.md)
 3. [Tyre Model Deep Dive](Tyre-Model-Deep-Dive.md)
 4. [Powertrain Model and Wheel Force Flow](Powertrain-Model.md)
+5. [Aerodynamics Model Intro](Aero-Model.md)
 
 ## Style
 

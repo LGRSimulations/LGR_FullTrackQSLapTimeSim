@@ -110,6 +110,7 @@ How to use results well
 1. [Tyre Model Intro](Tyre-Model.md)
 2. [Tyre Model Deep Dive](Tyre-Model-Deep-Dive.md)
 3. [Powertrain Model and Wheel Force Flow](Powertrain-Model.md)
+4. [Aerodynamics Model Intro](Aero-Model.md)
 
 ## Related references
 - [Parameter Enforcement Audit Roadmap](../PARAMETER_ENFORCEMENT_AUDIT_ROADMAP.md)

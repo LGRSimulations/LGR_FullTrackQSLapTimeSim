@@ -1,4 +1,4 @@
-# Aero CoP (Aerodynamic Centre of Pressure)
+# Aero CoP Deep Dive (Aerodynamic Centre of Pressure)
 
 Purpose: explain what the `aero_cp` parameter means, how it maps to real physics, and how it is enforced in the simulator.
 

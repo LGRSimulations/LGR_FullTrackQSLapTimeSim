@@ -4,7 +4,7 @@ Purpose: central index for parameter-level engineering notes.
 
 ## Available Pages
 
-1. [Aero CoP](Aero-CoP.md)
+1. [Aero CoP Deep Dive](Aero-CoP-Deep-Dive.md)
 2. [Deferred Parameters (Production v1)](Deferred-Parameters.md)
 
 ## Lessons

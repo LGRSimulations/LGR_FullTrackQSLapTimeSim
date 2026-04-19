@@ -80,7 +80,7 @@ Physics docs and scope
 
 - `docs/PARAMETER_ENFORCEMENT_AUDIT_ROADMAP.md`
 - `docs/parameters/README.md`
-- `docs/parameters/Aero-CoP.md`
+- `docs/parameters/Aero-CoP-Deep-Dive.md`
 - `docs/parameters/Deferred-Parameters.md`
 - `docs/MAJOR_CHANGE_LOG.md`
 
