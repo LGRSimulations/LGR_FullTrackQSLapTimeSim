@@ -1,6 +1,8 @@
 import copy
 import json
 
+from fastapi import HTTPException
+
 from app.paths import config_path, parameters_path, resolve_track_path
 
 
@@ -40,7 +42,10 @@ def run_lap(parameters: dict | None = None, config: dict | None = None) -> dict:
     track_file_path = cfg.get("track", {}).get("file_path", "datasets/tracks/FSUK.txt")
     cfg.setdefault("track", {})["file_path"] = resolve_track_path(track_file_path)
 
-    vehicle = create_vehicle(cfg)
+    try:
+        vehicle = create_vehicle(cfg)
+    except KeyError as e:
+        raise HTTPException(status_code=422, detail=f"Missing parameter: {e}")
     track = load_track(cfg["track"]["file_path"], cfg.get("debug_mode", False))
     result = run_lap_time_simulation(track, vehicle, cfg, display=False)
 

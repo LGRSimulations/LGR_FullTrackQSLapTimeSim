@@ -65,6 +65,7 @@ async function loadParametersAndConfig() {
       fetch('/api/parameters'),
       fetch('/api/config'),
     ]);
+    if (!pRes.ok || !cRes.ok) throw new Error('Failed to load defaults');
     populateParameters(await pRes.json());
     populateConfig(await cRes.json());
   } catch {
@@ -152,6 +153,15 @@ function collectConfig() {
     return el ? el.value.trim() : '';
   }
 
+  function requirePath(id, label) {
+    const val = getString(id);
+    if (!val) {
+      document.getElementById(id).classList.add('field-error');
+      errors.push(`${label} is required`);
+    }
+    return val;
+  }
+
   function getFloat(id, label) {
     const el = document.getElementById(id);
     const val = parseFloat(el.value);
@@ -170,15 +180,15 @@ function collectConfig() {
 
   const cfg = {
     powertrain: {
-      powertrain: getString('c-powertrain-path'),
+      powertrain: requirePath('c-powertrain-path', 'Powertrain file'),
       type: getString('c-powertrain-type'),
     },
     track: {
-      file_path: getString('c-track-file_path'),
+      file_path: requirePath('c-track-file_path', 'Track file'),
     },
     tyre_model: {
-      file_path_longit: getString('c-tyre-file_path_longit'),
-      file_path_lateral: getString('c-tyre-file_path_lateral'),
+      file_path_longit: requirePath('c-tyre-file_path_longit', 'Tyre longitudinal data file'),
+      file_path_lateral: requirePath('c-tyre-file_path_lateral', 'Tyre lateral data file'),
       type: getString('c-tyre-type'),
     },
     debug_mode: getBool('c-sim-debug_mode'),
