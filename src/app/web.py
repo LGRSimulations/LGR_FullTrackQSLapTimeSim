@@ -6,7 +6,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.schemas import LapRunRequest, LiftCoastRequest, ChatRequest, ChatResponse
-from app.services.lap_service import metadata, run_lap
+from app.services.lap_service import get_config, get_parameters, metadata, run_lap
 from app.services.lift_coast_service import run_lift_coast
 from app.services.chat_service import chat
 
@@ -37,9 +37,17 @@ def create_app() -> FastAPI:
     def get_metadata() -> dict:
         return metadata()
 
+    @app.get("/api/parameters")
+    def get_parameters_endpoint() -> dict:
+        return get_parameters()
+
+    @app.get("/api/config")
+    def get_config_endpoint() -> dict:
+        return get_config()
+
     @app.post("/api/lap/run")
     def run_lap_endpoint(req: LapRunRequest) -> dict:
-        return run_lap(parameter_overrides=req.parameter_overrides, track_file_path=req.track_file_path)
+        return run_lap(parameters=req.parameters, config=req.config)
 
     @app.post("/api/lift-coast/run")
     def run_lift_coast_endpoint(req: LiftCoastRequest) -> dict:
