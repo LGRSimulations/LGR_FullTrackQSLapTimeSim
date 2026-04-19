@@ -1,0 +1,410 @@
+[
+    {
+        "file":  "Aero-Model.md",
+        "section":  "Read this after",
+        "summary":  "Powertrain force flow provides the longitudinal context needed before adding aerodynamic drag and downforce.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Aero-Model.md",
+        "section":  "Audience",
+        "summary":  "Readers should already understand the basic solver flow before adding aero load and drag effects.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Aero-Model.md",
+        "section":  "Goal",
+        "summary":  "Drag, downforce, aero load split, and their lap-time tradeoffs are introduced using simulator behaviour.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Aero-Model.md",
+        "section":  "One minute mental model",
+        "summary":  "Aerodynamics trades straight-line loss from drag against extra tyre capacity from downforce.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Aero-Model.md",
+        "section":  "Drag and downforce in this simulator",
+        "summary":  "Drag and downforce both scale with speed squared, with drag dominating the baseline setup.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Aero-Model.md",
+        "section":  "Aero center of pressure and axle load split",
+        "summary":  "Aero center of pressure sets front-rear downforce distribution and shifts tyre loads through wheelbase moments.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Aero-Model.md",
+        "section":  "How aero couples with tyre and powertrain",
+        "summary":  "Drag reduces net drive force while downforce raises tyre load-dependent grip limits.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Aero-Model.md",
+        "section":  "Speed profile tradeoff example",
+        "summary":  "Higher downforce can still slow the lap when added drag outweighs cornering gains.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Aero-Model.md",
+        "section":  "Known limits in this intro",
+        "summary":  "The simplified aero model omits ride-height maps and transient aerodynamic effects.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Powertrain-Model.md",
+        "section":  "Audience",
+        "summary":  "The powertrain model targets developers tracing how RPM and gearing become longitudinal wheel force.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Powertrain-Model.md",
+        "section":  "Goal",
+        "summary":  "First-principles powertrain force flow shows where wheel radius enters and where tyre limits intervene.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Powertrain-Model.md",
+        "section":  "Starting Point",
+        "summary":  "Lookup power data, drivetrain ratios, and wheel radius define the simulator\u0027s baseline traction calculation.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Powertrain-Model.md",
+        "section":  "First Principles View",
+        "summary":  "Wheel torque produces contact-patch force inversely proportional to wheel radius.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Powertrain-Model.md",
+        "section":  "1) Power curve lookup",
+        "summary":  "Engine power is read from lookup tables, preferring continuous power over peak power data.",
+        "heading_level":  3
+    },
+    {
+        "file":  "Powertrain-Model.md",
+        "section":  "2) Torque from power",
+        "summary":  "Lookup power is converted to engine torque from rotational speed.",
+        "heading_level":  3
+    },
+    {
+        "file":  "Powertrain-Model.md",
+        "section":  "3) Speed to engine RPM",
+        "summary":  "Vehicle speed maps to engine RPM through gear ratios, final drive, and wheel radius.",
+        "heading_level":  3
+    },
+    {
+        "file":  "Powertrain-Model.md",
+        "section":  "4) Wheel torque through drivetrain",
+        "summary":  "Engine torque is multiplied by gearing and transmission efficiency to obtain wheel torque.",
+        "heading_level":  3
+    },
+    {
+        "file":  "Powertrain-Model.md",
+        "section":  "5) Traction force at contact patch",
+        "summary":  "Powertrain-limited longitudinal force equals wheel torque divided by wheel radius.",
+        "heading_level":  3
+    },
+    {
+        "file":  "Powertrain-Model.md",
+        "section":  "Where wheel_radius matters",
+        "summary":  "`wheel_radius` affects engine-speed mapping and torque-to-force conversion, with larger values reducing tractive force.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Powertrain-Model.md",
+        "section":  "Gear Selection Logic",
+        "summary":  "The solver tests each gear at a speed point and chooses the one with highest net force.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Powertrain-Model.md",
+        "section":  "Coupling with Tyre Model and base_mu",
+        "summary":  "Net acceleration is limited by the lower of powertrain force and tyre grip, minus drag.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Powertrain-Model.md",
+        "section":  "Validation and Contracts",
+        "summary":  "Monotonic tests enforce expected effects of gearing, efficiency, and wheel radius on tractive force.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Powertrain-Model.md",
+        "section":  "Known Limits",
+        "summary":  "The compact powertrain model omits shift transients, controls, inertia, and thermal derating.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Simulator-Basics.md",
+        "section":  "Audience",
+        "summary":  "New readers get a first mental model of how the lap time simulator assembles subsystem physics.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Simulator-Basics.md",
+        "section":  "Goal",
+        "summary":  "Quasi-static lap prediction combines tyre, powertrain, aero, and constraints into one speed profile.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Simulator-Basics.md",
+        "section":  "What is a simulator trying to do",
+        "summary":  "The simulator predicts lap time and limiting channels from vehicle, track, and component assumptions.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Simulator-Basics.md",
+        "section":  "What quasi static means here",
+        "summary":  "Quasi-static modelling solves local equilibria algebraically instead of integrating full transient subsystem states.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Simulator-Basics.md",
+        "section":  "What steady state means here",
+        "summary":  "Steady-state corner solves satisfy local force and yaw balances at each track point.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Simulator-Basics.md",
+        "section":  "How we combine subsystems into one simulator",
+        "summary":  "The runtime chain builds models, solves cornering, propagates acceleration and braking, then integrates lap time.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Simulator-Basics.md",
+        "section":  "A compact force picture",
+        "summary":  "Net longitudinal force comes from powertrain request, tyre limits, lateral grip usage, and drag losses.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Simulator-Basics.md",
+        "section":  "Tradeoffs when using this simulator",
+        "summary":  "Fast transparent trend studies trade away transient, thermal, and map-fidelity modelling detail.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Tyre-Model-Deep-Dive.md",
+        "section":  "Audience",
+        "summary":  "The deep dive assumes readers already understand simulator basics and introductory tyre model concepts.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Tyre-Model-Deep-Dive.md",
+        "section":  "Goal",
+        "summary":  "Tyre-force equations, implementation path, combined-slip handling, and modelling limits are examined in detail.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Tyre-Model-Deep-Dive.md",
+        "section":  "First principles reminder",
+        "summary":  "Contact-patch traction distributions integrate into resultant tyre forces and moments used by the lap solver.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Tyre-Model-Deep-Dive.md",
+        "section":  "Magic Formula context",
+        "summary":  "Pacejka-style Magic Formula curves use fitted shape parameters to reproduce measured pure-slip tyre forces.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Tyre-Model-Deep-Dive.md",
+        "section":  "Runtime path in this repository",
+        "summary":  "Vehicle construction and solver routines call the tyre model to supply pure and combined force limits.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Tyre-Model-Deep-Dive.md",
+        "section":  "Load sensitivity and base_mu",
+        "summary":  "`base_mu` scales load-interpolated peak forces while preserving the dataset\u0027s load sensitivity trends.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Tyre-Model-Deep-Dive.md",
+        "section":  "Combined slip treatment",
+        "summary":  "Combined slip uses a capped resultant force and rescales both channels when demand exceeds capacity.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Tyre-Model-Deep-Dive.md",
+        "section":  "Worked numeric example",
+        "summary":  "A numeric example shows vector scaling of pure forces down to the combined-slip cap.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Tyre-Model-Deep-Dive.md",
+        "section":  "Effective loaded radius note",
+        "summary":  "Effective loaded radius is the correct rolling length scale for slip and speed calculations.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Tyre-Model-Deep-Dive.md",
+        "section":  "Validation and guardrails",
+        "summary":  "Tests and analysis scripts check limiting behaviour, domain validity, load sensitivity, and track-level robustness.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Tyre-Model-Deep-Dive.md",
+        "section":  "Known limits",
+        "summary":  "The model omits transient tyre states, thermal evolution, aligning moment detail, and carcass dynamics.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Tyre-Model.md",
+        "section":  "Read this after",
+        "summary":  "Simulator Basics introduces the solver context needed before interpreting tyre slip, load, and force limits.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Tyre-Model.md",
+        "section":  "Audience",
+        "summary":  "New readers get the minimum tyre-model concepts needed to follow force generation in the lap simulator.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Tyre-Model.md",
+        "section":  "Goal",
+        "summary":  "Tyre force generation, `base_mu`, `wheel_radius`, and their role in the solver are introduced at a practical level.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Tyre-Model.md",
+        "section":  "One minute mental model",
+        "summary":  "The tyre model converts slip and normal load into the contact-patch forces the vehicle can actually use.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Tyre-Model.md",
+        "section":  "Slip angle",
+        "summary":  "Slip angle links steering direction mismatch to lateral force buildup and saturation under fixed normal load.",
+        "heading_level":  3
+    },
+    {
+        "file":  "Tyre-Model.md",
+        "section":  "Slip ratio",
+        "summary":  "Slip ratio links wheel speed mismatch to longitudinal drive or braking force before saturation.",
+        "heading_level":  3
+    },
+    {
+        "file":  "Tyre-Model.md",
+        "section":  "Start from real behaviour",
+        "summary":  "Nonlinear tyre behaviour comes from force rising with slip to a peak, then saturating.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Tyre-Model.md",
+        "section":  "Inputs and outputs in this simulator",
+        "summary":  "The runtime tyre model maps slip angle, slip ratio, and load into limited lateral and longitudinal forces.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Tyre-Model.md",
+        "section":  "Why literature uses Pacejka style curves",
+        "summary":  "Pacejka-style curves fit measured tyre data so slip, load, and curve shape produce realistic force peaks.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Tyre-Model.md",
+        "section":  "Where base_mu fits",
+        "summary":  "`base_mu` scales the overall grip ceiling without changing the underlying tyre curve family.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Tyre-Model.md",
+        "section":  "Where wheel_radius fits and why loaded radius matters",
+        "summary":  "`wheel_radius` sets wheel-speed kinematics and torque-to-force conversion, so loaded radius is more realistic than static radius.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Tyre-Model.md",
+        "section":  "How tyre force is used in this simulator",
+        "summary":  "Tyre force caps powertrain demand, shares combined grip with cornering, and sets net longitudinal acceleration.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Tyre-Model.md",
+        "section":  "What this intro does not cover",
+        "summary":  "Equations, combined-slip details, and model limitations are deferred to the deep-dive lesson.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Vehicle-Modelling.md",
+        "section":  "Read this after",
+        "summary":  "Aerodynamics introduces the final subsystem needed before combining the full three-pass lap solver.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Vehicle-Modelling.md",
+        "section":  "One page quick read",
+        "summary":  "Three passes impose cornering, acceleration, and braking constraints, with the minimum forming the final speed profile.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Vehicle-Modelling.md",
+        "section":  "Three pass picture",
+        "summary":  "The three-pass envelope shows how corner, acceleration, and braking limits combine into one lap speed trace.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Vehicle-Modelling.md",
+        "section":  "Worked segment example",
+        "summary":  "A near-straight segment can still be brake-limited because future deceleration constraints propagate backward.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Vehicle-Modelling.md",
+        "section":  "Why the final profile doesn\u0027t look like any single pass",
+        "summary":  "The final profile switches pointwise between whichever pass gives the lowest permissible speed.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Vehicle-Modelling.md",
+        "section":  "Lap closure and boundary asymmetry",
+        "summary":  "Backward braking enforces closed-loop lap entry conditions, so end-of-lap speeds need not match forward-pass limits.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Vehicle-Modelling.md",
+        "section":  "Pass 1 corner equilibrium speed limit",
+        "summary":  "Pass 1 finds the maximum speed satisfying lateral and yaw equilibrium under tyre force limits.",
+        "heading_level":  3
+    },
+    {
+        "file":  "Vehicle-Modelling.md",
+        "section":  "Pass 2 forward acceleration limit",
+        "summary":  "Pass 2 propagates speed forward using net longitudinal force from powertrain, tyre limits, and drag.",
+        "heading_level":  3
+    },
+    {
+        "file":  "Vehicle-Modelling.md",
+        "section":  "Pass 3 backward braking limit",
+        "summary":  "Pass 3 propagates braking feasibility backward so each segment can decelerate for what follows.",
+        "heading_level":  3
+    },
+    {
+        "file":  "Vehicle-Modelling.md",
+        "section":  "Final combine and lap time",
+        "summary":  "The final profile takes the lower of forward and backward constrained speeds before lap-time integration.",
+        "heading_level":  3
+    },
+    {
+        "file":  "Vehicle-Modelling.md",
+        "section":  "Low level implementation summary",
+        "summary":  "Runtime execution builds models, runs three passes, then combines speeds into lap time.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Vehicle-Modelling.md",
+        "section":  "Assumptions and limits",
+        "summary":  "The capstone solver is quasi-static and steady-state, without suspension or tyre thermal transients.",
+        "heading_level":  2
+    },
+    {
+        "file":  "Vehicle-Modelling.md",
+        "section":  "Validation evidence to check",
+        "summary":  "Solver and tyre contract tests verify the three-pass workflow and returned diagnostics.",
+        "heading_level":  2
+    }
+]

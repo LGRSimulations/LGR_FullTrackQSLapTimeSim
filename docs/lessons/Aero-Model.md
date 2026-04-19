@@ -156,4 +156,5 @@ It does not cover full ride-height aero maps or transient aero effects.
 - [Simulator Basics](Simulator-Basics.md)
 - [Tyre Model Intro](Tyre-Model.md)
 - [Powertrain Model and Wheel Force Flow](Powertrain-Model.md)
+- [Vehicle Modelling Capstone](Vehicle-Modelling.md)
 - [Lessons Index](README.md)
