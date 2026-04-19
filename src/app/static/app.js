@@ -250,7 +250,6 @@ function navigateToLesson(file) {
     showToast('This lesson is not yet available in the guide.');
     return;
   }
-  toggleChatPanel(false);
   const lessonsTab = document.querySelector('.tab[data-tab="lessons"]');
   if (lessonsTab) lessonsTab.click();
   item.click();
@@ -309,7 +308,7 @@ async function sendChatMessage() {
 // ── Boot ────────────────────────────────────────────────────────────────────
 
 document.getElementById('runLapBtn').addEventListener('click', runLap);
-document.getElementById('askBtn').addEventListener('click', () => toggleChatPanel());
+document.getElementById('askBtn').addEventListener('click', () => toggleChatPanel(true));
 document.getElementById('chatClose').addEventListener('click', () => toggleChatPanel(false));
 document.getElementById('chatSubmit').addEventListener('click', sendChatMessage);
 document.getElementById('chatQuestion').addEventListener('keydown', e => {
@@ -320,4 +319,5 @@ initTabs();
 initLessons();
 loadMetadata();
 positionChatPanel();
+toggleChatPanel(true);
 window.addEventListener('resize', positionChatPanel);

@@ -383,17 +383,17 @@ a.md-link:hover { background: #FFF0F0; }
   margin-bottom: 0;
 }
 .chat-close-btn {
-  background: none;
+  background: #C1122F;
   border: none;
   font-family: 'Inter', sans-serif;
   font-size: 0.65rem;
   letter-spacing: 1px;
   text-transform: uppercase;
-  color: #A7AEB6;
+  color: #F4F6F8;
   cursor: pointer;
-  padding: 4px 8px;
+  padding: 5px 12px;
 }
-.chat-close-btn:hover { color: #101215; }
+.chat-close-btn:hover { background: #a00e25; }
 
 .chat-messages {
   flex: 1;
