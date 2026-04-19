@@ -30,13 +30,134 @@
       <div class="sim-panel">
 
         <div class="panel inputs-panel">
-          <div class="panel-label">Inputs</div>
-          <label class="field-label">Track Path</label>
-          <input id="trackPath" type="text" placeholder="datasets/tracks/FSUK.txt" />
-          <label class="field-label">Mass Override (kg)</label>
-          <input id="massOverride" type="number" step="0.1" placeholder="300" />
-          <label class="field-label">Aero CoP Override (m)</label>
-          <input id="aeroCpOverride" type="number" step="0.01" placeholder="1.0" />
+
+          <div class="inner-tab-bar">
+            <button class="inner-tab active" data-inner-tab="params-tab">Parameters</button>
+            <button class="inner-tab" data-inner-tab="config-tab">Config</button>
+          </div>
+
+          <!-- Parameters tab -->
+          <div id="params-tab" class="inner-tab-section active">
+
+            <div class="field-section-header">General</div>
+            <label class="field-label">Name</label>
+            <input id="p-general-name" type="text" />
+            <div class="field-hint">e.g. F25_IC_Car</div>
+            <label class="field-label">Mass</label>
+            <input id="p-general-mass" type="text" />
+            <div class="field-hint">e.g. 320.0 · kg</div>
+            <label class="field-label">Base Mu</label>
+            <input id="p-general-base_mu" type="text" />
+            <div class="field-hint">e.g. 1.5 · dimensionless</div>
+
+            <div class="field-section-header">Aerodynamics</div>
+            <label class="field-label">Frontal Area</label>
+            <input id="p-aero-frontal_area" type="text" />
+            <div class="field-hint">e.g. 0.75 · m2</div>
+            <label class="field-label">Drag Coefficient</label>
+            <input id="p-aero-drag_coefficient" type="text" />
+            <div class="field-hint">e.g. 0.85 · dimensionless</div>
+            <label class="field-label">Downforce Coefficient</label>
+            <input id="p-aero-downforce_coefficient" type="text" />
+            <div class="field-hint">e.g. 0.07 · dimensionless</div>
+            <label class="field-label">Aero Centre of Pressure</label>
+            <input id="p-aero-aero_cp" type="text" />
+            <div class="field-hint">e.g. 1.0 · m from front axle</div>
+
+            <div class="field-section-header">Geometry</div>
+            <label class="field-label">Wheelbase</label>
+            <input id="p-geom-wheelbase" type="text" />
+            <div class="field-hint">e.g. 1.6 · m</div>
+            <label class="field-label">Front Track Width</label>
+            <input id="p-geom-front_track_width" type="text" />
+            <div class="field-hint">e.g. 1.26 · m</div>
+            <label class="field-label">Rear Track Width</label>
+            <input id="p-geom-rear_track_width" type="text" />
+            <div class="field-hint">e.g. 1.23 · m</div>
+            <label class="field-label">CoG Z</label>
+            <input id="p-geom-cog_z" type="text" />
+            <div class="field-hint">e.g. 0.48 · m</div>
+            <label class="field-label">CoG Longitudinal Position</label>
+            <input id="p-geom-cog_longitudinal_pos" type="text" />
+            <div class="field-hint">e.g. 0.516 · fraction of wheelbase from front axle (0 to 1)</div>
+            <label class="field-label">Max CoG Z</label>
+            <input id="p-geom-max_cog_z" type="text" />
+            <div class="field-hint">e.g. 0.6 · m</div>
+
+            <div class="field-section-header">Vehicle Dynamics</div>
+            <label class="field-label">Roll Stiffness</label>
+            <input id="p-vd-roll_stiffness" type="text" />
+            <div class="field-hint">e.g. 21439.49 · Nm/rad</div>
+            <label class="field-label">Suspension Stiffness</label>
+            <input id="p-vd-suspension_stiffness" type="text" />
+            <div class="field-hint">e.g. 21439 · N/m</div>
+            <label class="field-label">Damping Coefficient</label>
+            <input id="p-vd-damping_coefficient" type="text" />
+            <div class="field-hint">e.g. 0 · Ns/m</div>
+            <label class="field-label">Max Roll Angle</label>
+            <input id="p-vd-max_roll_angle_deg" type="text" />
+            <div class="field-hint">e.g. 10 · deg</div>
+
+            <div class="field-section-header">Drivetrain</div>
+            <label class="field-label">Wheel Radius</label>
+            <input id="p-dt-wheel_radius" type="text" />
+            <div class="field-hint">e.g. 0.2032 · m (effective rolling radius)</div>
+            <label class="field-label">Final Drive Ratio</label>
+            <input id="p-dt-final_drive_ratio" type="text" />
+            <div class="field-hint">e.g. 2.6 · dimensionless</div>
+            <label class="field-label">Gear Ratios</label>
+            <input id="p-dt-gear_ratios" type="text" />
+            <div class="field-hint">comma-separated, e.g. 2.75, 2, 1.667, 1.304, 1.208</div>
+            <label class="field-label">Transmission Efficiency</label>
+            <input id="p-dt-transmission_efficiency" type="text" />
+            <div class="field-hint">e.g. 0.95 · dimensionless (0 to 1)</div>
+
+          </div>
+
+          <!-- Config tab -->
+          <div id="config-tab" class="inner-tab-section">
+
+            <div class="field-section-header">Powertrain</div>
+            <label class="field-label">Powertrain File</label>
+            <input id="c-powertrain-path" type="text" />
+            <div class="field-hint">e.g. datasets/vehicle/PU_data/Honda_CBR_600RR_RPM_vs_Peak_Power.csv</div>
+            <label class="field-label">Powertrain Type</label>
+            <input id="c-powertrain-type" type="text" />
+            <div class="field-hint">e.g. lookup</div>
+
+            <div class="field-section-header">Track</div>
+            <label class="field-label">Track File</label>
+            <input id="c-track-file_path" type="text" />
+            <div class="field-hint">e.g. datasets/tracks/FSUK.txt</div>
+
+            <div class="field-section-header">Tyre Model</div>
+            <label class="field-label">Longitudinal Data File</label>
+            <input id="c-tyre-file_path_longit" type="text" />
+            <div class="field-hint">e.g. datasets/vehicle/tyre_data/Round_6_12_PSI_Longit_Load_TyreData_parsed.csv</div>
+            <label class="field-label">Lateral Data File</label>
+            <input id="c-tyre-file_path_lateral" type="text" />
+            <div class="field-hint">e.g. datasets/vehicle/tyre_data/Round_8_12_PSI_Lateral_Load_TyreData_parsed.csv</div>
+            <label class="field-label">Tyre Model Type</label>
+            <input id="c-tyre-type" type="text" />
+            <div class="field-hint">e.g. lookup</div>
+
+            <div class="field-section-header">Simulation</div>
+            <div class="field-checkbox-row">
+              <input type="checkbox" id="c-sim-debug_mode" />
+              <label for="c-sim-debug_mode">Debug Mode</label>
+            </div>
+            <div class="field-checkbox-row">
+              <input type="checkbox" id="c-sim-full_telemetry_mode" />
+              <label for="c-sim-full_telemetry_mode">Full Telemetry Mode</label>
+            </div>
+
+            <div class="field-section-header">Ambient</div>
+            <label class="field-label">Air Density</label>
+            <input id="c-ambient-air_density" type="text" />
+            <div class="field-hint">e.g. 1.225 · kg/m3</div>
+
+          </div>
+
           <button id="runLapBtn">Run Simulation</button>
         </div>
 
