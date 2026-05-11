@@ -8,6 +8,11 @@
 </head>
 <body>
 
+  <div class="user-bar">
+    <span class="user-bar-email" id="userBarEmail"></span>
+    <button class="user-bar-logout" id="userBarLogout" type="button">Sign out</button>
+  </div>
+
   <div class="page-header">
     <span class="page-title">LGR Lap Time Simulator</span>
     <span class="page-subtitle">Formula Student · Full Track QS · F24</span>
@@ -15,6 +20,7 @@
 
   <nav class="tab-bar">
     <button class="tab active" data-tab="base-sim">Base Simulator</button>
+    <button class="tab" data-tab="sweeps">Sweeps</button>
     <button class="tab" data-tab="tyres">Tyres</button>
     <button class="tab" data-tab="aero">Aerodynamics</button>
     <button class="tab" data-tab="powertrain">Powertrain</button>
@@ -133,6 +139,7 @@
             <div class="field-hint">e.g. datasets/tracks/FSUK.txt</div>
 
             <div class="field-section-header">Tyre Model</div>
+            <div class="field-cross-ref">These files are also used by the Tyres tab for model verification.</div>
             <label class="field-label">Longitudinal Data File</label>
             <input id="c-tyre-file_path_longit" type="text" />
             <div class="field-hint">e.g. datasets/vehicle/tyre_data/Round_6_12_PSI_Longit_Load_TyreData_parsed.csv</div>
@@ -206,9 +213,163 @@
       </div>
     </section>
 
+    <section id="sweeps" class="tab-section">
+      <div class="sim-panel">
+
+        <div class="panel inputs-panel">
+
+          <button id="runSweepBtn">Run Sweep</button>
+
+          <div class="field-section-header">Parameter</div>
+          <label class="field-label">Name</label>
+          <select id="sw-param"><option value="">Loading...</option></select>
+          <div class="field-hint" id="sw-param-hint"></div>
+
+          <label class="field-label">Values</label>
+          <input id="sw-values" type="text" placeholder="e.g. 250,350" />
+          <div class="field-hint" id="sw-values-hint">Range: min,max (uses steps). Explicit: 250,275,300,325,350</div>
+
+          <label class="field-label">Steps</label>
+          <input id="sw-steps" type="text" value="5" />
+          <div class="field-hint">Points across a min,max range. Ignored for explicit lists.</div>
+
+          <div class="field-section-header">Track</div>
+          <label class="field-label">Track File</label>
+          <input id="sw-track" type="text" placeholder="Leave blank for default" />
+          <div class="field-hint">e.g. datasets/tracks/FSUK.txt</div>
+
+        </div>
+
+        <div class="viz-panel">
+
+          <div class="summary-strip">
+            <div class="stat-item">
+              <span class="stat-label">Best</span>
+              <span class="stat-value" id="sw-stat-best-time">--</span>
+              <span class="stat-unit">s</span>
+            </div>
+            <div class="stat-divider"></div>
+            <div class="stat-item">
+              <span class="stat-label">Best at</span>
+              <span class="stat-value stat-value--sm" id="sw-stat-best-val">--</span>
+            </div>
+            <div class="stat-divider"></div>
+            <div class="stat-item">
+              <span class="stat-label">Worst</span>
+              <span class="stat-value" id="sw-stat-worst-time">--</span>
+              <span class="stat-unit">s</span>
+            </div>
+            <div class="stat-divider"></div>
+            <div class="stat-item">
+              <span class="stat-label">Worst at</span>
+              <span class="stat-value stat-value--sm" id="sw-stat-worst-val">--</span>
+            </div>
+            <div class="stat-divider"></div>
+            <div class="stat-item">
+              <span class="stat-label">Delta</span>
+              <span class="stat-value" id="sw-stat-delta">--</span>
+              <span class="stat-unit">s</span>
+            </div>
+            <span id="sweep-run-status" class="run-status"></span>
+            <button id="swCsvDownloadBtn" class="csv-btn" disabled>Download CSV</button>
+          </div>
+
+          <div id="sweepError" class="run-error" style="display:none"></div>
+
+          <div id="sweepChartContainer" class="sweep-chart-container">
+            <div class="sweep-placeholder">Set a parameter and run a sweep to see results.</div>
+          </div>
+
+        </div>
+
+      </div>
+    </section>
+
     <section id="tyres" class="tab-section">
-      <h2 class="section-title">Tyres</h2>
-      <p class="section-sub">In development.</p>
+      <div class="sim-panel">
+
+        <div class="panel inputs-panel">
+
+          <button id="runTyreBtn">Run Verification</button>
+
+          <div class="inner-tab-bar">
+            <button class="inner-tab active" data-inner-tab="tyre-verify-tab">Verification</button>
+            <button class="inner-tab" data-inner-tab="tyre-sensitivity-tab">Sensitivity</button>
+          </div>
+
+          <!-- Verification tab -->
+          <div id="tyre-verify-tab" class="inner-tab-section active">
+
+            <div class="field-section-header">Files in use</div>
+            <div class="field-cross-ref">Tyre data files are set in the Base Simulator Config tab. Run a simulation there first to apply any changes.</div>
+            <label class="field-label">Lateral Data</label>
+            <div class="tyre-file-display" id="tyre-lat-display">--</div>
+            <label class="field-label">Longitudinal Data</label>
+            <div class="tyre-file-display" id="tyre-long-display">--</div>
+
+            <div class="field-section-header">Options</div>
+            <label class="field-label">Model Variant</label>
+            <select id="tyre-model-variant">
+              <option value="tyre_peak_load_clamp">tyre_peak_load_clamp</option>
+              <option value="baseline">baseline</option>
+            </select>
+            <div class="field-hint">tyre_peak_load_clamp caps high-load growth. baseline uses raw extrapolation.</div>
+
+          </div>
+
+          <!-- Sensitivity tab -->
+          <div id="tyre-sensitivity-tab" class="inner-tab-section">
+
+            <div class="field-section-header">Friction Scale</div>
+            <label class="field-label">Base Mu</label>
+            <div class="slider-row">
+              <input type="range" id="tyre-base-mu" min="0.5" max="2.0" step="0.05" value="1.0" />
+              <span class="slider-value" id="tyre-base-mu-val">1.00</span>
+            </div>
+            <div class="field-hint">Scales all tyre forces linearly. 1.0 matches TTC data. Lower for wet or worn conditions.</div>
+
+          </div>
+
+        </div>
+
+        <div class="tyre-viz-panel">
+
+          <div class="summary-strip">
+            <div class="stat-item">
+              <span class="stat-label">Validation</span>
+              <span class="stat-value stat-value--sm" id="tyre-stat-result">--</span>
+            </div>
+            <div class="stat-divider"></div>
+            <div class="stat-item">
+              <span class="stat-label">Lat RMSE</span>
+              <span class="stat-value" id="tyre-stat-lat-rmse">--</span>
+              <span class="stat-unit">%</span>
+            </div>
+            <div class="stat-divider"></div>
+            <div class="stat-item">
+              <span class="stat-label">Long RMSE</span>
+              <span class="stat-value" id="tyre-stat-long-rmse">--</span>
+              <span class="stat-unit">%</span>
+            </div>
+            <div class="stat-divider"></div>
+            <div class="stat-item">
+              <span class="stat-label">Threshold</span>
+              <span class="stat-value" id="tyre-stat-threshold">12</span>
+              <span class="stat-unit">%</span>
+            </div>
+            <span id="tyre-run-status" class="run-status"></span>
+            <span id="tyre-stat-mu-note" class="tyre-mu-note" style="display:none"></span>
+          </div>
+
+          <div id="tyreError" class="run-error" style="display:none"></div>
+
+          <div class="tyre-charts-area" id="tyreChartsArea">
+            <div class="tyre-placeholder">Run verification to see tyre model accuracy against TTC data.</div>
+          </div>
+
+        </div>
+
+      </div>
     </section>
 
     <section id="aero" class="tab-section">

@@ -18,6 +18,37 @@ let telemetryState = {
 
 let _chartInstances = {};
 
+async function apiFetch(input, init) {
+  const res = await fetch(input, init);
+  if (res.status === 401) {
+    window.location.href = '/login';
+    throw new Error('Not authenticated');
+  }
+  return res;
+}
+
+async function initUserBar() {
+  try {
+    const res = await apiFetch('/api/me');
+    if (!res.ok) return;
+    const body = await res.json();
+    const emailEl = document.getElementById('userBarEmail');
+    if (emailEl) emailEl.textContent = body.email || '';
+  } catch (e) {
+    // apiFetch already redirects on 401; nothing to do here
+  }
+  const logoutBtn = document.getElementById('userBarLogout');
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', () => {
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = '/logout';
+      document.body.appendChild(form);
+      form.submit();
+    });
+  }
+}
+
 function initTabs() {
   const tabs = document.querySelectorAll('.tab');
   const sections = document.querySelectorAll('.tab-section');
@@ -348,8 +379,8 @@ function populateConfig(c) {
 async function loadParametersAndConfig() {
   try {
     const [pRes, cRes] = await Promise.all([
-      fetch('/api/parameters'),
-      fetch('/api/config'),
+      apiFetch('/api/parameters'),
+      apiFetch('/api/config'),
     ]);
     if (!pRes.ok || !cRes.ok) throw new Error('Failed to load defaults');
     populateParameters(await pRes.json());
@@ -491,7 +522,7 @@ function collectConfig() {
 }
 
 async function loadMetadata() {
-  const res = await fetch('/api/metadata');
+  const res = await apiFetch('/api/metadata');
   const data = await res.json();
   const el = document.getElementById('scope');
   if (el) el.textContent = data.model_scope ?? '';
@@ -532,7 +563,7 @@ async function runLap() {
     const overrides = {};
     if (cfg.ambient_conditions?.air_density != null) overrides.air_density = cfg.ambient_conditions.air_density;
     if (cfg.full_telemetry_mode != null) overrides.full_telemetry_mode = cfg.full_telemetry_mode;
-    const res = await fetch('/api/lap/run', {
+    const res = await apiFetch('/api/lap/run', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ parameters: params, overrides }),
@@ -670,6 +701,16 @@ function renderMarkdownWithMath(md) {
   return html;
 }
 
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, ch => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }[ch]));
+}
+
 // ── Lessons ─────────────────────────────────────────────────────────────────
 
 async function loadLesson(filename, title) {
@@ -677,7 +718,7 @@ async function loadLesson(filename, title) {
   const label = document.getElementById('lessonTitle');
   body.textContent = 'Loading...';
   label.textContent = title;
-  const res = await fetch('/lessons/' + filename);
+  const res = await apiFetch('/lessons/' + filename);
   const md = await res.text();
   body.innerHTML = renderMarkdownWithMath(md);
   body.querySelectorAll('img[src]').forEach(img => {
@@ -728,7 +769,11 @@ function appendChatMessage(role, content, sources) {
   const thread = document.getElementById('chatMessages');
   const msg = document.createElement('div');
   msg.className = `chat-msg ${role}`;
-  msg.textContent = content;
+  if (role === 'assistant') {
+    msg.innerHTML = renderMarkdownWithMath(escapeHtml(content));
+  } else {
+    msg.textContent = content;
+  }
 
   if (sources && sources.length > 0) {
     const pillRow = document.createElement('div');
@@ -782,7 +827,7 @@ async function sendChatMessage() {
   })();
 
   try {
-    const res = await fetch('/api/chat', {
+    const res = await apiFetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ question, history: chatHistory }),
@@ -821,7 +866,7 @@ const SWEEP_PARAM_HINTS = {
 async function initSweepParams() {
   const sel = document.getElementById('sw-param');
   try {
-    const res  = await fetch('/api/parameters');
+    const res  = await apiFetch('/api/parameters');
     const data = await res.json();
 
     sel.innerHTML = '';
@@ -904,7 +949,7 @@ async function runSweep() {
     const body = { param, values, steps };
     if (track) body.overrides = { track_id: track };
 
-    const res = await fetch('/api/sweep/run', {
+    const res = await apiFetch('/api/sweep/run', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -1044,7 +1089,7 @@ async function runTyreVerify() {
   const baseMu = parseFloat(document.getElementById('tyre-base-mu').value) || 1.0;
 
   try {
-    const res  = await fetch('/api/tyre/verify', {
+    const res  = await apiFetch('/api/tyre/verify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ lat_dataset: "round_8_12psi", long_dataset: "round_6_12psi", model_variant: variant, base_mu: baseMu }),
@@ -1170,6 +1215,7 @@ document.getElementById('chatQuestion').addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.target.disabled) sendChatMessage();
 });
 
+initUserBar();
 initTabs();
 initInnerTabs();
 initVizPanel();
