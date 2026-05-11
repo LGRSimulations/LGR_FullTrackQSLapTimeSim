@@ -14,3 +14,4 @@ dist/
 config/
 test_results.txt
 .env
+.env.*
