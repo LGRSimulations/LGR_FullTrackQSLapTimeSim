@@ -78,11 +78,12 @@ def run_lap(parameters: dict | None = None, overrides=None) -> dict:
 def metadata() -> dict:
     cfg = _load_base_config()
     params_json = _load_base_parameters()
+    default_track = cfg.get("track", {}).get("file_path", "")
 
     return {
         "app_name": "LGR Sim Workbench",
         "model_scope": "Quasi-static lap-time simulator (production v1)",
         "deferred_parameters": ["suspension_stiffness", "damping_coefficient"],
-        "track_default": cfg.get("track", {}).get("file_path"),
+        "track_default": Path(default_track).name if default_track else "",
         "parameter_file_sections": list(params_json.keys()),
     }

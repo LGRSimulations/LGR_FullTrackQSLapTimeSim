@@ -3,7 +3,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.paths import lessons_dir, static_dir, workspace_root
+from app.paths import lessons_dir, static_dir
 from app.schemas import LapRunRequest, LiftCoastRequest, SweepRequest, TyreVerifyRequest, ChatRequest, ChatResponse
 from app.services.lap_service import get_config, get_parameters, metadata, run_lap
 from app.services.lift_coast_service import run_lift_coast
@@ -24,15 +24,22 @@ def create_app() -> FastAPI:
     def index() -> FileResponse:
         return FileResponse(static_root / "index.html")
 
-    local_workspace_root = workspace_root()
-
     @app.get("/api/health")
     def health() -> dict:
         return {"status": "ok"}
 
-    @app.get("/api/workspace")
-    def get_workspace() -> dict:
-        return {"root": str(local_workspace_root).replace("\\", "/")}
+    @app.get("/api/datasets")
+    def list_datasets() -> dict:
+        from app.security.dataset_registry import (
+            list_track_ids,
+            list_tyre_lateral_ids,
+            list_tyre_longitudinal_ids,
+        )
+        return {
+            "tracks": list_track_ids(),
+            "tyre_lateral": list_tyre_lateral_ids(),
+            "tyre_longitudinal": list_tyre_longitudinal_ids(),
+        }
 
     @app.get("/api/metadata")
     def get_metadata() -> dict:
@@ -44,7 +51,18 @@ def create_app() -> FastAPI:
 
     @app.get("/api/config")
     def get_config_endpoint() -> dict:
-        return get_config()
+        cfg = get_config()
+        return {
+            "debug_mode": False,
+            "full_telemetry_mode": bool(cfg.get("full_telemetry_mode", True)),
+            "solver": {
+                "use_rollover_speed_cap": bool(cfg.get("solver", {}).get("use_rollover_speed_cap", True)),
+                "max_brake_decel_g": float(cfg.get("solver", {}).get("max_brake_decel_g", 2.0)),
+            },
+            "ambient_conditions": {
+                "air_density": float(cfg.get("ambient_conditions", {}).get("air_density", 1.225)),
+            },
+        }
 
     @app.post("/api/lap/run")
     def run_lap_endpoint(req: LapRunRequest) -> dict:

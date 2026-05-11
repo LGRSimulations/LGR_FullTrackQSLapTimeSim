@@ -561,16 +561,6 @@ async function runLap() {
 
 // ── Lesson link handling ────────────────────────────────────────────────────
 
-let _workspaceRoot = null;
-
-async function getWorkspaceRoot() {
-  if (_workspaceRoot) return _workspaceRoot;
-  const res = await fetch('/api/workspace');
-  const data = await res.json();
-  _workspaceRoot = data.root;
-  return _workspaceRoot;
-}
-
 function resolvePath(baseDir, rel) {
   const parts = [...baseDir.split('/'), ...rel.split('/')];
   const resolved = [];
@@ -614,8 +604,7 @@ function openVsCode(uri) {
   }, 1500);
 }
 
-async function processLessonLinks(container, lessonFile) {
-  const workspaceRoot = await getWorkspaceRoot();
+function processLessonLinks(container, lessonFile) {
   const baseDir = 'docs/lessons';
 
   container.querySelectorAll('a[href]').forEach(link => {
@@ -643,13 +632,13 @@ async function processLessonLinks(container, lessonFile) {
         }
       });
     } else {
-      const absPath = workspaceRoot + '/' + resolved;
-      const vscodeUri = 'vscode://file/' + absPath;
+      // TODO: fetch /api/datasets or a future /api/workspace-uri endpoint to
+      // construct VS Code deep links without leaking the server filesystem path.
       link.classList.add('code-link');
       link.setAttribute('title', resolved);
       link.addEventListener('click', e => {
         e.preventDefault();
-        openVsCode(vscodeUri);
+        showToast('Open this file in your editor: ' + resolved);
       });
     }
   });
