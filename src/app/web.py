@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
-from app.auth import build_oauth_client, load_auth_config, register_auth_routes, require_user
+from app.auth import build_oauth_client, load_auth_config, local_auth_bypass_email, register_auth_routes, require_user
 from app.paths import lessons_dir, static_dir
 from app.schemas import LapRunRequest, LiftCoastRequest, SweepRequest, TyreVerifyRequest, ChatRequest, ChatResponse
 from app.services.lap_service import get_config, get_parameters, metadata, run_lap
@@ -39,7 +39,7 @@ def create_app() -> FastAPI:
 
     @app.get("/")
     def index(request: Request):
-        if not request.session.get("email"):
+        if not request.session.get("email") and not local_auth_bypass_email():
             return RedirectResponse(url="/login", status_code=303)
         return FileResponse(static_root / "index.html")
 
@@ -75,12 +75,13 @@ def create_app() -> FastAPI:
     @app.get("/api/config")
     def get_config_endpoint(email: str = Depends(require_user)) -> dict:
         cfg = get_config()
+        max_brake_decel_g = cfg.get("solver", {}).get("max_brake_decel_g")
         return {
             "debug_mode": False,
             "full_telemetry_mode": bool(cfg.get("full_telemetry_mode", True)),
             "solver": {
                 "use_rollover_speed_cap": bool(cfg.get("solver", {}).get("use_rollover_speed_cap", True)),
-                "max_brake_decel_g": float(cfg.get("solver", {}).get("max_brake_decel_g", 2.0)),
+                "max_brake_decel_g": None if max_brake_decel_g is None else float(max_brake_decel_g),
             },
             "ambient_conditions": {
                 "air_density": float(cfg.get("ambient_conditions", {}).get("air_density", 1.225)),

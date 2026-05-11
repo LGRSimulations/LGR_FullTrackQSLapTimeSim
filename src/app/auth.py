@@ -11,6 +11,7 @@ from fastapi.responses import FileResponse, RedirectResponse
 
 
 _REQUIRED_ENV = ("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "SESSION_SECRET", "APP_BASE_URL")
+_LOCAL_BASE_PREFIXES = ("http://localhost", "http://127.0.0.1")
 
 
 @dataclass(frozen=True)
@@ -28,6 +29,18 @@ class AuthConfig:
 
 def load_auth_config() -> AuthConfig:
     """Read the required env vars or fail loudly. Strips a trailing slash from APP_BASE_URL."""
+    bypass_email = local_auth_bypass_email()
+    if bypass_email:
+        base = os.environ.get("APP_BASE_URL", "http://localhost:3000").rstrip("/")
+        session_secret = os.environ.get("SESSION_SECRET", "local-dev-session-secret-change-me")
+        return AuthConfig(
+            google_client_id=os.environ.get("GOOGLE_CLIENT_ID", "local-dev-client-id"),
+            google_client_secret=os.environ.get("GOOGLE_CLIENT_SECRET", "local-dev-client-secret"),
+            session_secret=session_secret,
+            app_base_url=base,
+            cookie_secure=False,
+        )
+
     missing = [v for v in _REQUIRED_ENV if not os.environ.get(v)]
     if missing:
         raise RuntimeError(
@@ -44,6 +57,17 @@ def load_auth_config() -> AuthConfig:
     )
 
 
+def local_auth_bypass_email() -> str:
+    """Return the local Docker/dev bypass user, but only for localhost base URLs."""
+    email = os.environ.get("LOCAL_AUTH_BYPASS_EMAIL", "").strip()
+    if not email:
+        return ""
+    base = os.environ.get("APP_BASE_URL", "http://localhost:3000").rstrip("/")
+    if not base.startswith(_LOCAL_BASE_PREFIXES):
+        raise RuntimeError("LOCAL_AUTH_BYPASS_EMAIL can only be used with a localhost APP_BASE_URL")
+    return email
+
+
 def build_oauth_client(cfg: AuthConfig) -> OAuth:
     oauth = OAuth()
     oauth.register(
@@ -58,6 +82,10 @@ def build_oauth_client(cfg: AuthConfig) -> OAuth:
 
 def require_user(request: Request) -> str:
     """FastAPI dependency. Returns the user's email if signed in, else 401."""
+    bypass_email = local_auth_bypass_email()
+    if bypass_email:
+        return bypass_email
+
     email = request.session.get("email") if hasattr(request, "session") else None
     if not email:
         raise HTTPException(status_code=401, detail="Authentication required")

@@ -5,5 +5,8 @@ seaborn
 scipy
 fastapi
 uvicorn
+itsdangerous
+authlib
+cryptography
 pyinstaller
 httpx
