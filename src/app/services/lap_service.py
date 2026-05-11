@@ -1,9 +1,9 @@
-import copy
 import json
+from pathlib import Path
 
 from fastapi import HTTPException
 
-from app.paths import config_path, parameters_path, resolve_track_path
+from app.paths import config_path, parameters_path
 
 
 def _load_base_config() -> dict:
@@ -26,21 +26,20 @@ def get_config() -> dict:
     return _load_base_config()
 
 
-def run_lap(parameters: dict | None = None, config: dict | None = None) -> dict:
+def run_lap(parameters: dict | None = None, overrides=None) -> dict:
+    from app.security.config_overrides import ConfigOverrides, build_config
     from simulator.simulator import run_lap_time_simulation
     from track.track import load_track
     from vehicle.vehicle import create_vehicle
 
-    if config is None:
-        cfg = copy.deepcopy(_load_base_config())
-    else:
-        cfg = copy.deepcopy(config)
+    overrides = overrides if overrides is not None else ConfigOverrides()
+    try:
+        cfg = build_config(_load_base_config(), overrides)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
 
     if parameters is not None:
         cfg["vehicle_parameters"] = parameters
-
-    track_file_path = cfg.get("track", {}).get("file_path", "datasets/tracks/FSUK.txt")
-    cfg.setdefault("track", {})["file_path"] = resolve_track_path(track_file_path)
 
     try:
         vehicle = create_vehicle(cfg)
@@ -59,7 +58,7 @@ def run_lap(parameters: dict | None = None, config: dict | None = None) -> dict:
 
     return {
         "lap_time_s": float(result.lap_time),
-        "track_file_path": cfg["track"]["file_path"],
+        "track_file_path": Path(cfg["track"]["file_path"]).name,
         "points": int(len(track.points)),
         "max_abs_g_lat": max_abs_g_lat,
         "max_abs_g_long": max_abs_g_long,

@@ -164,6 +164,19 @@ class LimitingCaseContractTests(unittest.TestCase):
         self.assertTrue(all(abs(float(v)) <= 1e-9 for v in speeds))
         self.assertEqual(len(diagnostics["backward_limiting_mode"]), len(point_speeds))
 
+    def test_backward_brake_decel_respects_configured_cap(self):
+        vehicle, cfg = self._create_vehicle()
+        cfg.setdefault("solver", {})["max_brake_decel_g"] = 2.0
+        track = _build_straight_track(ds=15.0, n_points=6)
+        point_speeds = [35.0] * len(track.points)
+
+        _, diagnostics = backward_pass(track, vehicle, point_speeds, cfg)
+
+        used = diagnostics.get("backward_brake_decel_limit", [])
+        self.assertEqual(len(used), len(point_speeds))
+        self.assertLessEqual(max(float(v) for v in used), 2.0 * 9.81 + 1e-9)
+        self.assertGreater(int(diagnostics.get("backward_brake_decel_cap_applied_events", 0)), 0)
+
     def test_corner_residual_telemetry_exists_and_is_finite_for_successes(self):
         vehicle, cfg = self._create_vehicle()
         track = _build_straight_track(ds=10.0, n_points=6)

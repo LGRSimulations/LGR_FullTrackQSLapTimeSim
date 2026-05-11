@@ -2,10 +2,12 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from app.security.config_overrides import ConfigOverrides
+
 
 class LapRunRequest(BaseModel):
-    parameters: dict[str, Any] | None = None
-    config: dict[str, Any] | None = None
+    parameters: dict[str, float | int | bool] | None = Field(default=None)
+    overrides: ConfigOverrides = Field(default_factory=ConfigOverrides)
 
 
 class LiftCoastRequest(BaseModel):
@@ -24,12 +26,11 @@ class TyreVerifyRequest(BaseModel):
 
 
 class SweepRequest(BaseModel):
-    param: str = Field(min_length=1)
-    values: str = Field(min_length=1)
+    param: str = Field(min_length=1, max_length=64)
+    values: str = Field(min_length=1, max_length=512)
     steps: int = Field(default=5, ge=2, le=50)
-    track_file_path: str | None = None
-    parameters: dict[str, Any] | None = None
-    config: dict[str, Any] | None = None
+    parameters: dict[str, float | int | bool] | None = Field(default=None)
+    overrides: ConfigOverrides = Field(default_factory=ConfigOverrides)
 
 
 class ChatSource(BaseModel):

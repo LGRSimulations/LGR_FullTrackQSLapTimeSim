@@ -48,7 +48,7 @@ def create_app() -> FastAPI:
 
     @app.post("/api/lap/run")
     def run_lap_endpoint(req: LapRunRequest) -> dict:
-        return run_lap(parameters=req.parameters, config=req.config)
+        return run_lap(parameters=req.parameters, overrides=req.overrides)
 
     @app.post("/api/tyre/verify")
     def tyre_verify_endpoint(req: TyreVerifyRequest) -> dict:
@@ -66,9 +66,8 @@ def create_app() -> FastAPI:
             param=req.param,
             values=req.values,
             steps=req.steps,
-            track_file_path=req.track_file_path,
             parameters=req.parameters,
-            config=req.config,
+            overrides=req.overrides,
         )
 
     @app.post("/api/lift-coast/run")

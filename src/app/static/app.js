@@ -529,10 +529,13 @@ async function runLap() {
     </div>`;
 
   try {
+    const overrides = {};
+    if (cfg.ambient_conditions?.air_density != null) overrides.air_density = cfg.ambient_conditions.air_density;
+    if (cfg.full_telemetry_mode != null) overrides.full_telemetry_mode = cfg.full_telemetry_mode;
     const res = await fetch('/api/lap/run', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ parameters: params, config: cfg }),
+      body: JSON.stringify({ parameters: params, overrides }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -910,7 +913,7 @@ async function runSweep() {
 
   try {
     const body = { param, values, steps };
-    if (track) body.track_file_path = track;
+    if (track) body.overrides = { track_id: track };
 
     const res = await fetch('/api/sweep/run', {
       method: 'POST',
