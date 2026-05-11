@@ -572,7 +572,16 @@ async function runLap() {
       chartArea.innerHTML = '';
       status.textContent = 'RUN FAILED';
       status.className = 'run-status error';
-      errorEl.textContent = data.detail ?? JSON.stringify(data, null, 2);
+      const detail = data.detail;
+      let msg;
+      if (typeof detail === 'string') {
+        msg = detail;
+      } else if (Array.isArray(detail)) {
+        msg = detail.map(e => `${(e.loc || []).join('.')}: ${e.msg}`).join('\n');
+      } else {
+        msg = JSON.stringify(data, null, 2);
+      }
+      errorEl.textContent = msg;
       errorEl.style.display = 'block';
     } else {
       storeTelemetry(data);

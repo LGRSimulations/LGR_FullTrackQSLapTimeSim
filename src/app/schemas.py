@@ -1,10 +1,12 @@
+from typing import Any
+
 from pydantic import BaseModel, Field, field_validator
 
 from app.security.config_overrides import ConfigOverrides
 
 
 class LapRunRequest(BaseModel):
-    parameters: dict[str, float | int | bool] | None = Field(default=None)
+    parameters: dict[str, Any] | None = Field(default=None)
     overrides: ConfigOverrides = Field(default_factory=ConfigOverrides)
 
 
@@ -42,7 +44,7 @@ class SweepRequest(BaseModel):
     param: str = Field(min_length=1, max_length=64)
     values: str = Field(min_length=1, max_length=512)
     steps: int = Field(default=5, ge=2, le=50)
-    parameters: dict[str, float | int | bool] | None = Field(default=None)
+    parameters: dict[str, Any] | None = Field(default=None)
     overrides: ConfigOverrides = Field(default_factory=ConfigOverrides)
 
 
