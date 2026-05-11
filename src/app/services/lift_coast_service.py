@@ -102,11 +102,14 @@ def run_lift_coast(power_limits_kw: list[float], energy_target_kwh: float, dt: f
     cfg = copy.deepcopy(cfg)
     vehicle = create_vehicle(cfg)
 
+    from app.security.vehicle_params import canonical_or_reject
     for key, value in (parameter_overrides or {}).items():
-        if key == "aero_cp":
-            key = "aero_centre_of_pressure"
-        if hasattr(vehicle.params, key):
-            setattr(vehicle.params, key, value)
+        try:
+            canonical = canonical_or_reject(key)
+        except ValueError:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=422, detail=f"Parameter {key!r} is not overridable")
+        setattr(vehicle.params, canonical, value)
 
     runs = [_run_single(vehicle, float(p), float(energy_target_kwh), float(dt)) for p in power_limits_kw]
 

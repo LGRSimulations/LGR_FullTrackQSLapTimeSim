@@ -1,6 +1,4 @@
-from typing import Any
-
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.security.config_overrides import ConfigOverrides
 
@@ -11,10 +9,25 @@ class LapRunRequest(BaseModel):
 
 
 class LiftCoastRequest(BaseModel):
-    power_limits_kw: list[float] = Field(default_factory=lambda: [10, 20, 30, 40, 50])
-    energy_target_kwh: float = 0.5
-    dt: float = 0.05
-    parameter_overrides: dict[str, Any] = Field(default_factory=dict)
+    power_limits_kw: list[float] = Field(
+        default_factory=lambda: [10.0, 20.0, 30.0, 40.0, 50.0],
+        min_length=1,
+        max_length=10,
+    )
+    energy_target_kwh: float = Field(default=0.5, gt=0.0, le=10.0)
+    dt: float = Field(default=0.05, gt=0.0, le=1.0)
+    parameter_overrides: dict[str, float | int | bool] = Field(
+        default_factory=dict,
+        max_length=20,
+    )
+
+    @field_validator("power_limits_kw")
+    @classmethod
+    def _bound_each_power_limit(cls, v: list[float]) -> list[float]:
+        for x in v:
+            if not (0.0 <= x <= 1000.0):
+                raise ValueError("power_limits_kw entries must be in [0, 1000]")
+        return v
 
 
 class TyreVerifyRequest(BaseModel):
