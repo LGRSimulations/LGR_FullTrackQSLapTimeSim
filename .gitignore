@@ -13,3 +13,4 @@ dist/
 .superpowers/
 config/
 test_results.txt
+.env
