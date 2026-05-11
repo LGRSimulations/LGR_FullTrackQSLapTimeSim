@@ -6,9 +6,22 @@ from fastapi.testclient import TestClient
 from app.web import create_app
 
 
+@pytest.fixture(scope="module", autouse=True)
+def _set_auth_env():
+    import os
+    os.environ.setdefault("GOOGLE_CLIENT_ID", "test-client-id")
+    os.environ.setdefault("GOOGLE_CLIENT_SECRET", "test-client-secret")
+    os.environ.setdefault("SESSION_SECRET", "x" * 32)
+    os.environ.setdefault("APP_BASE_URL", "http://testserver")
+    yield
+
+
 @pytest.fixture(scope="module")
 def client():
-    return TestClient(create_app())
+    from app.auth import require_user
+    app = create_app()
+    app.dependency_overrides[require_user] = lambda: "tester@example.com"
+    return TestClient(app)
 
 
 def test_workspace_endpoint_is_gone(client):

@@ -1,9 +1,26 @@
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
+import pytest
 from app.services.lap_service import get_parameters, get_config
 from fastapi.testclient import TestClient
 from app.web import create_app
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _set_auth_env():
+    os.environ.setdefault("GOOGLE_CLIENT_ID", "test-client-id")
+    os.environ.setdefault("GOOGLE_CLIENT_SECRET", "test-client-secret")
+    os.environ.setdefault("SESSION_SECRET", "x" * 32)
+    os.environ.setdefault("APP_BASE_URL", "http://testserver")
+    yield
+
+
+def _authed_client():
+    from app.auth import require_user
+    app = create_app()
+    app.dependency_overrides[require_user] = lambda: "tester@example.com"
+    return TestClient(app)
 
 
 def test_get_parameters_excludes_comments():
@@ -24,7 +41,7 @@ def test_get_config_has_expected_keys():
 
 
 def test_http_get_config_sanitised_shape():
-    client = TestClient(create_app())
+    client = _authed_client()
     resp = client.get("/api/config")
     assert resp.status_code == 200
     data = resp.json()
@@ -40,7 +57,7 @@ def test_http_get_config_sanitised_shape():
 
 
 def test_http_get_parameters():
-    client = TestClient(create_app())
+    client = _authed_client()
     resp = client.get("/api/parameters")
     assert resp.status_code == 200
     data = resp.json()
@@ -49,13 +66,13 @@ def test_http_get_parameters():
 
 
 def test_http_get_config_returns_200():
-    client = TestClient(create_app())
+    client = _authed_client()
     resp = client.get("/api/config")
     assert resp.status_code == 200
 
 
 def test_http_post_lap_run_null_body():
-    client = TestClient(create_app())
+    client = _authed_client()
     resp = client.post("/api/lap/run", json={})
     assert resp.status_code == 200
     data = resp.json()
