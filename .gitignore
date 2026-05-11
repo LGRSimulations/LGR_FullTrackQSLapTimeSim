@@ -1,7 +1,15 @@
 .vscode
 __pycache__/
+*.pyc
+*.pyo
 .venv/
+.uv-cache/
+.pytest_cache/
 ab_test_outputs/
 artifacts/
+build/
+dist/
+*.spec
 .superpowers/
 config/
+test_results.txt
