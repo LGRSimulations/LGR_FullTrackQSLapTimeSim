@@ -678,7 +678,7 @@ function processLessonLinks(container, lessonFile) {
 // ── Math pre-processing ──────────────────────────────────────────────────────
 // Extract math before marked.js sees it to prevent _ and ^ mangling.
 
-function renderMarkdownWithMath(md) {
+function renderMarkdownWithMath(md, options = {}) {
   const stash = [];
 
   const save = (math, display) => {
@@ -687,9 +687,15 @@ function renderMarkdownWithMath(md) {
     return key;
   };
 
-  const processed = md
+  let processed = md
+    .replace(/\\\[([\s\S]*?)\\\]/g, (_, m) => save(m, true))
+    .replace(/\\\(([\s\S]*?)\\\)/g, (_, m) => save(m, false))
     .replace(/\$\$([\s\S]*?)\$\$/g, (_, m) => save(m, true))
     .replace(/\$([^\$\n]+?)\$/g, (_, m) => save(m, false));
+
+  if (options.escapeHtml) {
+    processed = escapeHtml(processed);
+  }
 
   let html = marked.parse(processed);
 
@@ -770,7 +776,7 @@ function appendChatMessage(role, content, sources) {
   const msg = document.createElement('div');
   msg.className = `chat-msg ${role}`;
   if (role === 'assistant') {
-    msg.innerHTML = renderMarkdownWithMath(escapeHtml(content));
+    msg.innerHTML = renderMarkdownWithMath(content, { escapeHtml: true });
   } else {
     msg.textContent = content;
   }

@@ -1,5 +1,8 @@
 # Simulator Basics
 
+## Read this after
+Start here if you are new to the simulator.
+
 ## Audience
 This note is for new readers who want a clear first mental model of the simulator.
 
@@ -122,6 +125,7 @@ Optional side path after Tyre Model Intro
 ## Next lesson
 - [Tyre Model Intro](Tyre-Model.md)
 
-## Related references
+## Related lessons
+- [Lessons Index](README.md)
 - [Parameter Enforcement Audit Roadmap](../PARAMETER_ENFORCEMENT_AUDIT_ROADMAP.md)
 - [Major Change Log](../MAJOR_CHANGE_LOG.md)

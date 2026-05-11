@@ -1,7 +1,10 @@
 # Vehicle Modelling Capstone
 
 ## Read this after
-Read [Aerodynamics Model Intro](Aero-Model.md) first.
+Read [Load Transfer and Normal Loads](Load-Transfer-and-Normal-Loads.md) and [Braking Dynamics and Deceleration Budget](Braking-Dynamics-and-Deceleration-Budget.md) first.
+
+## Goal
+Explain how the local corner, acceleration, and braking constraints become one final speed profile and lap time.
 
 ## What you will learn
 - What each pass does
@@ -49,7 +52,7 @@ Results
 
 - Final profile in code is the min of Pass 2 and Pass 3 after both are corner capped by Pass 1
 - Worked segment index = 41 at distance 213.93 m
-- Lap time from this run = 65.353 s
+- Lap time from this run = 69.733 s
 
 ## Worked example
 This point shows why backward braking limits matter.
@@ -65,20 +68,20 @@ Results
 
 - Pass 1 speed = 200.00 m/s
 - Pass 2 speed = 33.30 m/s
-- Pass 3 speed = 16.56 m/s
-- Final speed = 16.56 m/s
+- Pass 3 speed = 13.25 m/s
+- Final speed = 13.25 m/s
 - Limiting pass = Pass 3
 
 At this segment
 
 $$
-v_{final} = \min(200.00,\ 33.30,\ 16.56) = 16.56\ \text{m/s}
+v_{final} = \min(200.00,\ 33.30,\ 13.25) = 13.25\ \text{m/s}
 $$
 
 Equivalent implementation form at this same segment
 
 $$
-v_{final} = \min(33.30,\ 16.56) = 16.56\ \text{m/s}
+v_{final} = \min(33.30,\ 13.25) = 13.25\ \text{m/s}
 $$
 
 That is the key behavior of the three pass method.

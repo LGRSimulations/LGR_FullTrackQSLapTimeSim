@@ -1,7 +1,7 @@
 # Track Geometry and Sampling for Vehicle Dynamics
 
 ## Read this after
-Read [Vehicle Modelling Diagnostics and Trust Checks](Vehicle-Modelling-Diagnostics.md) first.
+Read [Vehicle Analysis IRL vs Simulator and GG Envelope](Vehicle-Analysis-IRL-vs-Simulator.md) first.
 
 ## Goal
 By the end, you should know
@@ -112,4 +112,5 @@ It does not include full filtering or advanced track reconstruction methods.
 - [Simulator Summary and Core Solver](simulator-summary.md)
 - [Vehicle Modelling Capstone](Vehicle-Modelling.md)
 - [Vehicle Modelling Diagnostics and Trust Checks](Vehicle-Modelling-Diagnostics.md)
+- [Vehicle Analysis IRL vs Simulator and GG Envelope](Vehicle-Analysis-IRL-vs-Simulator.md)
 - [Lessons Index](README.md)

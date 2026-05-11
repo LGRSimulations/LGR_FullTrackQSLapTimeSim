@@ -1,5 +1,8 @@
 # Tyre Model Deep Dive
 
+## Read this after
+Read [Simulator Basics](Simulator-Basics.md) and [Tyre Model Intro](Tyre-Model.md) first.
+
 ## Audience
 This note is for readers who already finished [Simulator Basics](Simulator-Basics.md) and [Tyre Model Intro](Tyre-Model.md).
 
@@ -63,16 +66,24 @@ Related solver paths
 
 ## Load sensitivity and base_mu
 The model uses load dependent peak interpolation from TTC style datasets.
-A global scale `base_mu` multiplies load derived peaks.
+A global scale `base_mu` is applied against a dataset reference friction level.
 
 Conceptually
 
 $$
-D_{lat,used}(F_z) = base\_mu \cdot D_{lat,table}(F_z)
+\mu_{lat,ref} = median\left(\frac{D_{lat,table}(F_z)}{F_z}\right)
 $$
 
 $$
-D_{long,used}(F_z) = base\_mu \cdot D_{long,table}(F_z)
+\mu_{long,ref} = median\left(\frac{D_{long,table}(F_z)}{F_z}\right)
+$$
+
+$$
+D_{lat,used}(F_z) = D_{lat,table}(F_z) \cdot \frac{base\_mu}{\mu_{lat,ref}}
+$$
+
+$$
+D_{long,used}(F_z) = D_{long,table}(F_z) \cdot \frac{base\_mu}{\mu_{long,ref}}
 $$
 
 This gives a controlled way to shift force capacity while preserving curve families.
@@ -160,8 +171,13 @@ Typical checks include
 
 - zero and limiting behavior
 - out of domain counters
+- clamping or flagging when slip or load leaves the declared validity domain
+- RMSE validation against tyre data
 - high load growth behavior
 - sensitivity gates on representative tracks
+
+For the peak-load-clamped variant, high-load growth is gated so extrapolated tyre force cannot inflate unrealistically beyond the measured load range.
+The validation command uses `--max-high-load-growth-ratio` to make that high-load growth gate explicit.
 
 ## Known limits
 Current model does not include full transient tyre state evolution.
@@ -176,6 +192,14 @@ These are deliberate tradeoffs for speed and robustness in lap sweeps.
 
 ## Next lesson
 - [Powertrain Model and Wheel Force Flow](Powertrain-Model.md)
+
+## Related lessons
+- [Tyre Model Intro](Tyre-Model.md)
+- [Powertrain Model and Wheel Force Flow](Powertrain-Model.md)
+- [Load Transfer and Normal Loads](Load-Transfer-and-Normal-Loads.md)
+- [Braking Dynamics and Deceleration Budget](Braking-Dynamics-and-Deceleration-Budget.md)
+- [Validation and Falsification Workflow](Validation-and-Falsification-Workflow.md)
+- [Lessons Index](README.md)
 
 ## References
 - Pacejka, H. B. Tire and Vehicle Dynamics

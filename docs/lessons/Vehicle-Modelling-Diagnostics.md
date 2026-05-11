@@ -6,6 +6,9 @@ Read these first
 - [Vehicle Modelling Capstone](Vehicle-Modelling.md)
 - [Simulator Summary and Core Solver](simulator-summary.md)
 
+## Goal
+Explain how to decide whether a lap result is credible before using it for setup or design decisions.
+
 ## Why this page exists
 This page helps you decide if a lap result is credible.
 It also helps you decide what to tune next.
@@ -45,8 +48,8 @@ Code path
 
 Current run example from FSUK with model variant b1
 
-- Forward pass counts: `power_limited=160`, `corner_capped=97`, `initial=1`
-- Backward pass counts: `corner_capped=140`, `brake_limited=117`, `terminal=1`
+- Forward pass counts: `power_limited=156`, `traction_limited=5`, `corner_capped=96`, `initial=1`
+- Backward pass counts: `brake_limited=155`, `corner_capped=82`, `lateral_saturated=20`, `terminal=1`
 
 ![Limiter mode counts from simulator](figures/vehicle_modelling_diagnostics/limiter_mode_counts_from_sim.png)
 
@@ -154,8 +157,8 @@ Engineering takeaway
 
 Current run channel range
 
-- Lap time = `65.353 s`
-- Longitudinal g min max = `-3.367` to `+1.119`
+- Lap time = `69.733 s`
+- Longitudinal g min max = `-1.365` to `+1.119`
 - Lateral g min max = `-1.312` to `+1.312`
 
 ![g-channels from simulator](figures/vehicle_modelling_diagnostics/g_channels_from_sim.png)
@@ -168,11 +171,12 @@ Current run channel range
 5. Re-run and compare limiter mix plus lap time together
 
 ## Next lesson
-- [Track Geometry and Sampling for Vehicle Dynamics](Track-Geometry-and-Sampling.md)
+- [Vehicle Analysis IRL vs Simulator and GG Envelope](Vehicle-Analysis-IRL-vs-Simulator.md)
 
 ## Related lessons
 - [Vehicle Modelling Capstone](Vehicle-Modelling.md)
 - [Simulator Summary and Core Solver](simulator-summary.md)
+- [Vehicle Analysis IRL vs Simulator and GG Envelope](Vehicle-Analysis-IRL-vs-Simulator.md)
 - [Track Geometry and Sampling for Vehicle Dynamics](Track-Geometry-and-Sampling.md)
 - [Aerodynamics Model Intro](Aero-Model.md)
 - [Tyre Model Deep Dive](Tyre-Model-Deep-Dive.md)
