@@ -473,13 +473,12 @@ function collectConfig() {
     return el ? el.value.trim() : '';
   }
 
-  function requirePath(id, label) {
-    const val = getString(id);
-    if (!val) {
-      document.getElementById(id).classList.add('field-error');
-      errors.push(`${label} is required`);
-    }
-    return val;
+  function requirePath(id, _label) {
+    // Path inputs are display-only after Phase 1 security hardening — the
+    // backend resolves datasets server-side via the dataset registry.
+    // Kept here so the Config tab still renders the historical values;
+    // no validation, no submission.
+    return getString(id);
   }
 
   function getFloat(id, label) {
