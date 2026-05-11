@@ -1,11 +1,22 @@
 
-# Import the moved functions from util modules
 import numpy as np
 import logging
-from .util.prettyGraphs.lapTimeResults import plot_lap_time_results, LapTimeResults
+from importlib import import_module
+
 from .util.calcSpeedProfile import compute_speed_profile
+from .util.results import LapTimeResults
 
 logger = logging.getLogger(__name__)
+
+
+def _plot_lap_time_results(results) -> None:
+    try:
+        plot_module = import_module(".util.prettyGraphs.lapTimeResults", __package__)
+    except ModuleNotFoundError:
+        logger.warning("Plotting extras are unavailable in this runtime; skipping lap-time plots.")
+        return
+
+    plot_module.plot_lap_time_results(results)
 
 def run_lap_time_simulation(track, vehicle, config, display=True):
     """Initialize and run a lap time simulation for the whole track."""
@@ -50,5 +61,5 @@ def run_lap_time_simulation(track, vehicle, config, display=True):
         diagnostics=diagnostics,
     )
     if display:
-        plot_lap_time_results(results)
+        _plot_lap_time_results(results)
     return results

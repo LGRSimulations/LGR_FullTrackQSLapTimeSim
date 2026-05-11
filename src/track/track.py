@@ -1,11 +1,31 @@
 import logging
 import os
 import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
+from importlib import import_module
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
+
+
+def _show_debug_track_plot(x: np.ndarray, y: np.ndarray, z: np.ndarray) -> None:
+    try:
+        sns = import_module("seaborn")
+        plt = import_module("matplotlib.pyplot")
+    except ModuleNotFoundError:
+        logger.warning("Plotting extras are unavailable in this runtime; skipping track debug plot.")
+        return
+
+    sns.set_theme(style="darkgrid", context="notebook")
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    ax.plot(x, y, z, label='Track 3D Path')
+    ax.set_xlabel('X (m)')
+    ax.set_ylabel('Y (m)')
+    ax.set_zlabel('Z (m)')
+    ax.set_title('Track 3D Map')
+    ax.legend()
+    plt.show()
 
 @dataclass  # using dataclasses removes the need for constructor boilerplate
 class TrackPoint:
@@ -91,18 +111,7 @@ def load_track(file_path: str, debug_mode) -> Track:
         logger.info(f"Loaded track with {len(points)} points, total length: {distances[-1]:.1f}m")
 
         if debug_mode is True:
-            sns.set_theme(style="darkgrid", context="notebook") # Use seaborn style for the plot
-
-            # 3D track visualization for validation
-            fig = plt.figure()
-            ax = fig.add_subplot(111, projection='3d')
-            ax.plot(x, y, z, label='Track 3D Path')
-            ax.set_xlabel('X (m)')
-            ax.set_ylabel('Y (m)')
-            ax.set_zlabel('Z (m)')
-            ax.set_title('Track 3D Map')
-            ax.legend()
-            plt.show()  # Plot persists until manually closed
+            _show_debug_track_plot(x, y, z)
 
         return Track(points, is_closed=True)
 

@@ -10,7 +10,7 @@ from vehicle.Tyres.baseTyre import LookupTableTyreModel
 
 
 class TyrePeakLoadClampContractTests(unittest.TestCase):
-    def _make_model(self, clamp_peak_load_high):
+    def _make_model(self, clamp_peak_load_high, base_mu=1.0):
         lat = pd.DataFrame(
             {
                 "Slip Angle [deg]": [-6.0, -3.0, 0.0, 3.0, 6.0, -6.0, -3.0, 0.0, 3.0, 6.0],
@@ -33,7 +33,7 @@ class TyrePeakLoadClampContractTests(unittest.TestCase):
         return LookupTableTyreModel(
             lat,
             lon,
-            base_mu=1.0,
+            base_mu=base_mu,
             clamp_peak_load_high=clamp_peak_load_high,
         )
 
@@ -65,6 +65,15 @@ class TyrePeakLoadClampContractTests(unittest.TestCase):
         fx = clamped.get_longitudinal_force(0.2, normal_load=0.0)
         self.assertAlmostEqual(fy, 0.0, places=9)
         self.assertAlmostEqual(fx, 0.0, places=9)
+
+    def test_base_mu_is_scaled_against_dataset_reference_mu(self):
+        model = self._make_model(clamp_peak_load_high=True, base_mu=1.4)
+        diag = model.get_domain_diagnostics()
+
+        self.assertAlmostEqual(diag["lateral_peak_mu_reference"], 0.8, places=9)
+        self.assertAlmostEqual(diag["longitudinal_peak_mu_reference"], 0.7, places=9)
+        self.assertAlmostEqual(diag["lateral_base_mu_scale"], 1.4 / 0.8, places=9)
+        self.assertAlmostEqual(diag["longitudinal_base_mu_scale"], 1.4 / 0.7, places=9)
 
 
 if __name__ == "__main__":
