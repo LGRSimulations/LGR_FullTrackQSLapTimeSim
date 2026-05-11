@@ -209,7 +209,6 @@ def run_tyre_verify(
         full_lat  = str(get_tyre_lateral_path(lat_dataset))
         full_long = str(get_tyre_longitudinal_path(long_dataset))
     except ValueError as exc:
-        from fastapi import HTTPException
         raise HTTPException(status_code=422, detail=str(exc))
 
     try:
