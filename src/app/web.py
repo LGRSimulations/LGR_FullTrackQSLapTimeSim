@@ -1,3 +1,6 @@
+import os
+os.environ.setdefault("MPLBACKEND", "Agg")
+
 import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
