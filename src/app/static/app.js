@@ -342,6 +342,7 @@ function populateConfig(c) {
   document.getElementById('c-sim-debug_mode').checked = c.debug_mode ?? false;
   document.getElementById('c-sim-full_telemetry_mode').checked = c.full_telemetry_mode ?? true;
   document.getElementById('c-ambient-air_density').value = c.ambient_conditions?.air_density ?? '';
+  initTyreTab();
 }
 
 async function loadParametersAndConfig() {
@@ -514,6 +515,19 @@ async function runLap() {
   status.textContent = 'Running...';
   status.className = 'run-status';
 
+  const btn = document.getElementById('runLapBtn');
+  btn.disabled = true;
+
+  const chartArea = document.getElementById('vizChartArea');
+  chartArea.innerHTML = `
+    <div class="sim-loading">
+      <div class="sim-loading-bars">
+        <span></span><span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span><span></span>
+      </div>
+      <div class="sim-loading-label">Running simulation</div>
+    </div>`;
+
   try {
     const res = await fetch('/api/lap/run', {
       method: 'POST',
@@ -522,6 +536,7 @@ async function runLap() {
     });
     const data = await res.json();
     if (!res.ok) {
+      chartArea.innerHTML = '';
       status.textContent = 'RUN FAILED';
       status.className = 'run-status error';
       errorEl.textContent = data.detail ?? JSON.stringify(data, null, 2);
@@ -531,10 +546,13 @@ async function runLap() {
       renderViz();
     }
   } catch {
+    chartArea.innerHTML = '';
     status.textContent = 'RUN FAILED';
     status.className = 'run-status error';
     errorEl.textContent = 'Could not reach the server. Try again.';
     errorEl.style.display = 'block';
+  } finally {
+    btn.disabled = false;
   }
 }
 
@@ -800,10 +818,360 @@ async function sendChatMessage() {
   }
 }
 
+// ── Sweep param dropdown ─────────────────────────────────────────────────────
+
+const SWEEP_PARAM_HINTS = {
+  list:    'Multiple sets separated by semicolons, e.g. [2.75,2.0,1.667];[3.2,2.3,1.9]',
+  string:  'Comma-separated explicit values, e.g. F25_IC_Car,F26_IC_Car',
+  numeric: 'Range: min,max (uses steps). Explicit list: 250,275,300,325,350',
+};
+
+async function initSweepParams() {
+  const sel = document.getElementById('sw-param');
+  try {
+    const res  = await fetch('/api/parameters');
+    const data = await res.json();
+
+    sel.innerHTML = '';
+    Object.entries(data).forEach(([section, fields]) => {
+      const group = document.createElement('optgroup');
+      group.label = section.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      Object.entries(fields).forEach(([key, val]) => {
+        if (key === 'name') return;
+        const opt = document.createElement('option');
+        opt.value = key;
+        const typeTag = Array.isArray(val) ? 'list' : typeof val === 'string' ? 'str' : `${val}`;
+        opt.textContent = `${key}  (${typeTag})`;
+        opt.dataset.valtype = Array.isArray(val) ? 'list' : typeof val;
+        group.appendChild(opt);
+      });
+      if (group.children.length) sel.appendChild(group);
+    });
+
+    updateSweepParamHint();
+    sel.addEventListener('change', updateSweepParamHint);
+  } catch {
+    sel.innerHTML = '<option value="">Could not load parameters</option>';
+  }
+}
+
+function updateSweepParamHint() {
+  const sel      = document.getElementById('sw-param');
+  const opt      = sel.options[sel.selectedIndex];
+  const valType  = opt ? opt.dataset.valtype : 'number';
+  const hintEl   = document.getElementById('sw-param-hint');
+  const valHint  = document.getElementById('sw-values-hint');
+
+  if (valType === 'list') {
+    hintEl.textContent  = 'List parameter. Provide candidate sets in the Values field.';
+    valHint.textContent = SWEEP_PARAM_HINTS.list;
+  } else if (valType === 'string') {
+    hintEl.textContent  = 'String parameter. Provide comma-separated candidate values.';
+    valHint.textContent = SWEEP_PARAM_HINTS.string;
+  } else {
+    hintEl.textContent  = '';
+    valHint.textContent = SWEEP_PARAM_HINTS.numeric;
+  }
+}
+
+// ── Parameter Sweep ─────────────────────────────────────────────────────────
+
+let sweepState = { lastResult: null };
+let _sweepChart = null;
+
+async function runSweep() {
+  const param  = document.getElementById('sw-param').value;
+  const values = document.getElementById('sw-values').value.trim();
+  const steps  = parseInt(document.getElementById('sw-steps').value.trim(), 10) || 5;
+  const track  = document.getElementById('sw-track').value.trim();
+
+  const errorEl = document.getElementById('sweepError');
+  errorEl.style.display = 'none';
+
+  if (!param)  { errorEl.textContent = 'Select a parameter.';  errorEl.style.display = 'block'; return; }
+  if (!values) { errorEl.textContent = 'Values are required.';          errorEl.style.display = 'block'; return; }
+
+  const status = document.getElementById('sweep-run-status');
+  status.textContent = 'Running...';
+  status.className = 'run-status';
+
+  const btn = document.getElementById('runSweepBtn');
+  btn.disabled = true;
+
+  const container = document.getElementById('sweepChartContainer');
+  container.innerHTML = `
+    <div class="sim-loading">
+      <div class="sim-loading-bars">
+        <span></span><span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span><span></span>
+      </div>
+      <div class="sim-loading-label">Running sweep</div>
+    </div>`;
+
+  try {
+    const body = { param, values, steps };
+    if (track) body.track_file_path = track;
+
+    const res = await fetch('/api/sweep/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      container.innerHTML = '';
+      status.textContent = 'FAILED';
+      status.className = 'run-status error';
+      errorEl.textContent = data.detail ?? JSON.stringify(data);
+      errorEl.style.display = 'block';
+    } else {
+      sweepState.lastResult = data;
+      renderSweepResults(data);
+      status.textContent = 'SWEEP OK';
+      status.className = 'run-status ok';
+      document.getElementById('swCsvDownloadBtn').disabled = false;
+    }
+  } catch {
+    container.innerHTML = '';
+    status.textContent = 'FAILED';
+    status.className = 'run-status error';
+    errorEl.textContent = 'Could not reach the server. Try again.';
+    errorEl.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function renderSweepResults(data) {
+  document.getElementById('sw-stat-best-time').textContent  = data.best.lap_time_s.toFixed(2);
+  document.getElementById('sw-stat-best-val').textContent   = data.best.label;
+  document.getElementById('sw-stat-worst-time').textContent = data.worst.lap_time_s.toFixed(2);
+  document.getElementById('sw-stat-worst-val').textContent  = data.worst.label;
+  document.getElementById('sw-stat-delta').textContent      = (data.worst.lap_time_s - data.best.lap_time_s).toFixed(2);
+
+  const container = document.getElementById('sweepChartContainer');
+  container.innerHTML = '<canvas id="sweepChart"></canvas>';
+
+  if (_sweepChart) { _sweepChart.destroy(); _sweepChart = null; }
+
+  const labels   = data.results.map(r => r.label);
+  const lapTimes = data.results.map(r => r.lap_time_s);
+
+  _sweepChart = new Chart(document.getElementById('sweepChart').getContext('2d'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Lap Time',
+        data: lapTimes,
+        borderColor: '#006B5C',
+        borderWidth: 2,
+        pointRadius: 5,
+        pointBackgroundColor: '#006B5C',
+        tension: 0.3,
+        fill: false,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: { title: { display: true, text: data.canonical_param } },
+        y: { title: { display: true, text: 'Lap Time (s)' } },
+      },
+      plugins: { legend: { display: false } },
+    },
+  });
+}
+
+function downloadSweepCSV() {
+  const data = sweepState.lastResult;
+  if (!data) return;
+
+  const header = [data.canonical_param, 'lap_time_s'];
+  const rows   = data.results.map(r => [r.label, r.lap_time_s.toFixed(4)]);
+  const csv    = [header, ...rows].map(r => r.join(',')).join('\n');
+
+  const trackName = data.track_file_path.replace(/\\/g, '/').split('/').pop().replace(/\.[^.]+$/, '');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `lgr_sweep_${data.canonical_param}_${trackName}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ── Tyre Verification ───────────────────────────────────────────────────────
+
+let _tyreCharts = {};
+
+function initTyreTab() {
+  const latEl  = document.getElementById('c-tyre-file_path_lateral');
+  const longEl = document.getElementById('c-tyre-file_path_longit');
+  const update = () => {
+    document.getElementById('tyre-lat-display').textContent  = latEl.value  || '--';
+    document.getElementById('tyre-long-display').textContent = longEl.value || '--';
+  };
+  update();
+  latEl.addEventListener('input', update);
+  longEl.addEventListener('input', update);
+}
+
+async function runTyreVerify() {
+  const lat   = document.getElementById('c-tyre-file_path_lateral').value.trim();
+  const long  = document.getElementById('c-tyre-file_path_longit').value.trim();
+  const variant = document.getElementById('tyre-model-variant').value;
+
+  const errorEl = document.getElementById('tyreError');
+  errorEl.style.display = 'none';
+
+  if (!lat || !long) {
+    errorEl.textContent = 'Set tyre file paths in the Base Simulator Config tab first.';
+    errorEl.style.display = 'block';
+    return;
+  }
+
+  const status = document.getElementById('tyre-run-status');
+  status.textContent = 'Running...';
+  status.className = 'run-status';
+
+  const btn = document.getElementById('runTyreBtn');
+  btn.disabled = true;
+
+  const area = document.getElementById('tyreChartsArea');
+  area.innerHTML = `
+    <div class="sim-loading" style="min-height:200px">
+      <div class="sim-loading-bars">
+        <span></span><span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span><span></span>
+      </div>
+      <div class="sim-loading-label">Running tyre verification</div>
+    </div>`;
+
+  const baseMu = parseFloat(document.getElementById('tyre-base-mu').value) || 1.0;
+
+  try {
+    const res  = await fetch('/api/tyre/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lat_dataset: "round_8_12psi", long_dataset: "round_6_12psi", model_variant: variant, base_mu: baseMu }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      area.innerHTML = '';
+      status.textContent = 'FAILED';
+      status.className = 'run-status error';
+      errorEl.textContent = data.detail ?? JSON.stringify(data);
+      errorEl.style.display = 'block';
+    } else {
+      renderTyreResults(data);
+      status.textContent = 'DONE';
+      status.className = 'run-status ok';
+    }
+  } catch {
+    area.innerHTML = '';
+    status.textContent = 'FAILED';
+    status.className = 'run-status error';
+    errorEl.textContent = 'Could not reach the server. Try again.';
+    errorEl.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function _buildTyreChart(canvasId, chartData, xlabel, ylabel) {
+  const datasets = [];
+  chartData.ttc.forEach(s => {
+    datasets.push({ type: 'scatter', label: s.label, data: s.points,
+      backgroundColor: s.color, pointRadius: 2, pointHoverRadius: 4 });
+  });
+  chartData.model.forEach(s => {
+    datasets.push({ type: 'line', label: s.label, data: s.points,
+      borderColor: s.color, borderWidth: 2, pointRadius: 0, fill: false, tension: 0 });
+  });
+  return new Chart(document.getElementById(canvasId).getContext('2d'), {
+    type: 'scatter',
+    data: { datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: { title: { display: true, text: xlabel } },
+        y: { title: { display: true, text: ylabel } },
+      },
+      plugins: {
+        legend: { position: 'right', labels: { boxWidth: 10, font: { size: 9 } } },
+      },
+    },
+  });
+}
+
+function renderTyreResults(data) {
+  const passed = data.validation_passed;
+  const resultEl = document.getElementById('tyre-stat-result');
+  resultEl.textContent = passed ? 'PASS' : 'FAIL';
+  resultEl.className   = 'stat-value stat-value--sm ' + (passed ? 'tyre-stat-pass' : 'tyre-stat-fail');
+  document.getElementById('tyre-stat-lat-rmse').textContent  = data.lateral_rmse_pct.toFixed(2);
+  document.getElementById('tyre-stat-long-rmse').textContent = data.longitudinal_rmse_pct.toFixed(2);
+  document.getElementById('tyre-stat-threshold').textContent = data.rmse_threshold_pct;
+
+  const muNote = document.getElementById('tyre-stat-mu-note');
+  const mu = data.base_mu ?? 1.0;
+  if (Math.abs(mu - 1.0) > 0.001) {
+    muNote.textContent = `base_mu ${mu.toFixed(2)}`;
+    muNote.style.display = 'inline';
+  } else {
+    muNote.style.display = 'none';
+  }
+
+  Object.values(_tyreCharts).forEach(c => c.destroy());
+  _tyreCharts = {};
+
+  const area = document.getElementById('tyreChartsArea');
+  area.innerHTML = `
+    <div class="tyre-chart-section">
+      <div class="tyre-chart-title">Lateral Force Fy — TTC vs Model</div>
+      <div class="tyre-chart-wrap"><canvas id="tyreLatChart"></canvas></div>
+    </div>
+    <div class="tyre-chart-section">
+      <div class="tyre-chart-title">Longitudinal Force Fx — TTC vs Model</div>
+      <div class="tyre-chart-wrap"><canvas id="tyreLongChart"></canvas></div>
+    </div>
+    <div class="tyre-table-section">
+      <div class="tyre-chart-title">Per-load Errors</div>
+      ${_buildTyreErrorTable(data.rows)}
+    </div>`;
+
+  _tyreCharts.lat  = _buildTyreChart('tyreLatChart',  data.lateral_chart,  'Slip Angle (deg)',           'Lateral Force Fy (N)');
+  _tyreCharts.long = _buildTyreChart('tyreLongChart', data.longitudinal_chart, 'Slip Ratio (dataset units)', 'Longitudinal Force Fx (N)');
+}
+
+function _buildTyreErrorTable(rows) {
+  const cols = ['channel','normal_load_N','rmse_pct_of_peak','mae_pct_of_peak','peak_true_N','peak_pred_N'];
+  const heads = ['Channel','Load (N)','RMSE % peak','MAE % peak','Peak TTC (N)','Peak Model (N)'];
+  const header = heads.map(h => `<th>${h}</th>`).join('');
+  const body = rows.map(r => {
+    const cells = cols.map(c => {
+      const v = r[c];
+      return `<td>${typeof v === 'number' ? v.toFixed ? v.toFixed(2) : v : v}</td>`;
+    }).join('');
+    return `<tr>${cells}</tr>`;
+  }).join('');
+  return `<table class="tyre-error-table"><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
 // ── Boot ────────────────────────────────────────────────────────────────────
+
+document.getElementById('tyre-base-mu').addEventListener('input', e => {
+  document.getElementById('tyre-base-mu-val').textContent = parseFloat(e.target.value).toFixed(2);
+});
 
 document.getElementById('runLapBtn').addEventListener('click', runLap);
 document.getElementById('csvDownloadBtn').addEventListener('click', downloadCSV);
+document.getElementById('runSweepBtn').addEventListener('click', runSweep);
+document.getElementById('runTyreBtn').addEventListener('click', runTyreVerify);
+document.getElementById('swCsvDownloadBtn').addEventListener('click', downloadSweepCSV);
 document.getElementById('askBtn').addEventListener('click', () => toggleChatPanel());
 document.getElementById('chatSubmit').addEventListener('click', sendChatMessage);
 document.getElementById('chatQuestion').addEventListener('keydown', e => {
@@ -813,6 +1181,8 @@ document.getElementById('chatQuestion').addEventListener('keydown', e => {
 initTabs();
 initInnerTabs();
 initVizPanel();
+initSweepParams();
+initTyreTab();
 initLessons();
 loadMetadata();
 loadParametersAndConfig();
