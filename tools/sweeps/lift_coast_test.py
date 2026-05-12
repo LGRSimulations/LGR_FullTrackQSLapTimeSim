@@ -136,7 +136,8 @@ def run_range_test(vehicle, power_limit_kw, energy_target_kwh, dt=0.05):
         # We can use the vehicle's compute_longitudinal_force logic but we need to inject our limited torque/power
         # Instead, let's just clamp F_tractive with a simple friction limit for this MVP
         # F_max = weight_rear * mu
-        weight_rear = vehicle.params.mass * 9.81 * vehicle.params.cog_longitudinal_pos
+        # cog_longitudinal_pos is FRONT mass fraction, so rear fraction = 1 - cog_longitudinal_pos
+        weight_rear = vehicle.params.mass * 9.81 * (1.0 - vehicle.params.cog_longitudinal_pos)
         # Add aero load
         f_downforce = vehicle.compute_downforce(v_calc)
         f_aero_rear = f_downforce * (vehicle.params.aero_centre_of_pressure / vehicle.params.wheelbase)

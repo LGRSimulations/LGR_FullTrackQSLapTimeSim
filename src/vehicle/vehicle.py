@@ -14,7 +14,8 @@ class vehicle_parameters:
     base_mu: float  # dimensionless (base coefficient of friction for tyres)
     frontal_area: float  # m²
     drag_coefficient: float  # dimensionless
-    downforce_coefficient: float  # dimensionless (L/D ratio typically)
+    downforce_coefficient: float  # DEPRECATED. Kept for backward compatibility. Use CLA_m2.
+    CLA_m2: float  # Downforce coefficient times reference area in m² (Cl * A). F_downforce = 0.5 * rho * v^2 * CLA_m2.
     aero_centre_of_pressure: float  # m from front axle
     wheelbase: float  # m
     front_track_width: float  # m
@@ -22,7 +23,9 @@ class vehicle_parameters:
     cog_z: float  # m
     max_cog_z: float  # m
     max_roll_angle_deg: float  # degrees
-    cog_longitudinal_pos: float  # fraction of wheelbase from front axle (0 to 1)
+    cog_longitudinal_pos: float  # Fraction of total mass carried by the front axle in static conditions, dimensionless, 0 to 1.
+                                  # Equivalently: distance from rear axle to CoG divided by wheelbase (l_r / L).
+                                  # Example: 0.516 means 51.6% of static weight on the front axle.
     wheel_radius: float  # m (effective rolling radius)
     final_drive_ratio: float  # dimensionless (final drive gear ratio)
     gear_ratios: list  # dimensionless (gear ratios for each gear)
@@ -164,9 +167,11 @@ class Vehicle:
             normal_load_front = self.compute_static_normal_load()
         if normal_load_rear is None:
             normal_load_rear = self.compute_static_normal_load()
-        mu_scale = (float(self.params.base_mu) / self.base_mu_reference) * self.scenario_grip_scale
-        f_front = self.tyre_model.get_lateral_force(slip_angle_front, normal_load=normal_load_front) * 2 * mu_scale
-        f_rear = self.tyre_model.get_lateral_force(slip_angle_rear, normal_load=normal_load_rear) * 2 * mu_scale
+        # The tyre model already applies base_mu internally (D = peak * base_mu).
+        # Only scenario_grip_scale is applied here as a separate surface condition multiplier.
+        # Multiplying by base_mu/base_mu_reference again would double-count the base friction.
+        f_front = self.tyre_model.get_lateral_force(slip_angle_front, normal_load=normal_load_front) * 2 * self.scenario_grip_scale
+        f_rear = self.tyre_model.get_lateral_force(slip_angle_rear, normal_load=normal_load_rear) * 2 * self.scenario_grip_scale
         return f_front, f_rear
     
     def compute_yaw_moment(self, f_front: float, f_rear: float, steer_angle: float) -> float:
@@ -184,9 +189,10 @@ class Vehicle:
         Returns:
             Yaw moment in Nm
         """
-        # Calculate distances from CoG to axles
-        l_f = self.params.wheelbase * (1 - self.params.cog_longitudinal_pos)  # distance to front
-        l_r = self.params.wheelbase * self.params.cog_longitudinal_pos        # distance to rear
+        # cog_longitudinal_pos = front mass fraction = l_r / L.
+        # l_r: distance from CoG to rear axle. l_f: distance from CoG to front axle.
+        l_r = self.params.wheelbase * self.params.cog_longitudinal_pos         # CoG to rear axle (m)
+        l_f = self.params.wheelbase * (1 - self.params.cog_longitudinal_pos)   # CoG to front axle (m)
         # Yaw moment = (front force × front moment arm) - (rear force × rear moment arm)
         # In steady state, this should equal zero
         m_z = f_front * l_f - f_rear * l_r
@@ -226,19 +232,23 @@ class Vehicle:
     def compute_downforce(self, v_car: float) -> float:
         """
         Compute aerodynamic downforce at given speed.
-        
-        F_downforce = 0.5 * rho * Cl * A * v^2
-        
+
+        F_downforce = 0.5 * rho * CLA_m2 * v^2
+
+        CLA_m2 is the downforce coefficient times reference area (Cl * A) in m².
+        Using CLA_m2 directly avoids the misleading intermediate step of multiplying
+        a dimensionless Cl by a separate frontal_area — the product is what matters physically.
+
         Args:
             v_car: Vehicle speed in m/s
-            
+
         Returns:
             Downforce in N
         """
         # Use air density from config if available, else default to 1.225
         rho = self.config.get('ambient_conditions', {}).get('air_density', 1.225)
         rho = float(rho) * self.scenario_air_density_scale
-        f_downforce = 0.5 * rho * self.params.downforce_coefficient * self.params.frontal_area * v_car**2
+        f_downforce = 0.5 * rho * self.params.CLA_m2 * v_car**2
         return f_downforce
     
     def speed_to_rpm(self, v_car: float, gear_ratio: float) -> float:
@@ -338,7 +348,7 @@ import os
 
 def params_from_dict(data: dict) -> vehicle_parameters:
     """
-    Create vehicle_parameters from a dictionary.
+    Create vehicle_parameters from a nested parameter dictionary.
 
     Args:
         data: Dictionary with nested structure (general, aerodynamics, geometry, etc)
@@ -346,14 +356,31 @@ def params_from_dict(data: dict) -> vehicle_parameters:
     Returns:
         vehicle_parameters object
     """
+    aero = data['aerodynamics']
+    frontal_area = float(aero['frontal_area'])
+    downforce_coefficient = float(aero['downforce_coefficient'])
+
+    # CLA_m2 is downforce coefficient times reference area in m².
+    # Use it directly when present. Otherwise derive from legacy fields and warn once.
+    if 'CLA_m2' in aero:
+        CLA_m2 = float(aero['CLA_m2'])
+    else:
+        CLA_m2 = downforce_coefficient * frontal_area
+        logger.warning(
+            "parameters.json is missing 'CLA_m2'. Computed from downforce_coefficient * frontal_area "
+            f"= {downforce_coefficient} * {frontal_area} = {CLA_m2:.6f} m². "
+            "Add 'CLA_m2' to parameters.json to suppress this warning."
+        )
+
     return vehicle_parameters(
         name=data['general']['name'],
         mass=data['general']['mass'],
         base_mu=data['general']['base_mu'],
-        frontal_area=data['aerodynamics']['frontal_area'],
-        drag_coefficient=data['aerodynamics']['drag_coefficient'],
-        downforce_coefficient=data['aerodynamics']['downforce_coefficient'],
-        aero_centre_of_pressure=data['aerodynamics']['aero_cp'],
+        frontal_area=frontal_area,
+        drag_coefficient=aero['drag_coefficient'],
+        downforce_coefficient=downforce_coefficient,
+        CLA_m2=CLA_m2,
+        aero_centre_of_pressure=aero['aero_cp'],
         wheelbase=data['geometry']['wheelbase'],
         front_track_width=data['geometry']['front_track_width'],
         rear_track_width=data['geometry']['rear_track_width'],

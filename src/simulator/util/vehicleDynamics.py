@@ -209,12 +209,13 @@ def find_vehicle_state_at_point(
     t = getattr(p, 'front_track_width', 1.20)
     h = getattr(p, 'cog_z', 0.28)
     
-    # Weight distribution (approximated if not explicit)
-    wd_f = getattr(p, 'cog_longitudinal_pos', 0.46) 
-    
+    # cog_longitudinal_pos = front mass fraction = l_r / L (distance rear-to-CoG over wheelbase).
+    # So b = l_r (CoG to rear axle) and a = l_f (CoG to front axle).
+    wd_f = getattr(p, 'cog_longitudinal_pos', 0.46)
+
     # Calculate axle distances
-    b = L * wd_f      # rear axle
-    a = L - b         # front axle
+    b = L * wd_f      # l_r: distance from CoG to rear axle (m)
+    a = L - b         # l_f: distance from CoG to front axle (m)
     
     # Track params
     K = curvature

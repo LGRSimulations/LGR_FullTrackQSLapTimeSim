@@ -75,8 +75,8 @@ def _compute_tyre_lateral_speed_cap(curvature, vehicle, normal_load_per_tyre, co
         slip_angle_cap = 10.0
 
     try:
-        mu_scale = float(vehicle.params.base_mu) / max(getattr(vehicle, 'base_mu_reference', 1.0), 1e-6)
-        fy_per_tyre = abs(vehicle.tyre_model.get_lateral_force(slip_angle_cap, normal_load=normal_load_per_tyre)) * mu_scale
+        # No extra mu_scale: base_mu is already embedded in tyre model output (D = peak * base_mu).
+        fy_per_tyre = abs(vehicle.tyre_model.get_lateral_force(slip_angle_cap, normal_load=normal_load_per_tyre))
         a_lat_cap = (fy_per_tyre * 4.0) / max(float(vehicle.params.mass), 1e-6)
         if a_lat_cap <= 0.0 or (not np.isfinite(a_lat_cap)):
             return np.inf
@@ -244,32 +244,39 @@ def _compute_normal_loads_for_longitudinal(vehicle, v_car, a_long, config):
 
 
 def _compute_total_force_caps(vehicle, front_load, rear_load, config, peak_slip_ratio):
-    """Compute pure-slip total longitudinal and lateral tyre force caps."""
+    """Compute pure-slip total longitudinal and lateral tyre force caps.
+
+    The tyre model (LookupTableTyreModel) already applies base_mu internally when
+    computing peak force D = peak_interp(load) * base_mu. Applying mu_scale again
+    here would double-count the base friction coefficient. scenario_grip_scale is
+    applied separately via vehicle.compute_tyre_forces and is NOT relevant for these
+    raw force caps (they are used to compute a budget scale, not absolute forces).
+    """
     solver_cfg = config.get('solver', {}) if isinstance(config, dict) else {}
     lateral_cap_slip_angle = float(solver_cfg.get('lateral_combined_slip_angle_deg', 10.0))
 
-    mu_scale = float(vehicle.params.base_mu) / max(getattr(vehicle, 'base_mu_reference', 1.0), 1e-6)
-
     # Longitudinal pure cap from front/rear tyres at requested peak slip ratio.
+    # No additional mu_scale: base_mu is already embedded in the tyre model output.
     f_long_front = abs(vehicle.tyre_model.get_longitudinal_force(
         slip_ratio=peak_slip_ratio,
         normal_load=front_load,
-    ) * mu_scale) * 2.0
+    )) * 2.0
     f_long_rear = abs(vehicle.tyre_model.get_longitudinal_force(
         slip_ratio=peak_slip_ratio,
         normal_load=rear_load,
-    ) * mu_scale) * 2.0
+    )) * 2.0
     fx_cap_total = f_long_front + f_long_rear
 
     # Lateral pure cap proxy using fixed representative slip angle.
+    # No additional mu_scale: base_mu is already embedded in the tyre model output.
     f_lat_front = abs(vehicle.tyre_model.get_lateral_force(
         slip_angle=lateral_cap_slip_angle,
         normal_load=front_load,
-    ) * mu_scale) * 2.0
+    )) * 2.0
     f_lat_rear = abs(vehicle.tyre_model.get_lateral_force(
         slip_angle=lateral_cap_slip_angle,
         normal_load=rear_load,
-    ) * mu_scale) * 2.0
+    )) * 2.0
     fy_cap_total = f_lat_front + f_lat_rear
 
     return float(fx_cap_total), float(fy_cap_total)

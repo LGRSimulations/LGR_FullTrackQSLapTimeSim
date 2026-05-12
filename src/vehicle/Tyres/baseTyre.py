@@ -115,7 +115,10 @@ class LookupTableTyreModel(BaseTyreModel):
         tyre_data_lat: pd.DataFrame,
         tyre_data_long: pd.DataFrame,
         base_mu: float = 1.0,
-        clamp_peak_load_high: bool = False,
+        clamp_peak_load_high: bool = True,
+        # clamp_peak_load_high=True: peak force interpolation is clamped to the highest measured
+        # TTC load rather than extrapolating linearly. Linear extrapolation above the measured
+        # range is unphysical (tyre load sensitivity inverts at high load). Default is True.
     ):
         """
         Initialize lookup table tyre model.
@@ -617,7 +620,8 @@ class LookupTableTyreModel(BaseTyreModel):
                     tyre_data_long = cls._parse_longitudinal_file(full_long)
 
                 model_variant = str(config.get('model_variant', '')).strip().lower()
-                clamp_peak_load_high = bool(config.get('clamp_peak_load_high', False))
+                # Default True: extrapolating peak force above measured TTC loads is unphysical.
+                clamp_peak_load_high = bool(config.get('clamp_peak_load_high', True))
                 if model_variant in {'b2', 'tyre_peak_load_clamp', 'tyre_load_clamp'}:
                     clamp_peak_load_high = True
 
@@ -684,7 +688,8 @@ class LookupTableTyreModel(BaseTyreModel):
                 
             # Return the model
             model_variant = str(config.get('model_variant', '')).strip().lower()
-            clamp_peak_load_high = bool(config.get('clamp_peak_load_high', False))
+            # Default True: extrapolating peak force above measured TTC loads is unphysical.
+            clamp_peak_load_high = bool(config.get('clamp_peak_load_high', True))
             if model_variant in {'b2', 'tyre_peak_load_clamp', 'tyre_load_clamp'}:
                 clamp_peak_load_high = True
 
