@@ -73,7 +73,7 @@ $$
 v_{final} = \min(v_{pass2},\ v_{pass3}) = v_{pass3}
 $$
 
-That is the key behavior of the three pass method.
+That is the key behaviour of the three pass method.
 
 ## Why the black line can look lower than every pass
 

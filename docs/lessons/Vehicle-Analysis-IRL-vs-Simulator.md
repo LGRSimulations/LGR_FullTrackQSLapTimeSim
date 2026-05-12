@@ -4,7 +4,7 @@
 Read [Vehicle Modelling Diagnostics and Trust Checks](Vehicle-Modelling-Diagnostics.md) first.
 
 ## Goal
-This page gives a fast method to compare real vehicle behavior and simulator behavior.
+This page gives a fast method to compare real vehicle behaviour and simulator behaviour.
 It uses GG envelope plots as one compact trust and diagnosis view.
 
 ## What a GG envelope is

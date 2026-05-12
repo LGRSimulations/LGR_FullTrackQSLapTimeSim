@@ -49,7 +49,7 @@ Some parameter changes have expected directions.
 
 Examples:
 
-- Higher `base_mu` should usually improve grip-limited behavior.
+- Higher `base_mu` should usually improve grip-limited behaviour.
 - Higher `cog_z` should not make rollover-limited cornering look better.
 - Higher drag should usually hurt acceleration or top speed.
 - More downforce can help corners but may hurt straights through drag tradeoff.

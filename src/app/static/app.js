@@ -5,7 +5,7 @@ const CHANNEL_REGISTRY = {
     tip: 'Lateral acceleration, in g. Sign follows the local track curvature. Positive in a left-hand turn, negative in a right-hand turn.' },
   g_long:              { label: 'Long G',            unit: 'g',    color: '#e05d5d', group: 'G-Forces',    flex: 1,
     tip: 'Longitudinal acceleration, in g. Positive when accelerating along the track direction, negative when braking. Magnitudes under braking usually exceed magnitudes under acceleration because braking is tyre-limited while acceleration is power-limited.' },
-  mu_util:             { label: 'Mu Utilization',    unit: '',     color: '#d4a017', group: 'Grip',        flex: 1,
+  mu_util:             { label: 'Mu Utilisation',    unit: '',     color: '#d4a017', group: 'Grip',        flex: 1,
     tip: 'Magnitude of combined lateral and longitudinal g divided by base mu. 1.0 means the car is at the tyre grip ceiling. Values slightly above 1.0 are physically possible because tyre peak mu can exceed the base mu at low load.' },
   curvature_1pm:       { label: 'Curvature',         unit: '1/m',  color: '#5fa78d', group: 'Track',       flex: 1,
     tip: 'Signed track curvature, in 1/m. Positive for a left-hand turn, negative for a right-hand turn. Zero on a straight.' },

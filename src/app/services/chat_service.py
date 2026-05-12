@@ -96,13 +96,13 @@ def _augment_selected_sections(question: str, selected: list[str]) -> list[str]:
         ]),
         (("fallback", "residual", "solver", "failure"), [
             "Numerical-Robustness-and-Solver-Failure-Modes.md > Equilibrium residuals",
-            "Numerical-Robustness-and-Solver-Failure-Modes.md > Fallback behavior",
+            "Numerical-Robustness-and-Solver-Failure-Modes.md > Fallback behaviour",
             "Numerical-Robustness-and-Solver-Failure-Modes.md > Why fallback can be risky",
         ]),
         (("rollover", "roll over"), [
             "Load-Transfer-and-Normal-Loads.md > Rollover speed cap",
             "simulator-summary.md > Draft equation mapping table",
-            "Numerical-Robustness-and-Solver-Failure-Modes.md > Fallback behavior",
+            "Numerical-Robustness-and-Solver-Failure-Modes.md > Fallback behaviour",
         ]),
         (("validation", "falsification", "contract", "realism gate", "documentation readiness", "ready for reliable"), [
             "Validation-and-Falsification-Workflow.md > Layer A component contracts",
@@ -208,7 +208,7 @@ def _ensure_answer_coverage(question: str, answer: str) -> str:
     add_if_missing(
         "sampling" in q or "spacing" in q or "track geometry" in q,
         ("distance step", "curvature sampling", "trust check", "longitudinal acceleration estimate"),
-        "Track sampling vocabulary: distance step `ds`, speed change over segment, curvature sampling, and the longitudinal acceleration estimate control g-channel behavior. A basic trust check is to compare spacing outliers and curvature spikes against any g spikes before tuning the vehicle model.",
+        "Track sampling vocabulary: distance step `ds`, speed change over segment, curvature sampling, and the longitudinal acceleration estimate control g-channel behaviour. A basic trust check is to compare spacing outliers and curvature spikes against any g spikes before tuning the vehicle model.",
     )
     add_if_missing(
         "validation" in q or "plausible-looking" in q or "plausible" in q or "how do we know" in q,
@@ -329,6 +329,7 @@ def chat(question: str, history: list) -> dict:
         "Be concise and precise. For educational questions, include the key named concepts "
         "from the notes so the reader learns the simulator vocabulary. "
         "Use 3 to 6 short bullets when that helps coverage. "
+        "Write in British English. Use spellings like tyre, behaviour, utilisation, modelling, centre, analyse, optimise, colour. "
         "Do not use em dashes or semicolons.\n\n"
         f"Reference notes:\n\n{context}"
     )

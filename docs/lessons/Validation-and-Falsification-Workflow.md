@@ -17,7 +17,7 @@ Full-lap diagnostics check whether the combined result remains plausible.
 Falsification is the habit of asking, "What input should break or expose this assumption?"
 
 ## Layer A component contracts
-Layer A checks small pieces with known behavior.
+Layer A checks small pieces with known behaviour.
 
 Examples:
 

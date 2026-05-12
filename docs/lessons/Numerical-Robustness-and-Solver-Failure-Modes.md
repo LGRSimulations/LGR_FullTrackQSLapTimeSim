@@ -4,7 +4,7 @@
 Read [Simulator Summary and Core Solver](simulator-summary.md) first.
 
 ## Goal
-Explain how the solver decides whether a corner solution is valid, what fallback means, and which gates prevent numerical behavior from becoming hidden performance.
+Explain how the solver decides whether a corner solution is valid, what fallback means, and which gates prevent numerical behaviour from becoming hidden performance.
 
 ## One minute mental model
 The corner solver is allowed to fail.
@@ -65,7 +65,7 @@ Diagnostics include
 - `corner_solve_method`
 - `corner_tier_failure_reasons`
 
-## Fallback behavior
+## Fallback behaviour
 If all solve tiers fail, the point uses a fallback speed.
 That fallback is bounded by three ideas:
 

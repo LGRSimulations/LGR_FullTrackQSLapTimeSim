@@ -199,11 +199,11 @@ Relevant tests and reports
 
 Typical checks include
 
-- zero and limiting behavior
+- zero and limiting behaviour
 - out of domain counters
 - clamping or flagging when slip or load leaves the declared validity domain
 - RMSE validation against tyre data
-- high load growth behavior
+- high load growth behaviour
 - sensitivity gates on representative tracks
 
 For the peak-load-clamped variant, high-load growth is gated so extrapolated tyre force cannot inflate unrealistically beyond the measured load range.

@@ -16,7 +16,7 @@ It also helps you decide what to tune next.
 ## Quick engineer checklist
 1. Check what limited speed most often
 2. Check corner solver confidence
-3. Check friction budget behavior
+3. Check friction budget behaviour
 4. Check load and clamp health flags
 5. Check lap time integration channels
 

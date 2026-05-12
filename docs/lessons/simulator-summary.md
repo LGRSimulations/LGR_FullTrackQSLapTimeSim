@@ -129,7 +129,7 @@ The corner solver uses a two-layer search.
 5. If not feasible, speed upper bound is reduced
 6. Best feasible speed is retained
 
-Important accept and fallback behavior
+Important accept and fallback behaviour
 
 - Initial guess is warm-started from the previous successful point when available
 - Residual acceptance uses scale-aware thresholds

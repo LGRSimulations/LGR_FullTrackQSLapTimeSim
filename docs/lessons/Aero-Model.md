@@ -11,7 +11,7 @@ By the end, you should know
 
 - what drag and downforce do in this simulator
 - why aerodynamic forces grow strongly with speed
-- how aero center of pressure changes front and rear tyre loads
+- how aero centre of pressure changes front and rear tyre loads
 - how aero changes lap speed as a tradeoff
 
 ## Baseline car aero scope
@@ -76,7 +76,7 @@ Results
 In this baseline setup, drag is larger than downforce over most of the range.
 That means aero can easily become a straight-line penalty if downforce gain is modest.
 
-## Aero center of pressure and axle load split
+## Aero centre of pressure and axle load split
 Total downforce is only one part of the story.
 Where that downforce acts also matters.
 

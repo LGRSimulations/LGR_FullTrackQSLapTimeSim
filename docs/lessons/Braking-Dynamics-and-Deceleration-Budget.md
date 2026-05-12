@@ -91,14 +91,14 @@ The default model should not need a hard-coded braking-g clip to look plausible.
 If `solver.max_brake_decel_g` is present, it is an explicit experiment or safety override, not the normal realism mechanism.
 
 The braking realism eval checks that the default run has no hard brake deceleration cap configured and that no brake deceleration cap events are active.
-It also reports the static longitudinal tyre cap and an estimate of the older double-scaling behavior where `base_mu` multiplied an already frictional tyre-data peak.
+It also reports the static longitudinal tyre cap and an estimate of the older double-scaling behaviour where `base_mu` multiplied an already frictional tyre-data peak.
 
 Code path
 
 - [tools/evals/evaluate_braking_model.py](../../tools/evals/evaluate_braking_model.py)
 
 ## Diagnostics to inspect
-Use these channels when braking behavior looks suspicious.
+Use these channels when braking behaviour looks suspicious.
 
 - `backward_limiting_mode`
 - `backward_brake_force_limit`
@@ -120,7 +120,7 @@ Interpretation guide
 
 ## Assumptions and limits
 - Braking is quasi-static over each segment.
-- Brake balance, ABS behavior, tyre thermal state, and hydraulic dynamics are not modelled in detail.
+- Brake balance, ABS behaviour, tyre thermal state, and hydraulic dynamics are not modelled in detail.
 - Drag is treated as an external deceleration term outside the tyre friction budget.
 - The combined budget is a compact approximation, not a full transient combined-slip tyre model.
 

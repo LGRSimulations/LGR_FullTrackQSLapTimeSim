@@ -12,7 +12,7 @@ Explain what quasi static and steady state mean in this project.
 Explain how tyre, powertrain, aero, and constraints are combined into one lap result.
 
 ## What is a simulator trying to do
-At a high level, this simulator predicts lap behavior from a set of assumptions and parameters.
+At a high level, this simulator predicts lap behaviour from a set of assumptions and parameters.
 It is a decision support model, not a replacement for real testing.
 
 The model takes
@@ -56,7 +56,7 @@ Steady state is used inside local solves.
 Quasi static describes the broader modelling strategy across the lap.
 
 Think of a flipbook of the lap.
-Quasi static is the choice to analyze one frame at a time with compact physics.
+Quasi static is the choice to analyse one frame at a time with compact physics.
 Steady state is what each frame is trying to satisfy before moving to the next frame.
 
 ## How we combine subsystems into one simulator
@@ -103,7 +103,7 @@ Tradeoffs
 
 - not a full transient multi body simulation
 - limited direct modelling of tyre thermal and pressure evolution
-- limited direct modelling of suspension transient behavior
+- limited direct modelling of suspension transient behaviour
 - results depend on map quality and parameter realism
 
 How to use results well
