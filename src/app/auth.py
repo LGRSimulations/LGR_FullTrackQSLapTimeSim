@@ -14,6 +14,41 @@ _REQUIRED_ENV = ("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "SESSION_SECRET", "
 _LOCAL_BASE_PREFIXES = ("http://localhost", "http://127.0.0.1")
 
 
+def _load_allowlist() -> tuple[frozenset[str], frozenset[str]]:
+    """Return (allowed_emails, allowed_domains) from env vars.
+
+    If both sets are empty the gate is open to any verified Google email.
+    Emails are stored lowercase for case-insensitive comparison.
+    """
+    raw_emails = os.environ.get("ALLOWED_EMAILS", "").strip()
+    raw_domains = os.environ.get("ALLOWED_EMAIL_DOMAINS", "").strip()
+
+    emails: frozenset[str] = frozenset(
+        e.strip().lower() for e in raw_emails.split(",") if e.strip()
+    )
+    domains: frozenset[str] = frozenset(
+        d.strip().lower() for d in raw_domains.split(",") if d.strip()
+    )
+    return emails, domains
+
+
+def _check_allowlist(email: str) -> bool:
+    """Return True if *email* passes the configured allowlist.
+
+    Returns True unconditionally when no allowlist env vars are set.
+    """
+    allowed_emails, allowed_domains = _load_allowlist()
+    if not allowed_emails and not allowed_domains:
+        return True
+    email_lower = email.lower()
+    if email_lower in allowed_emails:
+        return True
+    domain = email_lower.split("@", 1)[-1] if "@" in email_lower else ""
+    if domain and domain in allowed_domains:
+        return True
+    return False
+
+
 @dataclass(frozen=True)
 class AuthConfig:
     google_client_id: str
@@ -89,6 +124,8 @@ def require_user(request: Request) -> str:
     email = request.session.get("email") if hasattr(request, "session") else None
     if not email:
         raise HTTPException(status_code=401, detail="Authentication required")
+    if not _check_allowlist(email):
+        raise HTTPException(status_code=403, detail="Your account is not authorised to access this application.")
     return email
 
 
@@ -114,7 +151,10 @@ def register_auth_routes(app: FastAPI, cfg: AuthConfig, oauth: OAuth, login_html
             raise HTTPException(status_code=400, detail="Google did not return an email")
         if not userinfo.get("email_verified", False):
             raise HTTPException(status_code=403, detail="Email is not verified by Google")
-        request.session["email"] = userinfo["email"]
+        email = userinfo["email"]
+        if not _check_allowlist(email):
+            raise HTTPException(status_code=403, detail="Your account is not authorised to access this application.")
+        request.session["email"] = email
         return RedirectResponse(url="/", status_code=303)
 
     @app.post("/logout")
