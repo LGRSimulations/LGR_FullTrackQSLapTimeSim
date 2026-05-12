@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -54,9 +54,14 @@ class ChatSource(BaseModel):
     section: str
 
 
+class ChatTurn(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=10000)
+
+
 class ChatRequest(BaseModel):
     question: str = Field(min_length=1, max_length=1000)
-    history: list[dict] = Field(default_factory=list)
+    history: list[ChatTurn] = Field(default_factory=list, max_length=40)
 
 
 class ChatResponse(BaseModel):

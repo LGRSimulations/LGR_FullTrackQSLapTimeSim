@@ -1,3 +1,4 @@
+import logging
 import os
 os.environ.setdefault("MPLBACKEND", "Agg")
 
@@ -5,7 +6,12 @@ import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.responses import Response
 
 from app.auth import build_oauth_client, load_auth_config, local_auth_bypass_email, register_auth_routes, require_user
 from app.paths import lessons_dir, static_dir
@@ -16,6 +22,13 @@ from app.services.sweep_service import run_sweep
 from app.services.tyre_service import run_tyre_verify
 from app.services.chat_service import chat
 
+_log = logging.getLogger(__name__)
+
+# Set RATE_LIMIT_DISABLED=1 in test environments to prevent rate-limit state
+# from accumulating across tests in a single pytest session.
+_rate_limits_enabled = os.environ.get("RATE_LIMIT_DISABLED", "").lower() not in ("1", "true", "yes")
+limiter = Limiter(key_func=get_remote_address, enabled=_rate_limits_enabled)
+
 
 def _basename(path: str) -> str:
     if not path:
@@ -23,12 +36,73 @@ def _basename(path: str) -> str:
     return path.replace("\\", "/").rsplit("/", 1)[-1]
 
 
+async def _rate_limit_handler(request: Request, exc: RateLimitExceeded) -> Response:
+    retry_after = str(getattr(exc, "retry_after", 60))
+    return Response(
+        content='{"detail":"Rate limit exceeded. Please slow down."}',
+        status_code=429,
+        media_type="application/json",
+        headers={"Retry-After": retry_after},
+    )
+
+
+class SecurityHeadersMiddleware:
+    """Attach security headers to every response.
+
+    HSTS is only set when the request arrives over HTTPS, either directly or
+    via the X-Forwarded-Proto header that Fly.io sets.
+    """
+
+    _CSP = (
+        "default-src 'self'; "
+        "script-src 'self'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; "
+        "font-src 'self' data:;"
+    )
+
+    def __init__(self, app) -> None:
+        self._app = app
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] != "http":
+            await self._app(scope, receive, send)
+            return
+
+        request = Request(scope, receive)
+        forwarded_proto = request.headers.get("x-forwarded-proto", "")
+        scheme = forwarded_proto or request.url.scheme
+        is_https = scheme == "https"
+
+        async def send_with_headers(message) -> None:
+            if message["type"] == "http.response.start":
+                headers = dict(message.get("headers", []))
+                headers[b"x-frame-options"] = b"DENY"
+                headers[b"x-content-type-options"] = b"nosniff"
+                headers[b"referrer-policy"] = b"same-origin"
+                headers[b"permissions-policy"] = b"camera=(), microphone=(), geolocation=()"
+                headers[b"content-security-policy"] = self._CSP.encode()
+                if is_https:
+                    headers[b"strict-transport-security"] = b"max-age=31536000; includeSubDomains"
+                message = {**message, "headers": list(headers.items())}
+            await send(message)
+
+        await self._app(scope, receive, send_with_headers)
+
+
 def create_app() -> FastAPI:
     app = FastAPI(title="LGR Sim Workbench", version="0.1.0")
+
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_handler)
 
     auth_cfg = load_auth_config()
     oauth = build_oauth_client(auth_cfg)
 
+    # Security headers on every response
+    app.add_middleware(SecurityHeadersMiddleware)
+    # Rate limiting via slowapi
+    app.add_middleware(SlowAPIMiddleware)
     app.add_middleware(
         SessionMiddleware,
         secret_key=auth_cfg.session_secret,
@@ -124,7 +198,8 @@ def create_app() -> FastAPI:
         }
 
     @app.post("/api/lap/run")
-    def run_lap_endpoint(req: LapRunRequest, email: str = Depends(require_user)) -> dict:
+    @limiter.limit("10/minute")
+    def run_lap_endpoint(request: Request, req: LapRunRequest, email: str = Depends(require_user)) -> dict:
         return run_lap(parameters=req.parameters, overrides=req.overrides)
 
     @app.get("/api/track/datasets")
@@ -141,7 +216,8 @@ def create_app() -> FastAPI:
         }
 
     @app.post("/api/tyre/verify")
-    def tyre_verify_endpoint(req: TyreVerifyRequest, email: str = Depends(require_user)) -> dict:
+    @limiter.limit("10/minute")
+    def tyre_verify_endpoint(request: Request, req: TyreVerifyRequest, email: str = Depends(require_user)) -> dict:
         return run_tyre_verify(
             lat_dataset=req.lat_dataset,
             long_dataset=req.long_dataset,
@@ -152,7 +228,8 @@ def create_app() -> FastAPI:
         )
 
     @app.post("/api/sweep/run")
-    def run_sweep_endpoint(req: SweepRequest, email: str = Depends(require_user)) -> dict:
+    @limiter.limit("3/minute")
+    def run_sweep_endpoint(request: Request, req: SweepRequest, email: str = Depends(require_user)) -> dict:
         return run_sweep(
             param=req.param,
             values=req.values,
@@ -171,12 +248,14 @@ def create_app() -> FastAPI:
         )
 
     @app.post("/api/chat")
-    def chat_endpoint(req: ChatRequest, email: str = Depends(require_user)) -> ChatResponse:
+    @limiter.limit("20/minute")
+    def chat_endpoint(request: Request, req: ChatRequest, email: str = Depends(require_user)) -> ChatResponse:
         try:
             return chat(question=req.question, history=req.history)
         except FileNotFoundError:
             raise HTTPException(status_code=503, detail="Chat is not configured.")
         except httpx.HTTPError as exc:
-            raise HTTPException(status_code=502, detail=str(exc))
+            _log.warning("DeepSeek request failed: %s", exc)
+            raise HTTPException(status_code=502, detail="The assistant is temporarily unavailable.")
 
     return app
