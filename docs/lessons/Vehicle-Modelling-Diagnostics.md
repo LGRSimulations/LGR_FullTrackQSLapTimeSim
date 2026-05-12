@@ -170,6 +170,23 @@ For FSAE, longitudinal g beyond about 2 g or lateral g beyond about 3 g is a sig
 
 ![g-channels from simulator](figures/vehicle_modelling_diagnostics/g_channels_from_sim.png)
 
+## 7. Telemetry sign conventions
+The simulator publishes its channels with these conventions. Read them before interpreting any plot.
+
+**Longitudinal g (`g_long`).** Positive when the car is accelerating along the track direction. Negative when braking. Magnitudes under braking commonly exceed magnitudes under acceleration because braking is tyre-limited while acceleration is power-limited.
+
+**Lateral g (`g_lat`).** Sign follows track curvature. Positive in a left-hand turn, negative in a right-hand turn. Zero on a straight.
+
+**Curvature (`curvature_1pm`).** Signed by the same rule as lateral g. Positive for left, negative for right.
+
+**Speed (`speeds_kmh`).** Always non-negative. Sign carries no information about direction along the track.
+
+**Mu utilization (`mu_util`).** Magnitude of combined lateral and longitudinal g divided by `base_mu`. A value of 1.0 means the car is at the simple tyre grip ceiling. Values slightly above 1.0 are physically possible because the tyre peak mu at low normal load can exceed `base_mu`.
+
+**Front axle load (`normal_load_front_n`) and rear axle load (`normal_load_rear_n`).** Total vertical load in Newtons, always non-negative. Front rises under braking and under high speed when aero centre of pressure is forward. Rear rises under acceleration and at high speed when aero centre of pressure is rearward.
+
+These conventions are also surfaced in the channel sidebar tooltips of the Base Simulator tab.
+
 ## Suggested tuning workflow
 1. Run a baseline lap and store diagnostics
 2. Read limiter mode counts to identify dominant bottleneck

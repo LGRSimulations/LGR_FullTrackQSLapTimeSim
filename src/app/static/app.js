@@ -1,11 +1,18 @@
 const CHANNEL_REGISTRY = {
-  speeds_kmh:          { label: 'Speed',             unit: 'km/h', color: '#4e9af1', group: 'Speed',       flex: 2 },
-  g_lat:               { label: 'Lat G',             unit: 'g',    color: '#f1a24e', group: 'G-Forces',    flex: 1 },
-  g_long:              { label: 'Long G',            unit: 'g',    color: '#e05d5d', group: 'G-Forces',    flex: 1 },
-  mu_util:             { label: 'Mu Utilization',    unit: '',     color: '#d4a017', group: 'Grip',        flex: 1 },
-  curvature_1pm:       { label: 'Curvature',         unit: '1/m',  color: '#5fa78d', group: 'Track',       flex: 1 },
-  normal_load_front_n: { label: 'Front Axle Load',   unit: 'N',    color: '#7896c9', group: 'Tyre Loads',  flex: 1 },
-  normal_load_rear_n:  { label: 'Rear Axle Load',    unit: 'N',    color: '#c97878', group: 'Tyre Loads',  flex: 1 },
+  speeds_kmh:          { label: 'Speed',             unit: 'km/h', color: '#4e9af1', group: 'Speed',       flex: 2,
+    tip: 'Vehicle speed along the track, in km/h. Always non-negative.' },
+  g_lat:               { label: 'Lat G',             unit: 'g',    color: '#f1a24e', group: 'G-Forces',    flex: 1,
+    tip: 'Lateral acceleration, in g. Sign follows the local track curvature. Positive in a left-hand turn, negative in a right-hand turn.' },
+  g_long:              { label: 'Long G',            unit: 'g',    color: '#e05d5d', group: 'G-Forces',    flex: 1,
+    tip: 'Longitudinal acceleration, in g. Positive when accelerating along the track direction, negative when braking. Magnitudes under braking usually exceed magnitudes under acceleration because braking is tyre-limited while acceleration is power-limited.' },
+  mu_util:             { label: 'Mu Utilization',    unit: '',     color: '#d4a017', group: 'Grip',        flex: 1,
+    tip: 'Magnitude of combined lateral and longitudinal g divided by base mu. 1.0 means the car is at the tyre grip ceiling. Values slightly above 1.0 are physically possible because tyre peak mu can exceed the base mu at low load.' },
+  curvature_1pm:       { label: 'Curvature',         unit: '1/m',  color: '#5fa78d', group: 'Track',       flex: 1,
+    tip: 'Signed track curvature, in 1/m. Positive for a left-hand turn, negative for a right-hand turn. Zero on a straight.' },
+  normal_load_front_n: { label: 'Front Axle Load',   unit: 'N',    color: '#7896c9', group: 'Tyre Loads',  flex: 1,
+    tip: 'Total vertical load on the front axle, in N. Rises under braking and at high speed when aero downforce is applied with a forward centre of pressure.' },
+  normal_load_rear_n:  { label: 'Rear Axle Load',    unit: 'N',    color: '#c97878', group: 'Tyre Loads',  flex: 1,
+    tip: 'Total vertical load on the rear axle, in N. Rises under acceleration and at high speed when aero downforce is applied with a rearward centre of pressure.' },
 };
 
 const GG_V_GRADIENT_STOPS = [
@@ -176,6 +183,7 @@ function resolveLegendItem(entry) {
       unit: ch.unit,
       color: ch.color,
       group: entry.group || ch.group,
+      tip: ch.tip,
       toggleable: true,
     };
   }
@@ -185,6 +193,7 @@ function resolveLegendItem(entry) {
     unit: entry.unit,
     color: entry.color,
     group: entry.group,
+    tip: entry.tip,
     toggleable: false,
   };
 }
@@ -217,9 +226,12 @@ function renderChannelList(tab) {
       el.className = 'channel-item' + (isActive ? '' : ' inactive');
       if (item.channelKey) el.dataset.channelKey = item.channelKey;
       if (!item.toggleable) el.style.cursor = 'default';
+      const tipHtml = item.tip
+        ? ` <button type="button" class="info-tip" aria-label="More info" aria-hidden="true" data-tip="${escapeHtml(item.tip)}" onclick="event.stopPropagation()">i</button>`
+        : '';
       el.innerHTML =
         `<div class="channel-dot" style="background:${item.color}"></div>` +
-        `<div><span class="channel-item-name">${item.label}</span>` +
+        `<div><span class="channel-item-name">${item.label}</span>${tipHtml}` +
         `<span class="channel-item-unit">${item.unit}</span></div>`;
       if (item.toggleable) {
         el.addEventListener('click', () => toggleChannel(item.channelKey));
