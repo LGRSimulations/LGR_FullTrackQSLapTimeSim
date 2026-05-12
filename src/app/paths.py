@@ -1,6 +1,6 @@
 import os
 import sys
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 
 def source_root() -> Path:
@@ -85,7 +85,14 @@ def workspace_root() -> Path:
 def resolve_repo_path(relative_path: str | Path) -> Path:
     if not relative_path:
         raise ValueError("relative_path must be non-empty")
-    rel = Path(relative_path)
+    raw = str(relative_path)
+    # Reject Windows-style absolute paths even when running on POSIX. Path() on Linux
+    # treats "C:\\Windows\\System32" as a relative single segment, so the OS-native check
+    # below would miss it.
+    win = PureWindowsPath(raw)
+    if win.is_absolute() or win.drive:
+        raise ValueError(f"Absolute paths are not permitted: {relative_path!r}")
+    rel = Path(raw)
     if rel.is_absolute() or rel.drive:
         raise ValueError(f"Absolute paths are not permitted: {relative_path!r}")
     parts = rel.parts
