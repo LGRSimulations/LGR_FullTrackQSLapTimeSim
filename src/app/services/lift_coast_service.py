@@ -61,7 +61,8 @@ def _run_single(vehicle, power_limit_kw: float, energy_target_kwh: float, dt: fl
 
         f_tractive = wheel_torque / max(vehicle.params.wheel_radius, 1e-6)
 
-        weight_rear = vehicle.params.mass * 9.81 * vehicle.params.cog_longitudinal_pos
+        # cog_longitudinal_pos is the front mass fraction. Rear share is the complement.
+        weight_rear = vehicle.params.mass * 9.81 * (1.0 - vehicle.params.cog_longitudinal_pos)
         f_downforce = vehicle.compute_downforce(v_calc)
         f_aero_rear = f_downforce * (vehicle.params.aero_centre_of_pressure / max(vehicle.params.wheelbase, 1e-6))
         normal_load_rear = weight_rear + f_aero_rear
