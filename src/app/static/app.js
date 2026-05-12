@@ -139,13 +139,17 @@ async function initUserBar() {
 }
 
 function initTabs() {
-  const tabs = document.querySelectorAll('.tab');
-  const sections = document.querySelectorAll('.tab-section');
+  const tabs = document.querySelectorAll('.tab[role="tab"]');
+  const sections = document.querySelectorAll('.tab-section[role="tabpanel"]');
   tabs.forEach(tab => {
     tab.addEventListener('click', () => {
-      tabs.forEach(t => t.classList.remove('active'));
+      tabs.forEach(t => {
+        t.classList.remove('active');
+        t.setAttribute('aria-selected', 'false');
+      });
       sections.forEach(s => s.classList.remove('active'));
       tab.classList.add('active');
+      tab.setAttribute('aria-selected', 'true');
       document.getElementById(tab.dataset.tab).classList.add('active');
     });
   });
@@ -318,6 +322,7 @@ function renderTelemetryTab() {
 
     const canvas = document.createElement('canvas');
     canvas.id = `chart-${key}`;
+    canvas.setAttribute('aria-label', `${ch.label} channel over distance for the current run`);
     body.appendChild(canvas);
 
     pane.appendChild(header);
@@ -383,6 +388,7 @@ function renderGGTab() {
   container.className = 'gg-chart-container';
   const canvas = document.createElement('canvas');
   canvas.id = 'chart-gg';
+  canvas.setAttribute('aria-label', 'G-G-V diagram showing lateral and longitudinal acceleration coloured by speed');
   container.appendChild(canvas);
   area.appendChild(container);
 
@@ -490,6 +496,7 @@ function renderTrackTab() {
   square.className = 'track-map-square';
   const canvas = document.createElement('canvas');
   canvas.id = 'chart-track';
+  canvas.setAttribute('aria-label', 'Track map showing the circuit layout coloured by speed');
   square.appendChild(canvas);
   container.appendChild(square);
   area.appendChild(container);
@@ -1171,8 +1178,26 @@ const SWEEP_PARAM_HINTS = {
 
 const DEFERRED_PARAMETERS = new Set(['suspension_stiffness', 'damping_coefficient']);
 
+async function populateSweepTrackDropdown() {
+  const select = document.getElementById('sw-track-id');
+  try {
+    const res = await apiFetch('/api/track/datasets');
+    if (!res.ok) return;
+    const tracks = await res.json();
+    tracks.forEach(t => {
+      const opt = document.createElement('option');
+      opt.value = t.id;
+      opt.textContent = t.label;
+      select.appendChild(opt);
+    });
+  } catch {
+    // leave with only the default option
+  }
+}
+
 async function initSweepParams() {
   const sel = document.getElementById('sw-param');
+  populateSweepTrackDropdown();
   try {
     const res  = await apiFetch('/api/parameters');
     const data = await res.json();
@@ -1226,10 +1251,10 @@ let sweepState = { lastResult: null };
 let _sweepChart = null;
 
 async function runSweep() {
-  const param  = document.getElementById('sw-param').value;
-  const values = document.getElementById('sw-values').value.trim();
-  const steps  = parseInt(document.getElementById('sw-steps').value.trim(), 10) || 5;
-  const track  = document.getElementById('sw-track').value.trim();
+  const param   = document.getElementById('sw-param').value;
+  const values  = document.getElementById('sw-values').value.trim();
+  const steps   = parseInt(document.getElementById('sw-steps').value.trim(), 10) || 5;
+  const trackId = document.getElementById('sw-track-id').value.trim();
 
   const errorEl = document.getElementById('sweepError');
   errorEl.style.display = 'none';
@@ -1256,7 +1281,7 @@ async function runSweep() {
 
   try {
     const body = { param, values, steps };
-    if (track) body.overrides = { track_id: track };
+    if (trackId) body.overrides = { track_id: trackId };
 
     const res = await apiFetch('/api/sweep/run', {
       method: 'POST',
