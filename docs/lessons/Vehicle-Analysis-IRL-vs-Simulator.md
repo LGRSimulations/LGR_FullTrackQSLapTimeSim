@@ -62,7 +62,7 @@ The left panel zooms into the used envelope.
 The right panel keeps the same points but shows the larger static-load tyre-cap reference.
 The dashed ellipse is a reference cap, not a statement that the lap should fill the whole ellipse.
 
-![GG envelope diagram from simulator run](figures/vehicle_analysis_irl_vs_simulator/gg_envelope_from_sim.png)
+![GG envelope diagram from simulator run](figures/vehicle_analysis_irl_vs_simulator/gg_envelope_from_sim_current.png)
 
 Generation path
 

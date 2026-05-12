@@ -1,12 +1,72 @@
 const CHANNEL_REGISTRY = {
-  speeds_kmh: { label: 'Speed',  unit: 'km/h', color: '#4e9af1', group: 'Speed',    flex: 2 },
-  g_lat:      { label: 'Lat G',  unit: 'g',    color: '#f1a24e', group: 'G-Forces', flex: 1 },
-  g_long:     { label: 'Long G', unit: 'g',    color: '#e05d5d', group: 'G-Forces', flex: 1 },
+  speeds_kmh:          { label: 'Speed',             unit: 'km/h', color: '#4e9af1', group: 'Speed',       flex: 2 },
+  g_lat:               { label: 'Lat G',             unit: 'g',    color: '#f1a24e', group: 'G-Forces',    flex: 1 },
+  g_long:              { label: 'Long G',            unit: 'g',    color: '#e05d5d', group: 'G-Forces',    flex: 1 },
+  mu_util:             { label: 'Mu Utilization',    unit: '',     color: '#d4a017', group: 'Grip',        flex: 1 },
+  curvature_1pm:       { label: 'Curvature',         unit: '1/m',  color: '#5fa78d', group: 'Track',       flex: 1 },
+  normal_load_front_n: { label: 'Front Axle Load',   unit: 'N',    color: '#7896c9', group: 'Tyre Loads',  flex: 1 },
+  normal_load_rear_n:  { label: 'Rear Axle Load',    unit: 'N',    color: '#c97878', group: 'Tyre Loads',  flex: 1 },
 };
 
+const GG_V_GRADIENT_STOPS = [
+  [0.00, [ 33, 102, 172]],
+  [0.25, [ 67, 162, 202]],
+  [0.50, [102, 194, 165]],
+  [0.75, [253, 174,  97]],
+  [1.00, [215,  48,  39]],
+];
+
+const GG_V_GRADIENT_CSS = 'linear-gradient(to right, ' +
+  GG_V_GRADIENT_STOPS.map(([, rgb]) => `rgb(${rgb.join(',')})`).join(', ') + ')';
+
+function speedToColor(t) {
+  const clamped = Math.max(0, Math.min(1, t));
+  for (let i = 0; i < GG_V_GRADIENT_STOPS.length - 1; i++) {
+    const [t0, c0] = GG_V_GRADIENT_STOPS[i];
+    const [t1, c1] = GG_V_GRADIENT_STOPS[i + 1];
+    if (clamped <= t1) {
+      const f = (clamped - t0) / (t1 - t0);
+      const r = Math.round(c0[0] + (c1[0] - c0[0]) * f);
+      const g = Math.round(c0[1] + (c1[1] - c0[1]) * f);
+      const b = Math.round(c0[2] + (c1[2] - c0[2]) * f);
+      return `rgb(${r},${g},${b})`;
+    }
+  }
+  const last = GG_V_GRADIENT_STOPS[GG_V_GRADIENT_STOPS.length - 1][1];
+  return `rgb(${last.join(',')})`;
+}
+
 const VIZ_TABS = [
-  { key: 'telemetry', label: 'Telemetry',   render: () => renderTelemetryTab() },
-  { key: 'gg',        label: 'G-G Diagram', render: () => renderGGTab() },
+  {
+    key: 'telemetry',
+    label: 'Telemetry',
+    render: () => renderTelemetryTab(),
+    legend: [
+      { channelKey: 'speeds_kmh',          group: 'Speed' },
+      { channelKey: 'g_lat',               group: 'G-Forces' },
+      { channelKey: 'g_long',              group: 'G-Forces' },
+      { channelKey: 'mu_util',             group: 'Grip' },
+      { channelKey: 'curvature_1pm',       group: 'Track' },
+      { channelKey: 'normal_load_front_n', group: 'Tyre Loads' },
+      { channelKey: 'normal_load_rear_n',  group: 'Tyre Loads' },
+    ],
+  },
+  {
+    key: 'gg',
+    label: 'G-G-V Diagram',
+    render: () => renderGGTab(),
+    legend: [
+      { label: 'V', unit: 'km/h', color: GG_V_GRADIENT_CSS, group: 'Speed' },
+    ],
+  },
+  {
+    key: 'track',
+    label: 'Track Map',
+    render: () => renderTrackTab(),
+    legend: [
+      { label: 'V', unit: 'km/h', color: GG_V_GRADIENT_CSS, group: 'Speed' },
+    ],
+  },
 ];
 
 let telemetryState = {
@@ -14,9 +74,38 @@ let telemetryState = {
   activeRunId: null,
   activePanes: ['speeds_kmh', 'g_lat', 'g_long'],
   activeTabKey: 'telemetry',
+  isRunning: false,
 };
 
+let parameterDefaults = null;
+
 let _chartInstances = {};
+let _trackResizeObserver = null;
+
+function destroyAllCharts() {
+  if (_trackResizeObserver) {
+    _trackResizeObserver.disconnect();
+    _trackResizeObserver = null;
+  }
+  for (const key of Object.keys(_chartInstances)) {
+    const c = _chartInstances[key];
+    if (c && typeof c.destroy === 'function') {
+      try { c.destroy(); } catch { /* ignore teardown errors */ }
+    }
+    delete _chartInstances[key];
+  }
+}
+
+function showSimLoader(area, label = 'Running simulation') {
+  area.innerHTML = `
+    <div class="sim-loading">
+      <div class="sim-loading-bars">
+        <span></span><span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span><span></span>
+      </div>
+      <div class="sim-loading-label">${label}</div>
+    </div>`;
+}
 
 async function apiFetch(input, init) {
   const res = await fetch(input, init);
@@ -74,39 +163,71 @@ function initInnerTabs() {
   });
 }
 
-function initVizPanel() {
+function resolveLegendItem(entry) {
+  if (entry.channelKey) {
+    const ch = CHANNEL_REGISTRY[entry.channelKey];
+    return {
+      channelKey: entry.channelKey,
+      label: ch.label,
+      unit: ch.unit,
+      color: ch.color,
+      group: entry.group || ch.group,
+      toggleable: true,
+    };
+  }
+  return {
+    channelKey: null,
+    label: entry.label,
+    unit: entry.unit,
+    color: entry.color,
+    group: entry.group,
+    toggleable: false,
+  };
+}
+
+function renderChannelList(tab) {
   const list = document.getElementById('channelList');
+  list.innerHTML = '';
 
   const listHeader = document.createElement('div');
   listHeader.className = 'channel-list-header';
   listHeader.textContent = 'Channels';
   list.appendChild(listHeader);
 
+  const items = (tab.legend || []).map(resolveLegendItem);
   const groups = {};
-  Object.entries(CHANNEL_REGISTRY).forEach(([key, ch]) => {
-    if (!groups[ch.group]) groups[ch.group] = [];
-    groups[ch.group].push(key);
+  items.forEach(item => {
+    if (!groups[item.group]) groups[item.group] = [];
+    groups[item.group].push(item);
   });
 
-  Object.entries(groups).forEach(([group, keys]) => {
+  Object.entries(groups).forEach(([group, groupItems]) => {
     const groupHeader = document.createElement('div');
     groupHeader.className = 'channel-group-header';
     groupHeader.textContent = group;
     list.appendChild(groupHeader);
 
-    keys.forEach(key => {
-      const ch = CHANNEL_REGISTRY[key];
-      const item = document.createElement('div');
-      item.className = 'channel-item' + (telemetryState.activePanes.includes(key) ? '' : ' inactive');
-      item.dataset.channelKey = key;
-      item.innerHTML =
-        `<div class="channel-dot" style="background:${ch.color}"></div>` +
-        `<div><span class="channel-item-name">${ch.label}</span>` +
-        `<span class="channel-item-unit">${ch.unit}</span></div>`;
-      item.addEventListener('click', () => toggleChannel(key));
-      list.appendChild(item);
+    groupItems.forEach(item => {
+      const isActive = !item.toggleable || telemetryState.activePanes.includes(item.channelKey);
+      const el = document.createElement('div');
+      el.className = 'channel-item' + (isActive ? '' : ' inactive');
+      if (item.channelKey) el.dataset.channelKey = item.channelKey;
+      if (!item.toggleable) el.style.cursor = 'default';
+      el.innerHTML =
+        `<div class="channel-dot" style="background:${item.color}"></div>` +
+        `<div><span class="channel-item-name">${item.label}</span>` +
+        `<span class="channel-item-unit">${item.unit}</span></div>`;
+      if (item.toggleable) {
+        el.addEventListener('click', () => toggleChannel(item.channelKey));
+      }
+      list.appendChild(el);
     });
   });
+}
+
+function initVizPanel() {
+  const activeTab = VIZ_TABS.find(t => t.key === telemetryState.activeTabKey) || VIZ_TABS[0];
+  renderChannelList(activeTab);
 
   const tabBar = document.getElementById('vizTabBar');
   VIZ_TABS.forEach(tab => {
@@ -117,10 +238,14 @@ function initVizPanel() {
       telemetryState.activeTabKey = tab.key;
       tabBar.querySelectorAll('.viz-tab').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      if (telemetryState.activeRunId) {
+      renderChannelList(tab);
+      const area = document.getElementById('vizChartArea');
+      if (telemetryState.isRunning) {
+        showSimLoader(area);
+      } else if (telemetryState.activeRunId) {
         tab.render();
       } else {
-        document.getElementById('vizChartArea').innerHTML = '';
+        area.innerHTML = '';
       }
     });
     tabBar.appendChild(btn);
@@ -169,12 +294,7 @@ function renderTelemetryTab() {
   const area = document.getElementById('vizChartArea');
   area.innerHTML = '';
 
-  Object.keys(_chartInstances).forEach(k => {
-    if (_chartInstances[k]) {
-      _chartInstances[k].destroy();
-      delete _chartInstances[k];
-    }
-  });
+  destroyAllCharts();
 
   const { telemetry } = run;
 
@@ -246,14 +366,18 @@ function renderGGTab() {
   const area = document.getElementById('vizChartArea');
   area.innerHTML = '';
 
-  Object.keys(_chartInstances).forEach(k => {
-    if (_chartInstances[k]) {
-      _chartInstances[k].destroy();
-      delete _chartInstances[k];
-    }
-  });
+  destroyAllCharts();
 
-  const { g_lat, g_long } = run.telemetry;
+  const { g_lat, g_long, speeds_kmh } = run.telemetry;
+
+  let vMin = Infinity;
+  let vMax = -Infinity;
+  for (const v of speeds_kmh) {
+    if (v < vMin) vMin = v;
+    if (v > vMax) vMax = v;
+  }
+  const vRange = vMax - vMin || 1;
+  const pointColors = speeds_kmh.map(v => speedToColor((v - vMin) / vRange));
 
   const container = document.createElement('div');
   container.className = 'gg-chart-container';
@@ -266,9 +390,9 @@ function renderGGTab() {
     type: 'scatter',
     data: {
       datasets: [{
-        data: g_lat.map((lat, i) => ({ x: lat, y: g_long[i] })),
-        borderColor: '#4e9af1',
-        backgroundColor: 'rgba(78,154,241,0.35)',
+        data: g_lat.map((lat, i) => ({ x: lat, y: g_long[i], v: speeds_kmh[i] })),
+        borderColor: pointColors,
+        backgroundColor: pointColors,
         pointRadius: 2,
         pointHoverRadius: 3,
       }],
@@ -277,7 +401,17 @@ function renderGGTab() {
       animation: false,
       responsive: true,
       maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              const d = ctx.raw;
+              return `Lat ${d.x.toFixed(2)} g, Long ${d.y.toFixed(2)} g, V ${d.v.toFixed(0)} km/h`;
+            },
+          },
+        },
+      },
       scales: {
         x: {
           title: { display: true, text: 'Lat G', color: '#A7AEB6', font: { size: 10 } },
@@ -292,6 +426,141 @@ function renderGGTab() {
       },
     },
   });
+
+  renderGGVScale(area, vMin, vMax);
+}
+
+function renderGGVScale(area, vMin, vMax) {
+  const scale = document.createElement('div');
+  scale.className = 'gg-v-scale';
+  scale.innerHTML =
+    `<span class="gg-v-scale-label">V (km/h)</span>` +
+    `<span class="gg-v-scale-min">${Math.round(vMin)}</span>` +
+    `<span class="gg-v-scale-bar" style="background:${GG_V_GRADIENT_CSS}"></span>` +
+    `<span class="gg-v-scale-max">${Math.round(vMax)}</span>`;
+  area.appendChild(scale);
+}
+
+function renderTrackTab() {
+  const run = telemetryState.runs[telemetryState.activeRunId];
+  if (!run) return;
+
+  const area = document.getElementById('vizChartArea');
+  area.innerHTML = '';
+
+  destroyAllCharts();
+
+  const { x_m, y_m, speeds_kmh, distances_m } = run.telemetry;
+  if (!x_m || !y_m || x_m.length === 0) {
+    area.innerHTML = '<div class="sweep-placeholder">Track coordinates not available in this run.</div>';
+    return;
+  }
+
+  let vMin = Infinity;
+  let vMax = -Infinity;
+  for (const v of speeds_kmh) {
+    if (v < vMin) vMin = v;
+    if (v > vMax) vMax = v;
+  }
+  const vRange = vMax - vMin || 1;
+  const segColor = (i) => speedToColor((speeds_kmh[i] - vMin) / vRange);
+
+  const points = x_m.map((x, i) => ({ x, y: y_m[i], v: speeds_kmh[i], s: distances_m?.[i] }));
+
+  let xMin = Infinity, xMax = -Infinity, yMin = Infinity, yMax = -Infinity;
+  for (let i = 0; i < x_m.length; i++) {
+    if (x_m[i] < xMin) xMin = x_m[i];
+    if (x_m[i] > xMax) xMax = x_m[i];
+    if (y_m[i] < yMin) yMin = y_m[i];
+    if (y_m[i] > yMax) yMax = y_m[i];
+  }
+  const xSpan = xMax - xMin || 1;
+  const ySpan = yMax - yMin || 1;
+  const span = Math.max(xSpan, ySpan) * 1.05;
+  const xMid = (xMin + xMax) / 2;
+  const yMid = (yMin + yMax) / 2;
+  const xLo = xMid - span / 2;
+  const xHi = xMid + span / 2;
+  const yLo = yMid - span / 2;
+  const yHi = yMid + span / 2;
+
+  const container = document.createElement('div');
+  container.className = 'track-map-container';
+  const square = document.createElement('div');
+  square.className = 'track-map-square';
+  const canvas = document.createElement('canvas');
+  canvas.id = 'chart-track';
+  square.appendChild(canvas);
+  container.appendChild(square);
+  area.appendChild(container);
+
+  const sizeSquare = () => {
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+    const side = Math.max(80, Math.min(w, h));
+    square.style.width  = side + 'px';
+    square.style.height = side + 'px';
+    if (_chartInstances['track']) _chartInstances['track'].resize();
+  };
+  sizeSquare();
+  _trackResizeObserver = new ResizeObserver(sizeSquare);
+  _trackResizeObserver.observe(container);
+
+  _chartInstances['track'] = new Chart(canvas, {
+    type: 'scatter',
+    data: {
+      datasets: [{
+        data: points,
+        showLine: true,
+        pointRadius: 0,
+        pointHoverRadius: 3,
+        borderWidth: 2.5,
+        borderColor: '#A7AEB6',
+        segment: {
+          borderColor: (ctx) => segColor(ctx.p0DataIndex),
+        },
+        spanGaps: false,
+      }],
+    },
+    options: {
+      animation: false,
+      responsive: true,
+      maintainAspectRatio: false,
+      aspectRatio: 1,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              const d = ctx.raw;
+              const s = (d.s != null) ? `${d.s.toFixed(0)} m, ` : '';
+              return `${s}V ${d.v.toFixed(0)} km/h`;
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          type: 'linear',
+          min: xLo,
+          max: xHi,
+          title: { display: true, text: 'X (m)', color: '#A7AEB6', font: { size: 10 } },
+          grid: { color: '#E8ECF0' },
+          ticks: { color: '#A7AEB6', font: { size: 9 } },
+        },
+        y: {
+          type: 'linear',
+          min: yLo,
+          max: yHi,
+          title: { display: true, text: 'Y (m)', color: '#A7AEB6', font: { size: 10 } },
+          grid: { color: '#E8ECF0' },
+          ticks: { color: '#A7AEB6', font: { size: 9 } },
+        },
+      },
+    },
+  });
+
+  renderGGVScale(area, vMin, vMax);
 }
 
 function toggleChannel(key) {
@@ -340,6 +609,7 @@ function downloadCSV() {
 }
 
 function populateParameters(p) {
+  parameterDefaults = JSON.parse(JSON.stringify(p));
   document.getElementById('p-general-name').value = p.general?.name ?? '';
   document.getElementById('p-general-mass').value = p.general?.mass ?? '';
   document.getElementById('p-general-base_mu').value = p.general?.base_mu ?? '';
@@ -354,8 +624,6 @@ function populateParameters(p) {
   document.getElementById('p-geom-cog_longitudinal_pos').value = p.geometry?.cog_longitudinal_pos ?? '';
   document.getElementById('p-geom-max_cog_z').value = p.geometry?.max_cog_z ?? '';
   document.getElementById('p-vd-roll_stiffness').value = p.vehicle_dynamics?.roll_stiffness ?? '';
-  document.getElementById('p-vd-suspension_stiffness').value = p.vehicle_dynamics?.suspension_stiffness ?? '';
-  document.getElementById('p-vd-damping_coefficient').value = p.vehicle_dynamics?.damping_coefficient ?? '';
   document.getElementById('p-vd-max_roll_angle_deg').value = p.vehicle_dynamics?.max_roll_angle_deg ?? '';
   document.getElementById('p-dt-wheel_radius').value = p.drivetrain?.wheel_radius ?? '';
   document.getElementById('p-dt-final_drive_ratio').value = p.drivetrain?.final_drive_ratio ?? '';
@@ -363,17 +631,56 @@ function populateParameters(p) {
   document.getElementById('p-dt-transmission_efficiency').value = p.drivetrain?.transmission_efficiency ?? '';
 }
 
-function populateConfig(c) {
-  document.getElementById('c-powertrain-path').value = c.powertrain?.powertrain ?? '';
-  document.getElementById('c-powertrain-type').value = c.powertrain?.type ?? '';
-  document.getElementById('c-track-file_path').value = c.track?.file_path ?? '';
-  document.getElementById('c-tyre-file_path_longit').value = c.tyre_model?.file_path_longit ?? '';
-  document.getElementById('c-tyre-file_path_lateral').value = c.tyre_model?.file_path_lateral ?? '';
-  document.getElementById('c-tyre-type').value = c.tyre_model?.type ?? '';
-  document.getElementById('c-sim-debug_mode').checked = c.debug_mode ?? false;
+function removeInactiveParameterField(id) {
+  const input = document.getElementById(id);
+  if (!input) return;
+  const label = input.previousElementSibling;
+  const hint = input.nextElementSibling;
+  if (label && label.classList.contains('field-label')) label.remove();
+  if (hint && hint.classList.contains('field-hint')) hint.remove();
+  input.remove();
+}
+
+function removeInactiveParameterFields() {
+  removeInactiveParameterField('p-vd-suspension_stiffness');
+  removeInactiveParameterField('p-vd-damping_coefficient');
+}
+
+async function populateConfig(c) {
+  const ds = c.datasets || {};
+  document.getElementById('c-powertrain-display').textContent  = ds.powertrain?.label        || '--';
+  document.getElementById('c-tyre-lat-display').textContent    = ds.tyre_lateral?.label      || '--';
+  document.getElementById('c-tyre-long-display').textContent   = ds.tyre_longitudinal?.label || '--';
+
   document.getElementById('c-sim-full_telemetry_mode').checked = c.full_telemetry_mode ?? true;
-  document.getElementById('c-ambient-air_density').value = c.ambient_conditions?.air_density ?? '';
+  document.getElementById('c-ambient-air_density').value       = c.ambient_conditions?.air_density ?? '';
+
+  const maxBrake = c.solver?.max_brake_decel_g;
+  document.getElementById('c-solver-max_brake_decel_g').value = (maxBrake == null) ? '' : maxBrake;
+  document.getElementById('c-solver-use_rollover_speed_cap').checked = c.solver?.use_rollover_speed_cap ?? true;
+
+  await populateTrackDropdown(ds.track?.id || null);
+
   initTyreTab();
+}
+
+async function populateTrackDropdown(currentTrackId) {
+  const select = document.getElementById('c-track-id');
+  try {
+    const res = await apiFetch('/api/track/datasets');
+    if (!res.ok) return;
+    const tracks = await res.json();
+    select.innerHTML = '';
+    tracks.forEach(t => {
+      const opt = document.createElement('option');
+      opt.value = t.id;
+      opt.textContent = t.label;
+      if (t.id === currentTrackId) opt.selected = true;
+      select.appendChild(opt);
+    });
+  } catch {
+    select.innerHTML = '<option value="">Could not load tracks</option>';
+  }
 }
 
 async function loadParametersAndConfig() {
@@ -449,8 +756,8 @@ function collectParameters() {
     },
     vehicle_dynamics: {
       roll_stiffness: getFloat('p-vd-roll_stiffness', 'Roll stiffness'),
-      suspension_stiffness: getFloat('p-vd-suspension_stiffness', 'Suspension stiffness'),
-      damping_coefficient: getFloat('p-vd-damping_coefficient', 'Damping coefficient'),
+      suspension_stiffness: parameterDefaults?.vehicle_dynamics?.suspension_stiffness ?? 0,
+      damping_coefficient: parameterDefaults?.vehicle_dynamics?.damping_coefficient ?? 0,
       max_roll_angle_deg: getFloat('p-vd-max_roll_angle_deg', 'Max roll angle'),
     },
     drivetrain: {
@@ -467,20 +774,6 @@ function collectParameters() {
 function collectConfig() {
   const errors = [];
 
-  function getString(id) {
-    const el = document.getElementById(id);
-    if (el) el.classList.remove('field-error');
-    return el ? el.value.trim() : '';
-  }
-
-  function requirePath(id, _label) {
-    // Path inputs are display-only after Phase 1 security hardening — the
-    // backend resolves datasets server-side via the dataset registry.
-    // Kept here so the Config tab still renders the historical values;
-    // no validation, no submission.
-    return getString(id);
-  }
-
   function getFloat(id, label) {
     const el = document.getElementById(id);
     const val = parseFloat(el.value);
@@ -493,28 +786,36 @@ function collectConfig() {
     return val;
   }
 
+  function getOptionalFloat(id) {
+    const el = document.getElementById(id);
+    el.classList.remove('field-error');
+    const raw = el.value.trim();
+    if (raw === '') return null;
+    const val = parseFloat(raw);
+    if (isNaN(val)) {
+      el.classList.add('field-error');
+      errors.push('Max brake decel must be a number or blank');
+      return null;
+    }
+    return val;
+  }
+
   function getBool(id) {
     return document.getElementById(id).checked;
   }
 
+  function getSelect(id) {
+    const el = document.getElementById(id);
+    el.classList.remove('field-error');
+    return el.value || null;
+  }
+
   const cfg = {
-    powertrain: {
-      powertrain: requirePath('c-powertrain-path', 'Powertrain file'),
-      type: getString('c-powertrain-type'),
-    },
-    track: {
-      file_path: requirePath('c-track-file_path', 'Track file'),
-    },
-    tyre_model: {
-      file_path_longit: requirePath('c-tyre-file_path_longit', 'Tyre longitudinal data file'),
-      file_path_lateral: requirePath('c-tyre-file_path_lateral', 'Tyre lateral data file'),
-      type: getString('c-tyre-type'),
-    },
-    debug_mode: getBool('c-sim-debug_mode'),
+    track_id: getSelect('c-track-id'),
     full_telemetry_mode: getBool('c-sim-full_telemetry_mode'),
-    ambient_conditions: {
-      air_density: getFloat('c-ambient-air_density', 'Air density'),
-    },
+    use_rollover_speed_cap: getBool('c-solver-use_rollover_speed_cap'),
+    max_brake_decel_g: getOptionalFloat('c-solver-max_brake_decel_g'),
+    air_density: getFloat('c-ambient-air_density', 'Air density'),
   };
 
   return { cfg, errors };
@@ -549,29 +850,25 @@ async function runLap() {
   btn.disabled = true;
 
   const chartArea = document.getElementById('vizChartArea');
-  chartArea.innerHTML = `
-    <div class="sim-loading">
-      <div class="sim-loading-bars">
-        <span></span><span></span><span></span><span></span><span></span>
-        <span></span><span></span><span></span><span></span><span></span>
-      </div>
-      <div class="sim-loading-label">Running simulation</div>
-    </div>`;
+  telemetryState.isRunning = true;
+  showSimLoader(chartArea);
 
+  let data;
   try {
     const overrides = {};
-    if (cfg.ambient_conditions?.air_density != null) overrides.air_density = cfg.ambient_conditions.air_density;
+    if (cfg.track_id) overrides.track_id = cfg.track_id;
+    if (cfg.air_density != null && !isNaN(cfg.air_density)) overrides.air_density = cfg.air_density;
     if (cfg.full_telemetry_mode != null) overrides.full_telemetry_mode = cfg.full_telemetry_mode;
+    if (cfg.use_rollover_speed_cap != null) overrides.use_rollover_speed_cap = cfg.use_rollover_speed_cap;
+    if (cfg.max_brake_decel_g != null) overrides.max_brake_decel_g = cfg.max_brake_decel_g;
     const res = await apiFetch('/api/lap/run', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ parameters: params, overrides }),
     });
-    const data = await res.json();
+    data = await res.json();
     if (!res.ok) {
-      chartArea.innerHTML = '';
-      status.textContent = 'RUN FAILED';
-      status.className = 'run-status error';
+      telemetryState.isRunning = false;
       const detail = data.detail;
       let msg;
       if (typeof detail === 'string') {
@@ -581,21 +878,48 @@ async function runLap() {
       } else {
         msg = JSON.stringify(data, null, 2);
       }
-      errorEl.textContent = msg;
-      errorEl.style.display = 'block';
-    } else {
-      storeTelemetry(data);
-      renderViz();
+      showRunFailure(chartArea, status, errorEl, msg);
+      btn.disabled = false;
+      return;
     }
-  } catch {
-    chartArea.innerHTML = '';
-    status.textContent = 'RUN FAILED';
-    status.className = 'run-status error';
-    errorEl.textContent = 'Could not reach the server. Try again.';
-    errorEl.style.display = 'block';
+  } catch (err) {
+    telemetryState.isRunning = false;
+    showRunFailure(chartArea, status, errorEl, 'Could not reach the server. Try again.');
+    btn.disabled = false;
+    console.error('runLap network error', err);
+    return;
+  }
+
+  telemetryState.isRunning = false;
+  try {
+    storeTelemetry(data);
+    renderViz();
+  } catch (err) {
+    console.error('runLap render error', err);
+    const msg = (err && err.message) ? err.message : String(err);
+    showRunFailure(chartArea, status, errorEl, 'Telemetry received but the chart failed to render. ' + msg);
   } finally {
     btn.disabled = false;
   }
+}
+
+function showRunFailure(chartArea, status, errorEl, msg) {
+  status.textContent = 'RUN FAILED';
+  status.className = 'run-status error';
+  errorEl.textContent = msg;
+  errorEl.style.display = 'block';
+  chartArea.innerHTML = `
+    <div class="sim-error-tile">
+      <div class="sim-error-tile-title">Run failed</div>
+      <div class="sim-error-tile-msg">${escapeHtml(msg)}</div>
+      <div class="sim-error-tile-hint">Press Run Simulation to try again.</div>
+    </div>`;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  })[c]);
 }
 
 // ── Lesson link handling ────────────────────────────────────────────────────
@@ -877,6 +1201,8 @@ const SWEEP_PARAM_HINTS = {
   numeric: 'Range: min,max (uses steps). Explicit list: 250,275,300,325,350',
 };
 
+const DEFERRED_PARAMETERS = new Set(['suspension_stiffness', 'damping_coefficient']);
+
 async function initSweepParams() {
   const sel = document.getElementById('sw-param');
   try {
@@ -889,6 +1215,7 @@ async function initSweepParams() {
       group.label = section.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
       Object.entries(fields).forEach(([key, val]) => {
         if (key === 'name') return;
+        if (DEFERRED_PARAMETERS.has(key)) return;
         const opt = document.createElement('option');
         opt.value = key;
         const typeTag = Array.isArray(val) ? 'list' : typeof val === 'string' ? 'str' : `${val}`;
@@ -1057,31 +1384,30 @@ function downloadSweepCSV() {
 
 let _tyreCharts = {};
 
-function initTyreTab() {
-  const latEl  = document.getElementById('c-tyre-file_path_lateral');
-  const longEl = document.getElementById('c-tyre-file_path_longit');
-  const update = () => {
-    document.getElementById('tyre-lat-display').textContent  = latEl.value  || '--';
-    document.getElementById('tyre-long-display').textContent = longEl.value || '--';
-  };
-  update();
-  latEl.addEventListener('input', update);
-  longEl.addEventListener('input', update);
+const TYRE_LAT_DATASET_ID  = 'round_8_12psi';
+const TYRE_LONG_DATASET_ID = 'round_6_12psi';
+
+async function initTyreTab() {
+  const latDisplay  = document.getElementById('tyre-lat-display');
+  const longDisplay = document.getElementById('tyre-long-display');
+  try {
+    const res = await apiFetch('/api/tyre/datasets');
+    if (!res.ok) return;
+    const body = await res.json();
+    const lat  = (body.lateral      || []).find(d => d.id === TYRE_LAT_DATASET_ID);
+    const long = (body.longitudinal || []).find(d => d.id === TYRE_LONG_DATASET_ID);
+    if (lat)  latDisplay.textContent  = lat.label;
+    if (long) longDisplay.textContent = long.label;
+  } catch (e) {
+    // leave as '--' if the request fails
+  }
 }
 
 async function runTyreVerify() {
-  const lat   = document.getElementById('c-tyre-file_path_lateral').value.trim();
-  const long  = document.getElementById('c-tyre-file_path_longit').value.trim();
   const variant = document.getElementById('tyre-model-variant').value;
 
   const errorEl = document.getElementById('tyreError');
   errorEl.style.display = 'none';
-
-  if (!lat || !long) {
-    errorEl.textContent = 'Set tyre file paths in the Base Simulator Config tab first.';
-    errorEl.style.display = 'block';
-    return;
-  }
 
   const status = document.getElementById('tyre-run-status');
   status.textContent = 'Running...';
@@ -1100,13 +1426,13 @@ async function runTyreVerify() {
       <div class="sim-loading-label">Running tyre verification</div>
     </div>`;
 
-  const baseMu = parseFloat(document.getElementById('tyre-base-mu').value) || 1.0;
+  const muMultiplier = parseFloat(document.getElementById('tyre-mu-multiplier').value) || 1.0;
 
   try {
     const res  = await apiFetch('/api/tyre/verify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ lat_dataset: "round_8_12psi", long_dataset: "round_6_12psi", model_variant: variant, base_mu: baseMu }),
+      body: JSON.stringify({ lat_dataset: TYRE_LAT_DATASET_ID, long_dataset: TYRE_LONG_DATASET_ID, model_variant: variant, mu_multiplier: muMultiplier }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -1168,9 +1494,13 @@ function renderTyreResults(data) {
   document.getElementById('tyre-stat-threshold').textContent = data.rmse_threshold_pct;
 
   const muNote = document.getElementById('tyre-stat-mu-note');
-  const mu = data.base_mu ?? 1.0;
-  if (Math.abs(mu - 1.0) > 0.001) {
-    muNote.textContent = `base_mu ${mu.toFixed(2)}`;
+  const eff = data.base_mu;
+  const mult = data.mu_multiplier;
+  const latRef = data.lat_ref_mu;
+  const longRef = data.long_ref_mu;
+  if (latRef != null && longRef != null) {
+    const multStr = (mult != null && Math.abs(mult - 1.0) > 0.001) ? ` · multiplier ${mult.toFixed(2)}` : '';
+    muNote.textContent = `native lat ${latRef.toFixed(2)} · long ${longRef.toFixed(2)} · effective ${eff.toFixed(2)}${multStr}`;
     muNote.style.display = 'inline';
   } else {
     muNote.style.display = 'none';
@@ -1214,8 +1544,8 @@ function _buildTyreErrorTable(rows) {
 
 // ── Boot ────────────────────────────────────────────────────────────────────
 
-document.getElementById('tyre-base-mu').addEventListener('input', e => {
-  document.getElementById('tyre-base-mu-val').textContent = parseFloat(e.target.value).toFixed(2);
+document.getElementById('tyre-mu-multiplier').addEventListener('input', e => {
+  document.getElementById('tyre-mu-multiplier-val').textContent = parseFloat(e.target.value).toFixed(2);
 });
 
 document.getElementById('runLapBtn').addEventListener('click', runLap);
@@ -1229,10 +1559,66 @@ document.getElementById('chatQuestion').addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.target.disabled) sendChatMessage();
 });
 
+function initInfoTips() {
+  const floater = document.createElement('div');
+  floater.className = 'tooltip-floater';
+  floater.setAttribute('role', 'tooltip');
+  document.body.appendChild(floater);
+
+  function showFor(target) {
+    const text = target.getAttribute('data-tip');
+    if (!text) return;
+    floater.textContent = text;
+    floater.classList.add('visible');
+    const r = target.getBoundingClientRect();
+    const ttRect = floater.getBoundingClientRect();
+    const ttW = ttRect.width;
+    const ttH = ttRect.height;
+    const margin = 10;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    let left = r.right + margin;
+    if (left + ttW > vw - 8) left = r.left - margin - ttW;
+    if (left < 8) left = 8;
+    let top = r.top + r.height / 2 - ttH / 2;
+    if (top < 8) top = 8;
+    if (top + ttH > vh - 8) top = vh - 8 - ttH;
+    floater.style.left = left + 'px';
+    floater.style.top = top + 'px';
+  }
+  function hide() {
+    floater.classList.remove('visible');
+  }
+
+  document.addEventListener('mouseover', (e) => {
+    const tip = e.target.closest && e.target.closest('.info-tip');
+    if (tip) showFor(tip);
+  });
+  document.addEventListener('mouseout', (e) => {
+    const tip = e.target.closest && e.target.closest('.info-tip');
+    if (tip) hide();
+  });
+  document.addEventListener('focusin', (e) => {
+    const tip = e.target.closest && e.target.closest('.info-tip');
+    if (tip) showFor(tip);
+  });
+  document.addEventListener('focusout', (e) => {
+    const tip = e.target.closest && e.target.closest('.info-tip');
+    if (tip) hide();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') hide();
+  });
+  window.addEventListener('scroll', hide, true);
+  window.addEventListener('resize', hide);
+}
+
 initUserBar();
 initTabs();
 initInnerTabs();
 initVizPanel();
+initInfoTips();
+removeInactiveParameterFields();
 initSweepParams();
 initTyreTab();
 initLessons();

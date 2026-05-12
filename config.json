@@ -15,7 +15,8 @@
     "debug_mode": false,
     "full_telemetry_mode": true,
     "solver": {
-        "use_rollover_speed_cap": true
+        "use_rollover_speed_cap": true,
+        "corner_max_bisection_iters": 14
     },
     "ambient_conditions": {
         "air_density": 1.225

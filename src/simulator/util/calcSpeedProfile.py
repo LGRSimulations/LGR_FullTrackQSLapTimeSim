@@ -45,6 +45,16 @@ def _get_straight_speed_cap(config):
         return 200.0
 
 
+def _get_corner_max_bisection_iters(config):
+    """Resolve corner-equilibrium speed-search iterations."""
+    solver_cfg = config.get('solver', {}) if isinstance(config, dict) else {}
+    iters = solver_cfg.get('corner_max_bisection_iters', 14)
+    try:
+        return max(1, int(iters))
+    except (TypeError, ValueError):
+        return 14
+
+
 def _compute_rollover_speed_cap(curvature, vehicle):
     if abs(curvature) < 1e-9:
         return np.inf
@@ -389,6 +399,7 @@ def optimise_speed_at_points(track_points, vehicle, config):
     corner_non_physical_normal_load = []
     corner_transfer_clamped = []
     straight_speed_cap = _get_straight_speed_cap(config)
+    corner_max_bisection_iters = _get_corner_max_bisection_iters(config)
     previous_solution = None
     for point in track_points:
         curvature = point.curvature
@@ -421,6 +432,7 @@ def optimise_speed_at_points(track_points, vehicle, config):
                 straight_line_speed_cap=straight_speed_cap,
                 initial_guess=tier.get('initial_guess'),
                 v_upper_bound_mps=tier.get('v_upper_bound_mps'),
+                max_bisection_iters=corner_max_bisection_iters,
             )
             if tier_result.get('success'):
                 result = tier_result

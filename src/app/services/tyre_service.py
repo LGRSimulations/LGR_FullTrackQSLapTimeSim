@@ -202,6 +202,7 @@ def run_tyre_verify(
     model_variant: str = "tyre_peak_load_clamp",
     rmse_threshold_pct: float = 12.0,
     base_mu: float = 1.0,
+    mu_multiplier: float | None = None,
 ) -> dict:
     from vehicle.Tyres.baseTyre import LookupTableTyreModel
 
@@ -224,6 +225,16 @@ def run_tyre_verify(
     except Exception as exc:
         raise HTTPException(status_code=422, detail=f"Could not load tyre data: {exc}")
 
+    lat_ref_mu  = float(getattr(model, "_lat_mu_reference",  1.0))
+    long_ref_mu = float(getattr(model, "_long_mu_reference", 1.0))
+
+    if mu_multiplier is not None:
+        native = (lat_ref_mu + long_ref_mu) / 2.0
+        effective_base_mu = float(native) * float(mu_multiplier)
+        model.base_mu = effective_base_mu
+    else:
+        effective_base_mu = float(base_mu)
+
     lat_rows  = _evaluate_lateral(model, df_lat)
     long_rows = _evaluate_longitudinal(model, df_long)
     all_rows  = lat_rows + long_rows
@@ -245,7 +256,10 @@ def run_tyre_verify(
         "longitudinal_rmse_pct": round(long_rmse_pct, 2),
         "rmse_threshold_pct": rmse_threshold_pct,
         "model_variant": model_variant,
-        "base_mu": float(base_mu),
+        "base_mu": float(effective_base_mu),
+        "mu_multiplier": None if mu_multiplier is None else float(mu_multiplier),
+        "lat_ref_mu":  round(lat_ref_mu,  3),
+        "long_ref_mu": round(long_ref_mu, 3),
         "lat_dataset": lat_dataset,
         "long_dataset": long_dataset,
         "rows": all_rows,

@@ -38,6 +38,7 @@ class TyreVerifyRequest(BaseModel):
     model_variant: str = Field(default="tyre_peak_load_clamp", max_length=64)
     rmse_threshold_pct: float = Field(default=12.0, ge=0.0, le=100.0)
     base_mu: float = Field(default=1.0, ge=0.0, le=5.0)
+    mu_multiplier: float | None = Field(default=None, ge=0.1, le=2.0)
 
 
 class SweepRequest(BaseModel):

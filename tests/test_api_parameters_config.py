@@ -45,8 +45,7 @@ def test_http_get_config_sanitised_shape():
     resp = client.get("/api/config")
     assert resp.status_code == 200
     data = resp.json()
-    assert set(data.keys()) == {"debug_mode", "full_telemetry_mode", "solver", "ambient_conditions"}
-    assert data["debug_mode"] is False
+    assert set(data.keys()) == {"full_telemetry_mode", "solver", "ambient_conditions", "datasets"}
     assert "use_rollover_speed_cap" in data["solver"]
     assert "max_brake_decel_g" in data["solver"]
     assert "air_density" in data["ambient_conditions"]
@@ -54,6 +53,15 @@ def test_http_get_config_sanitised_shape():
     assert "powertrain" not in data
     assert "tyre_model" not in data
     assert "vehicle_parameters" not in data
+
+    # The datasets block carries labels and ids, never raw file paths.
+    ds = data["datasets"]
+    assert set(ds.keys()) == {"powertrain", "track", "tyre_lateral", "tyre_longitudinal"}
+    for key in ds:
+        assert "label" in ds[key]
+        # No path-looking values should leak through.
+        for v in ds[key].values():
+            assert v is None or "/" not in str(v) and "\\" not in str(v)
 
 
 def test_http_get_parameters():

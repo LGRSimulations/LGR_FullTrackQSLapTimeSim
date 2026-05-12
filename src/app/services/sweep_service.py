@@ -1,4 +1,7 @@
 import json
+import os
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures.process import BrokenProcessPool
 from typing import Any
 from pathlib import Path
 
@@ -77,6 +80,44 @@ def _value_label(val: Any) -> str:
     return str(val)
 
 
+def _sweep_max_workers(cfg: dict, candidate_count: int) -> int:
+    solver_cfg = cfg.get("solver", {}) if isinstance(cfg, dict) else {}
+    raw_workers = solver_cfg.get("sweep_max_workers", None)
+    cpu_count = os.cpu_count() or 1
+    default_workers = min(4, cpu_count, max(1, candidate_count))
+    if raw_workers is None:
+        return default_workers
+    try:
+        return max(1, min(int(raw_workers), candidate_count))
+    except (TypeError, ValueError):
+        return default_workers
+
+
+def _run_sweep_candidate(index: int, cfg: dict, canonical_param: str, val: Any) -> tuple[int, dict]:
+    from simulator.simulator import run_lap_time_simulation
+    from track.track import load_track
+    from vehicle.vehicle import create_vehicle
+
+    vehicle = create_vehicle(cfg)
+    setattr(vehicle.params, canonical_param, val)
+    track = load_track(cfg["track"]["file_path"], cfg.get("debug_mode", False))
+    sim_result = run_lap_time_simulation(track, vehicle, cfg, display=False)
+    serialisable_val = val if isinstance(val, (int, float, bool)) else str(val)
+    return index, {
+        "value": serialisable_val,
+        "label": _value_label(val),
+        "lap_time_s": float(sim_result.lap_time),
+    }
+
+
+def _run_sweep_candidates_sequential(cfg: dict, canonical_param: str, param_values: list[Any]) -> list[dict]:
+    results: list[dict] = []
+    for idx, val in enumerate(param_values):
+        _, result = _run_sweep_candidate(idx, cfg, canonical_param, val)
+        results.append(result)
+    return results
+
+
 def run_sweep(
     param: str,
     values: str,
@@ -84,8 +125,6 @@ def run_sweep(
     parameters: dict | None = None,
     overrides: ConfigOverrides | None = None,
 ) -> dict:
-    from simulator.simulator import run_lap_time_simulation
-    from track.track import load_track
     from vehicle.vehicle import create_vehicle
 
     overrides = overrides if overrides is not None else ConfigOverrides()
@@ -113,21 +152,26 @@ def run_sweep(
     except (ValueError, TypeError) as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-    track = load_track(cfg["track"]["file_path"], cfg.get("debug_mode", False))
+    max_workers = _sweep_max_workers(cfg, len(param_values))
+    final_results: list[dict]
+    if max_workers == 1 or len(param_values) == 1:
+        final_results = _run_sweep_candidates_sequential(cfg, canonical_param, param_values)
+    else:
+        results: list[dict | None] = [None] * len(param_values)
+        try:
+            with ProcessPoolExecutor(max_workers=max_workers) as pool:
+                futures = [
+                    pool.submit(_run_sweep_candidate, idx, cfg, canonical_param, val)
+                    for idx, val in enumerate(param_values)
+                ]
+                for future in as_completed(futures):
+                    result_idx, result = future.result()
+                    results[result_idx] = result
+            final_results = [result for result in results if result is not None]
+        except BrokenProcessPool:
+            final_results = _run_sweep_candidates_sequential(cfg, canonical_param, param_values)
 
-    results = []
-    for val in param_values:
-        v = create_vehicle(cfg)
-        setattr(v.params, canonical_param, val)
-        sim_result = run_lap_time_simulation(track, v, cfg, display=False)
-        serialisable_val = val if isinstance(val, (int, float, bool)) else str(val)
-        results.append({
-            "value": serialisable_val,
-            "label": _value_label(val),
-            "lap_time_s": float(sim_result.lap_time),
-        })
-
-    lap_times = [r["lap_time_s"] for r in results]
+    lap_times = [r["lap_time_s"] for r in final_results]
     best_idx = int(lap_times.index(min(lap_times)))
     worst_idx = int(lap_times.index(max(lap_times)))
 
@@ -135,8 +179,8 @@ def run_sweep(
         "param": param,
         "canonical_param": canonical_param,
         "track_file_path": Path(cfg["track"]["file_path"]).name,
-        "points": len(results),
-        "results": results,
-        "best": results[best_idx],
-        "worst": results[worst_idx],
+        "points": len(final_results),
+        "results": final_results,
+        "best": final_results[best_idx],
+        "worst": final_results[worst_idx],
     }

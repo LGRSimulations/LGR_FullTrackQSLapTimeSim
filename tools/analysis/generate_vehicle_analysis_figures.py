@@ -138,7 +138,7 @@ def main():
     result = run_lap_time_simulation(track, vehicle, cfg, display=False)
 
     out_dir = os.path.join(REPO_ROOT, "docs", "lessons", "figures", "vehicle_analysis_irl_vs_simulator")
-    fig_path = os.path.join(out_dir, "gg_envelope_from_sim.png")
+    fig_path = os.path.join(out_dir, "gg_envelope_from_sim_current.png")
     summary = {
         "track_path": cfg["track"]["file_path"],
         "model_variant": cfg.get("ab_testing", {}).get("model_variant", "baseline"),
