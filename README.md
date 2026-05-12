@@ -101,6 +101,41 @@ You can run these from the repository root after `uv sync`:
 - Skidpad track generator: `uv run python tools/tracks/skidpad_creator.py`
 - Straight track generator: `uv run python tools/tracks/straight_line_creator.py`
 
+### Local Workbench (Browser UI)
+
+A lightweight local web app scaffold is available for zip-friendly distribution and one-click use.
+
+Run locally from source:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/app/launch_sim_bt.ps1
+```
+
+macOS/Linux:
+
+```bash
+bash tools/app/launch_workbench.sh
+```
+
+Port policy:
+- Allowed port range is `3000-3010`.
+- If requested port is busy, launcher auto-selects the first free port in that range.
+- If all ports in range are busy, launch stops with an explicit error.
+
+What it does:
+- Starts a local API backend on `127.0.0.1:8787` by default.
+- Opens the browser UI automatically.
+- Exposes simulator-backed services (lap run and lift/coast sweep scaffold).
+
+Build a Windows executable folder (zip-shareable):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/app/build_windows_exe.ps1
+```
+
+Output:
+- `dist/LGRSimWorkbench/` (share this folder or zip it)
+
 ### Quick Start Cheat Sheet
 
 Preferred workflow: use `uv`.

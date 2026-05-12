@@ -115,7 +115,10 @@ class LookupTableTyreModel(BaseTyreModel):
         tyre_data_lat: pd.DataFrame,
         tyre_data_long: pd.DataFrame,
         base_mu: float = 1.0,
-        clamp_peak_load_high: bool = False,
+        clamp_peak_load_high: bool = True,
+        # clamp_peak_load_high=True: peak force interpolation is clamped to the highest measured
+        # TTC load rather than extrapolating linearly. Linear extrapolation above the measured
+        # range is unphysical (tyre load sensitivity inverts at high load). Default is True.
     ):
         """
         Initialize lookup table tyre model.
@@ -140,6 +143,8 @@ class LookupTableTyreModel(BaseTyreModel):
         self._lat_load_max_N = np.nan
         self._long_load_min_N = np.nan
         self._long_load_max_N = np.nan
+        self._lat_mu_reference = 1.0
+        self._long_mu_reference = 1.0
         self._domain_diag = {
             "lateral_calls": 0,
             "longitudinal_calls": 0,
@@ -181,6 +186,10 @@ class LookupTableTyreModel(BaseTyreModel):
             None if not np.isfinite(self._long_load_min_N) else float(self._long_load_min_N),
             None if not np.isfinite(self._long_load_max_N) else float(self._long_load_max_N),
         ]
+        diag["lateral_peak_mu_reference"] = float(self._lat_mu_reference)
+        diag["longitudinal_peak_mu_reference"] = float(self._long_mu_reference)
+        diag["lateral_base_mu_scale"] = float(self._base_mu_scale_lateral())
+        diag["longitudinal_base_mu_scale"] = float(self._base_mu_scale_longitudinal())
         diag["out_of_domain_total"] = int(
             diag["lateral_out_of_domain_slip"]
             + diag["lateral_out_of_domain_load"]
@@ -347,6 +356,8 @@ class LookupTableTyreModel(BaseTyreModel):
             self._lat_peaks = np.array([])
             self._lat_peak_interp = None
 
+        self._lat_mu_reference = self._infer_peak_mu_reference(self._lat_loads, self._lat_peaks)
+
         # Ensure numeric columns for longitudinal
         if 'Normal Load [N]' in self.tyre_data_long.columns:
             self.tyre_data_long['Normal Load [N]'] = pd.to_numeric(self.tyre_data_long['Normal Load [N]'], errors='coerce')
@@ -373,6 +384,42 @@ class LookupTableTyreModel(BaseTyreModel):
             self._long_loads = np.array([])
             self._long_peaks = np.array([])
             self._long_peak_interp = None
+
+        self._long_mu_reference = self._infer_peak_mu_reference(self._long_loads, self._long_peaks)
+
+    @staticmethod
+    def _infer_peak_mu_reference(loads: np.ndarray, peaks: np.ndarray) -> float:
+        """
+        Infer a reference friction level from measured peak force/load pairs.
+
+        TTC peak tables in this model are absolute force values, so we normalize
+        them to a representative peak force ratio before applying base_mu.
+        """
+        try:
+            loads_arr = np.asarray(loads, dtype=float)
+            peaks_arr = np.asarray(peaks, dtype=float)
+        except Exception:
+            return 1.0
+
+        if loads_arr.size == 0 or peaks_arr.size == 0:
+            return 1.0
+
+        valid = np.isfinite(loads_arr) & np.isfinite(peaks_arr) & (loads_arr > 1e-9)
+        if not np.any(valid):
+            return 1.0
+
+        mu_vals = np.abs(peaks_arr[valid]) / loads_arr[valid]
+        mu_vals = mu_vals[np.isfinite(mu_vals) & (mu_vals > 1e-9)]
+        if mu_vals.size == 0:
+            return 1.0
+
+        return max(float(np.median(mu_vals)), 1e-6)
+
+    def _base_mu_scale_lateral(self) -> float:
+        return float(self.base_mu) / max(float(self._lat_mu_reference), 1e-6)
+
+    def _base_mu_scale_longitudinal(self) -> float:
+        return float(self.base_mu) / max(float(self._long_mu_reference), 1e-6)
 
     def _compute_B_lateral(self, D: float) -> float:
         """
@@ -481,7 +528,7 @@ class LookupTableTyreModel(BaseTyreModel):
         
         # Get peak force D by interpolating at the given normal load
         interp_load = self._resolve_peak_load_input(normal_load, 'lateral')
-        D = max(0.0, float(self._lat_peak_interp(interp_load)) * self.base_mu)
+        D = max(0.0, float(self._lat_peak_interp(interp_load)) * self._base_mu_scale_lateral())
         
         # Compute B as function of D
         B = self._compute_B_lateral(D)
@@ -519,7 +566,7 @@ class LookupTableTyreModel(BaseTyreModel):
         
         # Get peak force D by interpolating at the given normal load
         interp_load = self._resolve_peak_load_input(normal_load, 'longitudinal')
-        D = max(0.0, float(self._long_peak_interp(interp_load)) * self.base_mu)
+        D = max(0.0, float(self._long_peak_interp(interp_load)) * self._base_mu_scale_longitudinal())
         
         # Compute B as function of D
         B = self._compute_B_longitudinal(D)
@@ -573,7 +620,8 @@ class LookupTableTyreModel(BaseTyreModel):
                     tyre_data_long = cls._parse_longitudinal_file(full_long)
 
                 model_variant = str(config.get('model_variant', '')).strip().lower()
-                clamp_peak_load_high = bool(config.get('clamp_peak_load_high', False))
+                # Default True: extrapolating peak force above measured TTC loads is unphysical.
+                clamp_peak_load_high = bool(config.get('clamp_peak_load_high', True))
                 if model_variant in {'b2', 'tyre_peak_load_clamp', 'tyre_load_clamp'}:
                     clamp_peak_load_high = True
 
@@ -640,7 +688,8 @@ class LookupTableTyreModel(BaseTyreModel):
                 
             # Return the model
             model_variant = str(config.get('model_variant', '')).strip().lower()
-            clamp_peak_load_high = bool(config.get('clamp_peak_load_high', False))
+            # Default True: extrapolating peak force above measured TTC loads is unphysical.
+            clamp_peak_load_high = bool(config.get('clamp_peak_load_high', True))
             if model_variant in {'b2', 'tyre_peak_load_clamp', 'tyre_load_clamp'}:
                 clamp_peak_load_high = True
 
@@ -693,8 +742,8 @@ class LookupTableTyreModel(BaseTyreModel):
         # Get peak forces for friction circle limit
         lat_interp_load = self._resolve_peak_load_input(normal_load, 'lateral')
         long_interp_load = self._resolve_peak_load_input(normal_load, 'longitudinal')
-        D_lat = max(0.0, (float(self._lat_peak_interp(lat_interp_load)) * self.base_mu)) if self._lat_peak_interp else abs(fy_pure)
-        D_long = max(0.0, (float(self._long_peak_interp(long_interp_load)) * self.base_mu)) if self._long_peak_interp else abs(fx_pure)
+        D_lat = max(0.0, (float(self._lat_peak_interp(lat_interp_load)) * self._base_mu_scale_lateral())) if self._lat_peak_interp else abs(fy_pure)
+        D_long = max(0.0, (float(self._long_peak_interp(long_interp_load)) * self._base_mu_scale_longitudinal())) if self._long_peak_interp else abs(fx_pure)
         
         # Combined force magnitude
         total_force = np.sqrt(fx_pure**2 + fy_pure**2)

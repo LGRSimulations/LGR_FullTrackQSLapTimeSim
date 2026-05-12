@@ -45,6 +45,16 @@ def _get_straight_speed_cap(config):
         return 200.0
 
 
+def _get_corner_max_bisection_iters(config):
+    """Resolve corner-equilibrium speed-search iterations."""
+    solver_cfg = config.get('solver', {}) if isinstance(config, dict) else {}
+    iters = solver_cfg.get('corner_max_bisection_iters', 14)
+    try:
+        return max(1, int(iters))
+    except (TypeError, ValueError):
+        return 14
+
+
 def _compute_rollover_speed_cap(curvature, vehicle):
     if abs(curvature) < 1e-9:
         return np.inf
@@ -65,8 +75,8 @@ def _compute_tyre_lateral_speed_cap(curvature, vehicle, normal_load_per_tyre, co
         slip_angle_cap = 10.0
 
     try:
-        mu_scale = float(vehicle.params.base_mu) / max(getattr(vehicle, 'base_mu_reference', 1.0), 1e-6)
-        fy_per_tyre = abs(vehicle.tyre_model.get_lateral_force(slip_angle_cap, normal_load=normal_load_per_tyre)) * mu_scale
+        # No extra mu_scale: base_mu is already embedded in tyre model output (D = peak * base_mu).
+        fy_per_tyre = abs(vehicle.tyre_model.get_lateral_force(slip_angle_cap, normal_load=normal_load_per_tyre))
         a_lat_cap = (fy_per_tyre * 4.0) / max(float(vehicle.params.mass), 1e-6)
         if a_lat_cap <= 0.0 or (not np.isfinite(a_lat_cap)):
             return np.inf
@@ -234,32 +244,39 @@ def _compute_normal_loads_for_longitudinal(vehicle, v_car, a_long, config):
 
 
 def _compute_total_force_caps(vehicle, front_load, rear_load, config, peak_slip_ratio):
-    """Compute pure-slip total longitudinal and lateral tyre force caps."""
+    """Compute pure-slip total longitudinal and lateral tyre force caps.
+
+    The tyre model (LookupTableTyreModel) already applies base_mu internally when
+    computing peak force D = peak_interp(load) * base_mu. Applying mu_scale again
+    here would double-count the base friction coefficient. scenario_grip_scale is
+    applied separately via vehicle.compute_tyre_forces and is NOT relevant for these
+    raw force caps (they are used to compute a budget scale, not absolute forces).
+    """
     solver_cfg = config.get('solver', {}) if isinstance(config, dict) else {}
     lateral_cap_slip_angle = float(solver_cfg.get('lateral_combined_slip_angle_deg', 10.0))
 
-    mu_scale = float(vehicle.params.base_mu) / max(getattr(vehicle, 'base_mu_reference', 1.0), 1e-6)
-
     # Longitudinal pure cap from front/rear tyres at requested peak slip ratio.
+    # No additional mu_scale: base_mu is already embedded in the tyre model output.
     f_long_front = abs(vehicle.tyre_model.get_longitudinal_force(
         slip_ratio=peak_slip_ratio,
         normal_load=front_load,
-    ) * mu_scale) * 2.0
+    )) * 2.0
     f_long_rear = abs(vehicle.tyre_model.get_longitudinal_force(
         slip_ratio=peak_slip_ratio,
         normal_load=rear_load,
-    ) * mu_scale) * 2.0
+    )) * 2.0
     fx_cap_total = f_long_front + f_long_rear
 
     # Lateral pure cap proxy using fixed representative slip angle.
+    # No additional mu_scale: base_mu is already embedded in the tyre model output.
     f_lat_front = abs(vehicle.tyre_model.get_lateral_force(
         slip_angle=lateral_cap_slip_angle,
         normal_load=front_load,
-    ) * mu_scale) * 2.0
+    )) * 2.0
     f_lat_rear = abs(vehicle.tyre_model.get_lateral_force(
         slip_angle=lateral_cap_slip_angle,
         normal_load=rear_load,
-    ) * mu_scale) * 2.0
+    )) * 2.0
     fy_cap_total = f_lat_front + f_lat_rear
 
     return float(fx_cap_total), float(fy_cap_total)
@@ -277,6 +294,87 @@ def _longitudinal_budget_scale_from_lateral_demand(fy_demand_total, fy_cap_total
 def _compute_corner_normal_load_state(vehicle, v_car, config):
     """Cornering solve load state (front/rear per-tyre) at approximately steady longitudinal accel."""
     return _compute_normal_loads_for_longitudinal(vehicle, v_car=v_car, a_long=0.0, config=config)
+
+
+def _smooth_corner_speed_envelope(track, point_speeds, config):
+    """
+    Bound point-to-point speed cliffs in the corner envelope using finite accel/decel slopes.
+
+    This only reduces local maxima and never raises point speeds, so curvature-derived lows are
+    preserved while transition discontinuities are softened before forward/backward propagation.
+    """
+    solver_cfg = config.get('solver', {}) if isinstance(config, dict) else {}
+    enabled = bool(solver_cfg.get('enable_corner_envelope_smoothing', False))
+    try:
+        max_decel_g = max(float(solver_cfg.get('corner_envelope_max_decel_g', 1.8)), 0.05)
+    except (TypeError, ValueError):
+        max_decel_g = 1.8
+    try:
+        max_accel_g = max(float(solver_cfg.get('corner_envelope_max_accel_g', 2.2)), 0.05)
+    except (TypeError, ValueError):
+        max_accel_g = 2.2
+    try:
+        max_iterations = int(solver_cfg.get('corner_envelope_smoothing_iterations', 2))
+    except (TypeError, ValueError):
+        max_iterations = 2
+    max_iterations = max(1, min(max_iterations, 8))
+
+    base = np.asarray(point_speeds, dtype=float)
+    if (not enabled) or (base.size <= 1):
+        diagnostics = {
+            'corner_speed_smoothing_enabled': bool(enabled),
+            'corner_speed_smoothing_max_decel_g': float(max_decel_g),
+            'corner_speed_smoothing_max_accel_g': float(max_accel_g),
+            'corner_speed_smoothing_iterations': 0,
+            'corner_speed_smoothing_clamped_points': 0,
+            'corner_speed_smoothing_max_reduction_mps': 0.0,
+            'corner_speed_smoothing_mean_reduction_mps': 0.0,
+        }
+        return base.tolist(), diagnostics
+
+    smoothed = np.maximum(base.copy(), 0.0)
+    a_decel = float(max_decel_g) * 9.81
+    a_accel = float(max_accel_g) * 9.81
+    total_clamps = 0
+    iterations_run = 0
+
+    for _ in range(max_iterations):
+        changed = 0
+
+        for i in range(len(smoothed) - 2, -1, -1):
+            ds = float(track.points[i + 1].distance - track.points[i].distance)
+            if ds <= 0.0:
+                continue
+            max_prev = np.sqrt(max(smoothed[i + 1] ** 2 + 2.0 * a_decel * ds, 0.0))
+            if smoothed[i] > max_prev:
+                smoothed[i] = float(max_prev)
+                changed += 1
+
+        for i in range(1, len(smoothed)):
+            ds = float(track.points[i].distance - track.points[i - 1].distance)
+            if ds <= 0.0:
+                continue
+            max_curr = np.sqrt(max(smoothed[i - 1] ** 2 + 2.0 * a_accel * ds, 0.0))
+            if smoothed[i] > max_curr:
+                smoothed[i] = float(max_curr)
+                changed += 1
+
+        iterations_run += 1
+        total_clamps += changed
+        if changed == 0:
+            break
+
+    reduction = np.maximum(base - smoothed, 0.0)
+    diagnostics = {
+        'corner_speed_smoothing_enabled': True,
+        'corner_speed_smoothing_max_decel_g': float(max_decel_g),
+        'corner_speed_smoothing_max_accel_g': float(max_accel_g),
+        'corner_speed_smoothing_iterations': int(iterations_run),
+        'corner_speed_smoothing_clamped_points': int(total_clamps),
+        'corner_speed_smoothing_max_reduction_mps': float(np.max(reduction)) if reduction.size else 0.0,
+        'corner_speed_smoothing_mean_reduction_mps': float(np.mean(reduction)) if reduction.size else 0.0,
+    }
+    return smoothed.tolist(), diagnostics
 
 def optimise_speed_at_points(track_points, vehicle, config):
     """
@@ -308,6 +406,7 @@ def optimise_speed_at_points(track_points, vehicle, config):
     corner_non_physical_normal_load = []
     corner_transfer_clamped = []
     straight_speed_cap = _get_straight_speed_cap(config)
+    corner_max_bisection_iters = _get_corner_max_bisection_iters(config)
     previous_solution = None
     for point in track_points:
         curvature = point.curvature
@@ -340,6 +439,7 @@ def optimise_speed_at_points(track_points, vehicle, config):
                 straight_line_speed_cap=straight_speed_cap,
                 initial_guess=tier.get('initial_guess'),
                 v_upper_bound_mps=tier.get('v_upper_bound_mps'),
+                max_bisection_iters=corner_max_bisection_iters,
             )
             if tier_result.get('success'):
                 result = tier_result
@@ -445,6 +545,7 @@ def forward_pass(track, vehicle, point_speeds, config):
     speeds = np.zeros(n_points)
     speeds[0] = point_speeds[0]  # start at first point speed
     limiting_modes = ['initial'] * n_points
+    primary_limiting_modes = ['initial'] * n_points
     powertrain_forces = [0.0] * n_points
     tyre_limit_forces = [0.0] * n_points
     tyre_lateral_caps = [0.0] * n_points
@@ -462,6 +563,7 @@ def forward_pass(track, vehicle, point_speeds, config):
         if ds <= 0:
             speeds[i] = speeds[i-1]
             limiting_modes[i] = 'degenerate_segment'
+            primary_limiting_modes[i] = 'degenerate_segment'
             continue
         v_prev = speeds[i-1]
         v_calc = max(v_prev, 1.0)
@@ -495,7 +597,10 @@ def forward_pass(track, vehicle, point_speeds, config):
         )
 
         curvature = abs(track.points[i].curvature)
-        fy_demand_total = vehicle.params.mass * (v_calc**2) * curvature
+        # Budget lateral demand at physically feasible speed for this point.
+        # Using uncapped v_calc can overstate lateral demand at corner entries.
+        v_for_budget = min(v_calc, float(point_speeds[i]))
+        fy_demand_total = vehicle.params.mass * (v_for_budget**2) * curvature
         budget_scale = _longitudinal_budget_scale_from_lateral_demand(fy_demand_total, fy_cap_total)
         f_traction_tyre_limit = fx_cap_total * budget_scale
 
@@ -510,9 +615,10 @@ def forward_pass(track, vehicle, point_speeds, config):
         combined_budget_scale[i] = budget_scale
         net_long_forces[i] = f_x
         if f_traction_powertrain < f_traction_tyre_limit:
-            limiting_modes[i] = 'power_limited'
+            primary_limiting_modes[i] = 'power_limited'
         else:
-            limiting_modes[i] = 'traction_limited'
+            primary_limiting_modes[i] = 'traction_limited'
+        limiting_modes[i] = primary_limiting_modes[i]
 
         a_lon = f_x / vehicle.params.mass
         v_pred_squared = v_prev**2 + 2 * a_lon * ds
@@ -526,6 +632,7 @@ def forward_pass(track, vehicle, point_speeds, config):
         speeds[i] = v_pred
     diagnostics = {
         'forward_limiting_mode': limiting_modes,
+        'forward_primary_limiting_mode': primary_limiting_modes,
         'forward_powertrain_force': powertrain_forces,
         'forward_tyre_force_limit': tyre_limit_forces,
         'forward_tyre_lateral_cap': tyre_lateral_caps,
@@ -558,15 +665,25 @@ def backward_pass(track, vehicle, point_speeds, config):
     speeds[-1] = point_speeds[-1]
     limiting_modes = ['terminal'] * n_points
     brake_force_limits = [0.0] * n_points
+    brake_decel_limits_raw = [0.0] * n_points
     brake_decel_limits = [0.0] * n_points
     brake_lateral_caps = [0.0] * n_points
     brake_combined_budget_scale = [1.0] * n_points
+    brake_decel_capped = [False] * n_points
     normal_load_per_tyre = [vehicle.compute_static_normal_load()] * n_points
     front_normal_load_per_tyre = [vehicle.compute_static_normal_load()] * n_points
     rear_normal_load_per_tyre = [vehicle.compute_static_normal_load()] * n_points
     non_physical_normal_load_flags = [False] * n_points
     transfer_clamped_flags = [False] * n_points
     peak_slip_ratio = float(config.get('ab_testing', {}).get('peak_slip_ratio_brake', 12.0))
+    solver_cfg = config.get('solver', {}) if isinstance(config, dict) else {}
+    max_brake_decel_g_cfg = solver_cfg.get('max_brake_decel_g', None)
+    max_brake_decel_mps2 = np.inf
+    if max_brake_decel_g_cfg is not None:
+        try:
+            max_brake_decel_mps2 = max(0.0, float(max_brake_decel_g_cfg)) * 9.81
+        except (TypeError, ValueError):
+            max_brake_decel_mps2 = np.inf
 
     for i in range(n_points-2, -1, -1):
         ds = track.points[i+1].distance - track.points[i].distance
@@ -614,7 +731,12 @@ def backward_pass(track, vehicle, point_speeds, config):
         # Add aerodynamic drag (acts as free braking, outside friction circle)
         f_drag = vehicle.compute_aero_drag(v_next)
         a_brake += f_drag / vehicle.params.mass
+        a_brake_raw = float(a_brake)
+        if np.isfinite(max_brake_decel_mps2) and a_brake_raw > max_brake_decel_mps2:
+            a_brake = float(max_brake_decel_mps2)
+            brake_decel_capped[i] = True
         brake_force_limits[i] = f_brake_total
+        brake_decel_limits_raw[i] = a_brake_raw
         brake_decel_limits[i] = a_brake
         brake_lateral_caps[i] = fy_cap_total
         brake_combined_budget_scale[i] = budget_scale
@@ -635,9 +757,12 @@ def backward_pass(track, vehicle, point_speeds, config):
     diagnostics = {
         'backward_limiting_mode': limiting_modes,
         'backward_brake_force_limit': brake_force_limits,
+        'backward_brake_decel_limit_raw': brake_decel_limits_raw,
         'backward_brake_decel_limit': brake_decel_limits,
         'backward_tyre_lateral_cap': brake_lateral_caps,
         'backward_combined_budget_scale': brake_combined_budget_scale,
+        'backward_brake_decel_capped': brake_decel_capped,
+        'backward_brake_decel_cap_applied_events': int(sum(1 for x in brake_decel_capped if x)),
         'backward_normal_load_per_tyre': normal_load_per_tyre,
         'backward_front_normal_load_per_tyre': front_normal_load_per_tyre,
         'backward_rear_normal_load_per_tyre': rear_normal_load_per_tyre,
@@ -655,7 +780,8 @@ def compute_speed_profile(track, vehicle, config):
         vehicle.tyre_model.reset_domain_diagnostics()
 
     # Pass 1: Find ultimate speeds possible given vehicle model
-    point_speeds, corner_diag = optimise_speed_at_points(track.points, vehicle, config)
+    point_speeds_raw, corner_diag = optimise_speed_at_points(track.points, vehicle, config)
+    point_speeds, smoothing_diag = _smooth_corner_speed_envelope(track, point_speeds_raw, config)
     # Pass 2: Forward pass propagating accel limits
     forward_speeds, forward_diag = forward_pass(track, vehicle, point_speeds, config)
     # Pass 3: Backward pass propagating decel limits
@@ -665,6 +791,7 @@ def compute_speed_profile(track, vehicle, config):
     final_speeds = np.minimum(forward_speeds, backward_speeds)
     diagnostics = {
         **corner_diag,
+        **smoothing_diag,
         **forward_diag,
         **backward_diag,
         'model_variant': _get_model_variant(config),
