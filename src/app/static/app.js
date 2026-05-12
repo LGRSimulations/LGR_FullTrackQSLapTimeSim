@@ -1161,7 +1161,7 @@ async function sendChatMessage() {
     loading.remove();
 
     if (res.status === 503) {
-      appendChatMessage('assistant', 'Chat is not configured. Contact your distributor for a key file.');
+      appendChatMessage('assistant', 'The assistant is not available right now. Try again shortly.');
     } else if (!res.ok) {
       appendChatMessage('assistant', 'Something went wrong. Try again.');
     } else {
