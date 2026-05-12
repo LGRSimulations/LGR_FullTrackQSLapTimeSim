@@ -286,7 +286,7 @@ def _ensure_answer_coverage(question: str, answer: str) -> str:
     return covered
 
 
-def chat(question: str, history: list[dict]) -> dict:
+def chat(question: str, history: list) -> dict:
     api_key = _read_key()
     index = _load_index()
 
@@ -332,10 +332,15 @@ def chat(question: str, history: list[dict]) -> dict:
         "Do not use em dashes or semicolons.\n\n"
         f"Reference notes:\n\n{context}"
     )
-    history = history[-16:]
+    # Convert typed ChatTurn objects (or plain dicts) to plain dicts for the API call.
+    # Slicing to the last 16 turns limits context size.
+    raw_history = [
+        {"role": t.role, "content": t.content} if hasattr(t, "role") else {"role": t["role"], "content": t["content"]}
+        for t in history[-16:]
+    ]
     messages = [
         {"role": "system", "content": system},
-        *history,
+        *raw_history,
         {"role": "user", "content": question},
     ]
     answer = _call_deepseek(messages, api_key, max_tokens=600)
