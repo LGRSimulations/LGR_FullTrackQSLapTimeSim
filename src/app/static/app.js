@@ -947,26 +947,6 @@ function showToast(message) {
   toast._timer = setTimeout(() => toast.classList.remove('visible'), 4000);
 }
 
-function openVsCode(uri) {
-  const iframe = document.createElement('iframe');
-  iframe.style.cssText = 'display:none;position:fixed;';
-  document.body.appendChild(iframe);
-
-  let opened = false;
-  const onBlur = () => { opened = true; };
-  window.addEventListener('blur', onBlur, { once: true });
-
-  iframe.src = uri;
-
-  setTimeout(() => {
-    window.removeEventListener('blur', onBlur);
-    document.body.removeChild(iframe);
-    if (!opened) {
-      showToast('VS Code not detected. Download it at code.visualstudio.com to open this file.');
-    }
-  }, 1500);
-}
-
 function processLessonLinks(container, lessonFile) {
   const baseDir = 'docs/lessons';
 
@@ -995,8 +975,6 @@ function processLessonLinks(container, lessonFile) {
         }
       });
     } else {
-      // TODO: fetch /api/datasets or a future /api/workspace-uri endpoint to
-      // construct VS Code deep links without leaking the server filesystem path.
       link.classList.add('code-link');
       link.setAttribute('title', resolved);
       link.addEventListener('click', e => {
@@ -1037,16 +1015,6 @@ function renderMarkdownWithMath(md, options = {}) {
   }
 
   return html;
-}
-
-function escapeHtml(value) {
-  return String(value).replace(/[&<>"']/g, ch => ({
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#39;'
-  }[ch]));
 }
 
 // ── Lessons ─────────────────────────────────────────────────────────────────
@@ -1625,5 +1593,4 @@ initLessons();
 loadMetadata();
 loadParametersAndConfig();
 positionChatPanel();
-toggleChatPanel(true);
 window.addEventListener('resize', positionChatPanel);
