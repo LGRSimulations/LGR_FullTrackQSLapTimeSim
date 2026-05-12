@@ -177,6 +177,16 @@ Lap integration channels are then computed from this final speed trace.
 3. Check limiter mode mix in diagnostics
 4. Check model health flags for non-physical load or heavy clamping
 
+## Known limits and production extensions
+The simulator treats every segment as flat.
+Track elevation angle is computed from the input coordinates but is not used in the integration.
+There is no `g * sin(slope)` term in net longitudinal force.
+Lap time on a track with significant elevation change will be biased.
+Elevation propagation is on the roadmap.
+
+For a full list of known limits, see [Known Limits and Roadmap](Known-Limits-and-Roadmap.md).
+That page covers lateral load transfer, longitudinal load transfer lag, corner equilibrium drag balance, tyre relaxation, yaw inertia, shift time, engine braking, rolling resistance, and more.
+
 ## Next lesson
 - [Vehicle Modelling Diagnostics and Trust Checks](Vehicle-Modelling-Diagnostics.md)
 
@@ -184,4 +194,5 @@ Lap integration channels are then computed from this final speed trace.
 - [Vehicle Modelling Capstone](Vehicle-Modelling.md)
 - [Vehicle Modelling Diagnostics and Trust Checks](Vehicle-Modelling-Diagnostics.md)
 - [Track Geometry and Sampling for Vehicle Dynamics](Track-Geometry-and-Sampling.md)
+- [Known Limits and Roadmap](Known-Limits-and-Roadmap.md)
 - [Lessons Index](README.md)

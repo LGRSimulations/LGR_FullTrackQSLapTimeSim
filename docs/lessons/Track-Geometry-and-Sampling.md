@@ -14,9 +14,9 @@ By the end, you should know
 Use this as a quick screen before setup A B comparisons.
 These are red flags, not automatic fail gates.
 
-- Red flag 1 spacing spread is large: `max(ds) > 5 x median(ds)`
-- Red flag 2 closure gap is large for a closed track: `gap(start,end) > 1%` of total track length
-- Red flag 3 isolated curvature spike: one point has much larger `|kappa|` than nearby points and no matching geometric reason in the map
+- Red flag 1 spacing spread is large. `max(ds) > 5 x median(ds)`
+- Red flag 2 closure gap is large for a closed track. `gap(start,end) > 1%` of total track length
+- Red flag 3 isolated curvature spike. one point has much larger `|kappa|` than nearby points and no matching geometric reason in the map
 
 ## One minute mental model
 The simulator does not solve on a perfectly smooth curve.
@@ -99,6 +99,23 @@ Code path for integration channels
 2. Check curvature trace for one-point spikes
 3. Check if lap deltas are supported by limiter mode changes, not only one noisy area
 4. Compare g channel spikes against local spacing and curvature around the same distance
+
+## Known limit. Elevation is not propagated
+The track loader computes `elevation_angle` at each point from the x, y, z coordinates in the track file.
+That channel is stored on each point but is not used in the lap solver.
+
+The lap integration formula
+
+$$
+g_{long} = \frac{(v_i^2 - v_{i-1}^2)}{2\,ds\,9.81}
+$$
+
+contains no `g * sin(slope)` term.
+Every segment is treated as flat.
+
+On a real hilly track, climbing segments will overstate the speed the car can achieve and descending segments will understate braking effort needed.
+Lap time on a track with significant elevation change will be biased.
+Elevation propagation is on the roadmap.
 
 ## Limits of this page
 This page explains geometry and sampling effects only.

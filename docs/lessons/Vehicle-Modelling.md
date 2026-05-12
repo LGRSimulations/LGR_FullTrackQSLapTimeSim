@@ -51,37 +51,26 @@ Inputs
 Results
 
 - Final profile in code is the min of Pass 2 and Pass 3 after both are corner capped by Pass 1
-- Worked segment index = 41 at distance 213.93 m
-- Lap time from this run = 69.733 s
+- Example taken from the last segment in a representative FSUK run
 
 ## Worked example
 This point shows why backward braking limits matter.
-It is near straight curvature but it still must satisfy upcoming braking needs.
+The selected segment is near-straight in curvature but must still satisfy upcoming braking needs.
 
-Inputs
+In a representative FSUK run, Pass 1 at a low-curvature segment returns a speed well above the mechanical limits.
+Pass 2 (forward acceleration) reaches a moderate speed based on the power available.
+Pass 3 (backward braking) is lower still because a tight corner is ahead.
 
-- Segment index = 41
-- Distance = 213.93 m
-- Curvature = 4.441e-09 1/m
-
-Results
-
-- Pass 1 speed = 200.00 m/s
-- Pass 2 speed = 33.30 m/s
-- Pass 3 speed = 13.25 m/s
-- Final speed = 13.25 m/s
-- Limiting pass = Pass 3
-
-At this segment
+The final speed follows Pass 3.
 
 $$
-v_{final} = \min(200.00,\ 33.30,\ 13.25) = 13.25\ \text{m/s}
+v_{final} = \min(v_{pass1},\ v_{pass2},\ v_{pass3}) = v_{pass3}
 $$
 
-Equivalent implementation form at this same segment
+Equivalent implementation form
 
 $$
-v_{final} = \min(33.30,\ 13.25) = 13.25\ \text{m/s}
+v_{final} = \min(v_{pass2},\ v_{pass3}) = v_{pass3}
 $$
 
 That is the key behavior of the three pass method.
@@ -127,9 +116,8 @@ Backward starts at the last point with `speeds[-1] = point_speeds[-1]`.
 Because of this, the active limiter near the boundaries can change with track and setup.
 There is no fixed rule that backward must be lower at the end.
 
-In this current run, the last point is forward limited.
-At index 257, Pass 2 is 15.81 m/s and Pass 3 is 16.20 m/s.
-So the final speed follows Pass 2 at that point.
+In a representative FSUK run, the last segment is forward limited.
+Pass 2 is lower than Pass 3 at that point, so the final speed follows Pass 2.
 
 The pass loops run along the listed points only.
 They do not add an extra wraparound segment from last point back to first point inside these loops.
@@ -158,7 +146,7 @@ It applies powertrain request, tyre limits, and drag.
 Core relations
 
 $$
-F_{x,net} = \min(F_{x,power},\ F_{x,tyre\ limit}) - F_{drag}
+F_{x,net} = \min\!\left(F_{x,power},\ F_{x,tyre\_cap} \cdot \sqrt{1 - \left(\frac{F_{y,demand}}{F_{y,cap}}\right)^2}\right) - F_{drag}
 $$
 
 $$
@@ -223,4 +211,5 @@ Code path
 - [Vehicle Modelling Diagnostics and Trust Checks](Vehicle-Modelling-Diagnostics.md)
 - [Track Geometry and Sampling for Vehicle Dynamics](Track-Geometry-and-Sampling.md)
 - [Tyre Model Deep Dive](Tyre-Model-Deep-Dive.md)
+- [Known Limits and Roadmap](Known-Limits-and-Roadmap.md)
 - [Lessons Index](README.md)

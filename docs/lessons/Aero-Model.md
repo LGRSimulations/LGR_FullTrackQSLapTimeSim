@@ -14,6 +14,19 @@ By the end, you should know
 - how aero center of pressure changes front and rear tyre loads
 - how aero changes lap speed as a tradeoff
 
+## Baseline car aero scope
+The shipped baseline parameters represent a non-aero or low-downforce configuration.
+
+The downforce coefficient is 0.07 and the frontal area is 0.75 m².
+That gives a lift area product (`CLA_m2`) of approximately 0.053 m².
+
+A real FSAE car with a full aero package typically has a CLA between 1.5 and 3.0 m².
+The baseline is roughly 30 to 60 times less downforce than a high-downforce FSAE aero car.
+
+The plots and analysis in this lesson are valid for this low-downforce regime.
+They are not representative of a car with a full undertray and multi-element wings.
+If you are studying a high-downforce car, scale the downforce coefficient accordingly and re-run the figures.
+
 ## One minute mental model
 Aerodynamics does two jobs.
 

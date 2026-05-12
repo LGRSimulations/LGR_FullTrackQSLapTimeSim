@@ -16,42 +16,42 @@ Instead, scenario multipliers sit on top of the base vehicle model.
 ## Base vehicle parameters
 Base vehicle parameters describe the car itself.
 
-Examples:
+Examples
 
-- mass,
-- wheelbase,
-- centre of gravity height,
-- wheel radius,
-- base tyre grip parameter,
-- aero coefficients,
-- aero centre of pressure.
+- mass
+- wheelbase
+- centre of gravity height
+- wheel radius
+- base tyre grip parameter
+- aero coefficients
+- aero centre of pressure
 
 These should remain stable when comparing scenarios.
 
 ## Scenario parameters
 Scenario parameters describe operating conditions.
 
-Current scenario context includes:
+Current scenario context includes
 
 - `scenario.name`
 - `scenario.grip_scale`
 - `scenario.air_density_scale`
 
-Code path:
+Code path
 
 - [src/simulator/util/calcSpeedProfile.py](../../src/simulator/util/calcSpeedProfile.py) `_get_scenario_context`
 - [src/vehicle/vehicle.py](../../src/vehicle/vehicle.py)
 - [src/ab_testing/run_ab_suite.py](../../src/ab_testing/run_ab_suite.py)
 
 ## Good scenario implementation
-A good wet-track scenario might set:
+A good wet-track scenario might set
 
 ```json
 {
   "scenario": {
     "name": "wet_track",
     "grip_scale": 0.9,
-    "air_density_scale": 1.03
+    "air_density_scale": 0.97
   }
 }
 ```
@@ -59,18 +59,23 @@ A good wet-track scenario might set:
 The base `base_mu` remains the same.
 The scenario grip multiplier changes the operating condition.
 
+Note on air density direction. Wet air is less dense than dry air at the same temperature.
+Water vapour displaces heavier nitrogen and oxygen molecules, so humid or wet conditions reduce air density slightly.
+A value below 1.0 is physically correct for a wet-weather scenario.
+A value above 1.0 represents a cold dry morning or a higher-altitude air density increase.
+
 ## Bad scenario implementation
 A bad implementation would silently lower `base_mu` and then call that the wet setup.
 
-That is a problem because:
+That is a problem for these reasons
 
-- the vehicle calibration has been changed,
-- dry and wet comparisons no longer share the same base truth,
-- future calibration work cannot tell whether a change came from the car or the scenario,
-- A/B reports lose context.
+- the vehicle calibration has been changed
+- dry and wet comparisons no longer share the same base truth
+- future calibration work cannot tell whether a change came from the car or the scenario
+- A/B reports lose context
 
 ## Runtime reporting
-A/B outputs include explicit scenario context:
+A/B outputs include explicit scenario context
 
 - `scenario_name`
 - `scenario_grip_scale`
@@ -84,11 +89,11 @@ The baseline vehicle should pass physics and realism gates before scenario effec
 
 Then scenario-only changes should produce expected directions without violating realism gates.
 
-Examples:
+Examples
 
-- lower grip scale should usually reduce grip-limited performance,
-- higher air density can increase drag and downforce together,
-- scenario changes should not create non-physical normal-load events.
+- lower grip scale should usually reduce grip-limited performance
+- higher air density can increase drag and downforce together
+- scenario changes should not create non-physical normal-load events
 
 ## Assumptions and limits
 - Current scenario support is intentionally compact.
@@ -97,7 +102,7 @@ Examples:
 - Detailed tyre temperature, water film, wind direction, and transient weather effects are outside the current core model.
 
 ## Verification checks
-Useful commands:
+Useful commands
 
 ```bash
 uv run python -m unittest tests.test_falsification_and_scenario_contracts -v

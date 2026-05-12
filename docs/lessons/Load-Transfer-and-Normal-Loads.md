@@ -36,6 +36,10 @@ $$
 where $\lambda_f$ is the static front load fraction.
 Per tyre values are axle loads divided by two.
 
+`cog_longitudinal_pos` in `parameters.json` is the fraction of total mass carried by the front axle in static conditions.
+A value of 0.5 means equal front and rear split.
+A value of 0.516 means the front axle carries 51.6 percent of the car weight at rest.
+
 ## Aero load split
 Downforce adds vertical load as speed rises.
 The simulator computes total downforce and splits it across front and rear axles using aero centre of pressure.
@@ -79,25 +83,25 @@ Changing normal load changes available force in the corner solve, forward accele
 
 Runtime users
 
-- Corner limit: `optimise_speed_at_points`
-- Forward pass: `forward_pass`
-- Backward pass: `backward_pass`
+- Corner limit via `optimise_speed_at_points`
+- Forward pass via `forward_pass`
+- Backward pass via `backward_pass`
 
 ## Physical guardrails
 The load model should not produce negative axle loads.
 The implementation bounds transferable load so that each axle retains a small positive load in extreme cases.
 
-The diagnostics distinguish two cases:
+The diagnostics report two types of events.
 
-- `normal_load_non_physical_events_total`: a red flag. A raw load became invalid or negative.
-- `normal_load_transfer_clamped_events_total`: a warning. The transfer calculation reached a guardrail.
+`normal_load_non_physical_events_total` is a red flag. A raw load became invalid or negative.
+`normal_load_transfer_clamped_events_total` is a warning. The transfer calculation reached a guardrail.
 
 Non-physical events should be zero for credible runs.
 Clamp events can occur, but high counts mean the model is operating near its simplified assumptions.
 
 ## Rollover speed cap
 The corner speed search also applies a quasi-static rollover speed cap.
-The cap uses track width, centre of gravity height, gravity, and curvature radius:
+The cap uses track width, centre of gravity height, gravity, and curvature radius.
 
 $$
 v_{roll} = \sqrt{\frac{t}{2h} g R}

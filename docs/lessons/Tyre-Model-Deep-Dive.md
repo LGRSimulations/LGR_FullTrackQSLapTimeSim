@@ -117,6 +117,27 @@ $$
 This preserves vector direction and enforces a consistent budget.
 It is a practical approximation and not a full MF combined slip weighting model.
 
+**Note on combined slip and the lap solver**
+
+The tyre model class (`baseTyre.py`) exposes a `get_combined_forces` method that uses the elliptical-cap approach described above.
+That method is available for general use but is NOT called by the lap solver.
+
+The lap solver uses a separate friction-ellipse budget at the solver level.
+The function is `_longitudinal_budget_scale_from_lateral_demand` in `calcSpeedProfile.py` (lines 268-274).
+It computes
+
+$$
+\text{scale} = \sqrt{1 - \left(\frac{F_{y,demand}}{F_{y,cap}}\right)^2}
+$$
+
+and then multiplies the available longitudinal force cap by that scale.
+This is the production path for both the forward acceleration pass and the backward braking pass.
+
+Relevant files
+
+- [src/vehicle/Tyres/baseTyre.py](../../src/vehicle/Tyres/baseTyre.py) defines `get_combined_forces` (not called by lap solver)
+- [src/simulator/util/calcSpeedProfile.py](../../src/simulator/util/calcSpeedProfile.py) defines `_longitudinal_budget_scale_from_lateral_demand` (active lap solver path)
+
 ## Worked numeric example
 Assume
 
@@ -155,6 +176,15 @@ For free rolling relation
 $$
 V_x \approx r_e\Omega
 $$
+
+In Pacejka conventions, a common approximation for effective rolling radius is
+
+$$
+r_e \approx r_s - \frac{r_l - r_s}{3}
+$$
+
+where $r_s$ is the free static (unloaded) radius and $r_l$ is the loaded radius.
+This places the effective rolling radius closer to the loaded radius than the free static radius.
 
 So if `wheel_radius` does not represent a loaded effective value, speed to RPM and slip related computations can drift.
 For this project, treating wheel radius as loaded effective radius is the healthier assumption.
@@ -199,6 +229,7 @@ These are deliberate tradeoffs for speed and robustness in lap sweeps.
 - [Load Transfer and Normal Loads](Load-Transfer-and-Normal-Loads.md)
 - [Braking Dynamics and Deceleration Budget](Braking-Dynamics-and-Deceleration-Budget.md)
 - [Validation and Falsification Workflow](Validation-and-Falsification-Workflow.md)
+- [Known Limits and Roadmap](Known-Limits-and-Roadmap.md)
 - [Lessons Index](README.md)
 
 ## References

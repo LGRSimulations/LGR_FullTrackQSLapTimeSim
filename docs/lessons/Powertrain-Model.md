@@ -45,6 +45,11 @@ Default data file
 
 - [datasets/vehicle/PU_data/Honda_CBR_600RR_RPM_vs_Peak_Power.csv](../../datasets/vehicle/PU_data/Honda_CBR_600RR_RPM_vs_Peak_Power.csv)
 
+The default dataset name includes "Peak Power".
+The current `config.json` points to this Peak Power dataset, so the active operating curve IS peak power.
+The continuous power fallback path is not in use with the shipped configuration.
+Lap time results reflect peak-output operation throughout, not a derated continuous limit.
+
 ### 2) Torque from power
 The model computes torque from lookup power as
 
@@ -112,8 +117,12 @@ The forward pass in [src/simulator/util/calcSpeedProfile.py](../../src/simulator
 Implemented net step
 
 $$
-F_{x,net} = \min(F_{x,power}, F_{x,tyre\_limit}) - F_{drag}
+F_{x,net} = \min\!\left(F_{x,power},\ F_{x,tyre\_cap} \cdot \sqrt{1 - \left(\frac{F_{y,demand}}{F_{y,cap}}\right)^2}\right) - F_{drag}
 $$
+
+The friction-ellipse term reduces available longitudinal force when lateral demand is present.
+The full formula is computed in `_longitudinal_budget_scale_from_lateral_demand` inside
+[src/simulator/util/calcSpeedProfile.py](../../src/simulator/util/calcSpeedProfile.py).
 
 `base_mu` primarily acts on tyre force capability, not on engine torque generation.
 So `base_mu` belongs in tyre explanation, while `wheel_radius` belongs in powertrain explanation.
@@ -139,7 +148,9 @@ It does not currently model
 - traction control actuation
 - engine inertia and transient torque dynamics
 - thermal derating and fuel constraints
-- no delay for gear shift. sim always uses best-case gear
+- gear shift time cost. the solver always picks the best-case gear with zero shift delay
+- throttle is hardcoded to 1.0 throughout the forward pass, there is no partial-throttle model
+- engine braking is not modelled in the backward braking pass
 
 This tradeoff keeps runtime fast and stable for sweep-heavy lap studies.
 

@@ -38,6 +38,8 @@ Larger slip angle usually gives more lateral force up to a peak, then it saturat
 ![Fy vs slip angle predicted by the simulator tyre model](figures/tyre_model_intro/fy_vs_slip_angle_from_sim.png)
 
 This plot comes from the current simulator tyre model at fixed normal load 900 N per tyre.
+With a 320 kg car on four tyres, static load per tyre is approximately 785 N.
+The 900 N figure represents a transfer-loaded operating point, as occurs on the loaded side during cornering.
 
 ### Slip ratio
 Slip ratio compares wheel circumferential speed and vehicle forward speed.
@@ -50,7 +52,7 @@ As with slip angle, force grows first and then saturates.
 
 ![Fx vs slip ratio predicted by the simulator tyre model](figures/tyre_model_intro/fx_vs_slip_ratio_from_sim.png)
 
-This plot also comes from the current simulator tyre model at fixed normal load 900 N per tyre.
+This plot also comes from the current simulator tyre model at fixed normal load 900 N per tyre, representing a transfer-loaded operating point.
 Script path
 
 - [tools/analysis/generate_tyre_intro_figures.py](../../tools/analysis/generate_tyre_intro_figures.py)
@@ -135,8 +137,11 @@ Tyre force is one part of the full chain.
 In the forward pass
 
 $$
-F_{x,net} = \min(F_{x,power}, F_{x,tyre\_limit}) - F_{drag}
+F_{x,net} = \min\!\left(F_{x,power},\ F_{x,tyre\_cap} \cdot \sqrt{1 - \left(\frac{F_{y,demand}}{F_{y,cap}}\right)^2}\right) - F_{drag}
 $$
+
+The friction-ellipse term reduces available longitudinal force when lateral demand is present.
+At zero lateral demand the term equals 1, recovering the simpler tyre-cap limit.
 
 Key runtime files
 

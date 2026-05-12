@@ -82,8 +82,11 @@ At each segment, one useful way to think is
 A compact longitudinal step is
 
 $$
-F_{x,net} = \min(F_{x,power}, F_{x,tyre\_limit}) - F_{drag}
+F_{x,net} = \min\!\left(F_{x,power},\ F_{x,tyre\_cap} \cdot \sqrt{1 - \left(\frac{F_{y,demand}}{F_{y,cap}}\right)^2}\right) - F_{drag}
 $$
+
+The friction-ellipse term inside the min reduces available longitudinal force when lateral demand is present.
+When the car is on a straight with no lateral demand, the term equals 1 and the equation reduces to the simpler tyre-cap limit.
 
 The tyre model supplies the contact patch force limits.
 The powertrain model supplies torque and wheel force request.

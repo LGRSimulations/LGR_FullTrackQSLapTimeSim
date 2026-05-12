@@ -12,12 +12,12 @@ That is why the braking pass starts at the end of the track point list and walks
 
 The deceleration budget is the amount of braking authority still available after lateral cornering demand has used part of the tyre force envelope.
 
-At each step, the solver asks:
+At each step, the solver asks four questions.
 
-- how fast can the next point be,
-- how much distance is available,
-- how much deceleration can the tyres and drag provide,
-- what is the fastest previous speed that can still brake down in time.
+- How fast can the next point be.
+- How much distance is available.
+- How much deceleration can the tyres and drag provide.
+- What is the fastest previous speed that can still brake down in time.
 
 ## Backward speed propagation
 The backward pass uses constant-acceleration kinematics over each segment.
@@ -26,7 +26,7 @@ $$
 v_i = \sqrt{v_{i+1}^2 + 2 a_{brake} \Delta s}
 $$
 
-Then it applies the corner speed ceiling:
+Then it applies the corner speed ceiling.
 
 $$
 v_{pass3,i} = \min(v_{corner,i}, v_i)
@@ -98,7 +98,7 @@ Code path
 - [tools/evals/evaluate_braking_model.py](../../tools/evals/evaluate_braking_model.py)
 
 ## Diagnostics to inspect
-Use these channels when braking behavior looks suspicious:
+Use these channels when braking behavior looks suspicious.
 
 - `backward_limiting_mode`
 - `backward_brake_force_limit`
@@ -111,12 +111,12 @@ Use these channels when braking behavior looks suspicious:
 - `backward_front_normal_load_per_tyre`
 - `backward_rear_normal_load_per_tyre`
 
-Interpretation guide:
+Interpretation guide
 
 - `brake_limited` means braking capability controlled the profile.
 - `lateral_saturated` means lateral demand consumed almost all tyre budget.
 - `corner_capped` means the local corner ceiling was lower than the braking propagation result.
-- Non-zero `backward_brake_decel_cap_applied_events` means a hard braking clip affected the result and should be treated as a diagnostic warning.
+- Non-zero `backward_brake_decel_cap_applied_events` means a hard braking clip affected the result. Treat as a diagnostic warning.
 
 ## Assumptions and limits
 - Braking is quasi-static over each segment.

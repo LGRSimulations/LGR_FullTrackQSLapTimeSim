@@ -48,8 +48,8 @@ Code path
 
 Current run example from FSUK with model variant b1
 
-- Forward pass counts: `power_limited=156`, `traction_limited=5`, `corner_capped=96`, `initial=1`
-- Backward pass counts: `brake_limited=155`, `corner_capped=82`, `lateral_saturated=20`, `terminal=1`
+- Forward pass counts from a representative FSUK b1 run. `power_limited=156`, `traction_limited=5`, `corner_capped=96`, `initial=1`
+- Backward pass counts from the same run. `brake_limited=155`, `corner_capped=82`, `lateral_saturated=20`, `terminal=1`
 
 ![Limiter mode counts from simulator](figures/vehicle_modelling_diagnostics/limiter_mode_counts_from_sim.png)
 
@@ -73,8 +73,8 @@ Code path
 
 Current run example
 
-- Corner solver success points: `254`
-- Corner fallback points: `4`
+- Corner solver success points in a representative run. `254`
+- Corner fallback points in the same run. `4`
 
 ![Solver health counters from simulator](figures/vehicle_modelling_diagnostics/solver_health_counters_from_sim.png)
 
@@ -128,17 +128,20 @@ Code path
 - [src/simulator/util/calcSpeedProfile.py](../../src/simulator/util/calcSpeedProfile.py) `normal_load_non_physical_events_total`
 - [src/simulator/util/calcSpeedProfile.py](../../src/simulator/util/calcSpeedProfile.py) `normal_load_transfer_clamped_events_total`
 
-Current run example
+A run may show zero non-physical events but still have a high clamp count.
+Non-physical events should always be zero.
+Clamp counts that approach the total point count are a serious warning, not an informational note.
 
-- Non physical normal load events total: `0`
-- Normal load transfer clamped events total: `229`
+A clamp count near the total number of track segments means the quasi-static load transfer model is hitting its guardrail on nearly every segment.
+Results from such a run may still be directionally useful but the absolute force and speed values should not be trusted without checking whether mass, cog height, or longitudinal acceleration assumptions are realistic.
 
 This same run is shown in the solver health counters figure above.
 
 Engineering takeaway
 
-- Non zero non physical load events are a red flag
-- High clamp counts are a warning that load transfer assumptions are being stressed
+- Non-zero non-physical load events are a hard red flag. Investigate before using the result.
+- Clamp counts above roughly 20 percent of total points are a yellow flag worth investigating.
+- Clamp counts approaching the total point count mean the load model is being pushed far outside its valid operating range.
 
 ## 6. How lap time is actually integrated
 Lap time is integrated segment by segment from the final speed profile.
@@ -155,11 +158,15 @@ Engineering takeaway
 - Speed trace quality directly controls lap time quality
 - Spikes in speed or bad spacing in track points can show up in g channels
 
-Current run channel range
+Known limit. The g_long formula above has no `g * sin(slope)` term.
+The simulator treats every segment as flat.
+The `elevation_angle` field is computed from track coordinates but is not used in the integration.
+Lap time on a track with significant elevation change will be biased.
+Elevation propagation is on the roadmap.
 
-- Lap time = `69.733 s`
-- Longitudinal g min max = `-1.365` to `+1.119`
-- Lateral g min max = `-1.312` to `+1.312`
+Representative channel ranges will vary with setup and track.
+The main check is whether longitudinal and lateral g magnitudes are physically plausible for the car class and track.
+For FSAE, longitudinal g beyond about 2 g or lateral g beyond about 3 g is a signal to inspect model inputs.
 
 ![g-channels from simulator](figures/vehicle_modelling_diagnostics/g_channels_from_sim.png)
 
