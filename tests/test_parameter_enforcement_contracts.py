@@ -39,16 +39,21 @@ class ParameterEnforcementContractTests(unittest.TestCase):
         self.assertGreater(f_high, f_low)
 
     def test_frontal_area_monotonic_drag_and_downforce(self):
-        vehicle_low, _ = self._vehicle({"frontal_area": 0.6})
-        vehicle_high, _ = self._vehicle({"frontal_area": 0.9})
+        # compute_aero_drag still uses frontal_area directly.
+        # compute_downforce uses CLA_m2 = Cl * A; both frontal_area and CLA_m2 must change together.
+        vehicle_low, _ = self._vehicle({"frontal_area": 0.6, "CLA_m2": 0.6 * 0.07})
+        vehicle_high, _ = self._vehicle({"frontal_area": 0.9, "CLA_m2": 0.9 * 0.07})
 
         v = 20.0
         self.assertGreater(vehicle_high.compute_aero_drag(v), vehicle_low.compute_aero_drag(v))
         self.assertGreater(vehicle_high.compute_downforce(v), vehicle_low.compute_downforce(v))
 
     def test_downforce_coefficient_monotonic_downforce(self):
-        vehicle_low, _ = self._vehicle({"downforce_coefficient": 0.04})
-        vehicle_high, _ = self._vehicle({"downforce_coefficient": 0.12})
+        # compute_downforce uses CLA_m2 (Cl * A). Changing the legacy downforce_coefficient field
+        # no longer affects downforce directly — set CLA_m2 instead.
+        frontal_area = 0.75  # from parameters.json
+        vehicle_low, _ = self._vehicle({"CLA_m2": 0.04 * frontal_area})
+        vehicle_high, _ = self._vehicle({"CLA_m2": 0.12 * frontal_area})
 
         v = 20.0
         self.assertGreater(vehicle_high.compute_downforce(v), vehicle_low.compute_downforce(v))
