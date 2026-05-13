@@ -1313,3 +1313,214 @@ input.field-error {
 .user-bar-logout:hover {
   border-color: #F4F6F8;
 }
+
+/* ── Mobile and tablet responsive overrides ──────────────────────────────── */
+/* Breakpoint: tablet portrait and phone (up to 900px wide)                  */
+/* These rules are purely additive — desktop rules above are unchanged.       */
+
+@media (max-width: 900px) {
+
+  /* Tab bar — larger tap targets and iOS momentum scroll */
+  .tab-bar {
+    -webkit-overflow-scrolling: touch;
+    padding: 6px 8px 0;
+  }
+  .tab {
+    padding: 10px 12px;
+    min-height: 40px;
+    display: inline-flex;
+    align-items: center;
+  }
+  .ask-btn {
+    padding: 10px 12px;
+    min-height: 40px;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  /* Top bar — allow wrapping so brand and user section stack if needed */
+  .top-bar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  /* Main sim panel — single column stack */
+  .sim-panel {
+    grid-template-columns: 1fr;
+  }
+
+  /* Inputs panel — let the page scroll instead of a nested scroll area */
+  .inputs-panel {
+    max-height: none;
+    overflow-y: visible;
+  }
+
+  /* Viz panel and tyre viz panel — auto height instead of fixed viewport calc */
+  .viz-panel {
+    height: auto;
+    min-height: 500px;
+  }
+  .tyre-viz-panel {
+    height: auto;
+    min-height: 400px;
+  }
+
+  /* Summary strip — allow wrapping, hide dividers, push actions to their own row */
+  .summary-strip {
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    align-items: flex-start;
+  }
+  .stat-divider {
+    display: none;
+  }
+  /* Status badge and CSV button each take their own row below the stats */
+  .run-status {
+    flex-basis: 100%;
+    order: 10;
+  }
+  .csv-btn {
+    flex-basis: 100%;
+    order: 11;
+    margin-left: 0;
+    text-align: center;
+  }
+
+  /* Chart workspace — stack channel list above chart area */
+  .chart-workspace {
+    flex-direction: column;
+  }
+  .channel-list {
+    width: 100%;
+    max-height: 160px;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+  .channel-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+  }
+  .chart-area {
+    min-height: 320px;
+  }
+
+  /* Chart panes — ensure visible height in column layout */
+  .chart-pane--lg { min-height: 200px; }
+  .chart-pane--sm { min-height: 140px; }
+
+  /* Sweep chart — sensible min height on mobile */
+  .sweep-chart-container {
+    min-height: 260px;
+  }
+
+  /* Lessons layout — single column, auto height */
+  .lessons-layout {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+  .lessons-sidebar {
+    max-height: 220px;
+    overflow-y: auto;
+  }
+  .lessons-content {
+    min-height: 400px;
+  }
+
+  /* Chat panel — full width at bottom on mobile */
+  .chat-panel {
+    width: 100%;
+    left: 0;
+    right: 0;
+    border-left: none;
+    border-top: 1px solid #A7AEB6;
+  }
+
+  /* Tooltip — constrain width so it fits narrow viewports */
+  .tooltip-floater {
+    max-width: calc(100vw - 32px);
+    width: 260px;
+  }
+
+  /* Primary action buttons — minimum touch target height */
+  #runLapBtn,
+  #runSweepBtn,
+  #runTyreBtn {
+    min-height: 44px;
+    font-size: 0.8rem;
+  }
+
+  /* CSV download button — larger touch target */
+  .csv-btn {
+    min-height: 36px;
+    padding: 6px 12px;
+  }
+
+}
+
+/* ── Phone-specific tweaks (max 480px) ──────────────────────────────────── */
+
+@media (max-width: 480px) {
+
+  /* Hide subtitle and user email on very narrow screens */
+  .page-subtitle {
+    display: none;
+  }
+  .user-bar-email {
+    display: none;
+  }
+
+  /* Reduce main padding to reclaim horizontal space */
+  main {
+    padding: 10px 8px;
+  }
+
+  /* Reduce top-bar padding */
+  .top-bar {
+    padding: 8px 10px;
+  }
+
+  /* Slightly smaller page title tracking so it fits on one line */
+  .page-title {
+    letter-spacing: 1px;
+    font-size: 0.8rem;
+  }
+
+  /* Tabs — slightly smaller to fit more on screen without scrolling */
+  .tab {
+    padding: 10px 8px;
+    font-size: 0.65rem;
+  }
+
+  /* Panel padding — tighter on phones */
+  .panel {
+    padding: 10px 8px;
+  }
+
+  /* Inner tab bar margin compensates for reduced panel padding */
+  .inner-tab-bar {
+    margin: 8px -8px 10px -8px;
+  }
+
+  /* Stat values — slightly smaller on phones so summary strip fits */
+  .stat-value {
+    font-size: 0.95rem;
+  }
+
+  /* Tyre charts — reduce height slightly on phones */
+  .tyre-chart-wrap {
+    height: 220px;
+  }
+
+  /* Summary strip stat items — compact on very small screens */
+  .stat-item {
+    min-width: 50px;
+  }
+
+  /* CSV button — full width on phone so it is easy to tap */
+  .csv-btn {
+    width: 100%;
+  }
+
+}
