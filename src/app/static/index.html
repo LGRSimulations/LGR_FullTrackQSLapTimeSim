@@ -12,6 +12,7 @@
     <div class="top-bar-brand">
       <span class="page-title">Leeds Gryphon Racing Lap Time Sim</span>
       <span class="page-subtitle">Formula Student 2026</span>
+      <button type="button" class="scope-link" id="scopeOpenBtn">Model scope and limits</button>
     </div>
     <div class="top-bar-user">
       <span class="user-bar-email" id="userBarEmail"></span>
@@ -141,7 +142,7 @@
             <div class="field-hint">These are fixed by the server. Use the Tyres tab to verify the tyre model.</div>
 
             <div class="field-section-header">Solver</div>
-            <label class="field-label">Max Brake Decel <button type="button" class="info-tip" aria-label="More info" aria-hidden="true" data-tip="Cap on deceleration during braking, in g. Models real-world limits like brake pad fade or driver tolerance. Leave blank to use the server default.">i</button></label>
+            <label class="field-label">Max Brake Decel <button type="button" class="info-tip" aria-label="More info" aria-hidden="true" data-tip="User-set cap on braking deceleration, in g. Not derived from brake or pad physics. It is a solver ceiling to keep results inside a sane operating range. Leave blank to use the server default.">i</button></label>
             <input id="c-solver-max_brake_decel_g" type="text" />
             <div class="field-hint">e.g. 1.8 · g. Leave blank to use the server default.</div>
             <div class="field-checkbox-row">
@@ -419,6 +420,49 @@
     </section>
 
   </main>
+
+  <div id="scopeModal" class="scope-modal hidden" role="dialog" aria-modal="true" aria-labelledby="scopeModalTitle">
+    <div class="scope-modal-backdrop" id="scopeBackdrop"></div>
+    <div class="scope-modal-card">
+      <div class="scope-modal-header">
+        <span class="panel-label" id="scopeModalTitle">Model scope and limits</span>
+        <button type="button" class="scope-close-btn" id="scopeCloseBtn">Close</button>
+      </div>
+      <div class="scope-modal-body">
+        <p class="scope-lead">A quasi-steady-state lap time simulator built for Formula Student scale cars. It is a design trend tool, not a ground truth predictor.</p>
+
+        <div class="scope-block-label">What is modelled</div>
+        <ul class="scope-list">
+          <li>Pacejka pure-slip tyre forces with load-dependent peak</li>
+          <li>Isotropic friction ellipse for combined slip</li>
+          <li>Speed-dependent downforce and drag with a fixed centre of pressure</li>
+          <li>Quasi-static longitudinal and lateral load transfer</li>
+          <li>Engine torque curve, gearing, and traction-limited acceleration</li>
+        </ul>
+
+        <div class="scope-block-label">What is not modelled</div>
+        <ul class="scope-list">
+          <li>Transient yaw dynamics and counter-steer lag</li>
+          <li>Full Magic Formula combined-slip weighting</li>
+          <li>Tyre temperature, pressure, and relaxation length</li>
+          <li>Differential type or preload</li>
+          <li>Suspension kinematics like anti-dive, anti-squat, and camber gain</li>
+          <li>Driver behaviour. Inputs are assumed ideal</li>
+          <li>Surface roughness, wind, and weather</li>
+        </ul>
+
+        <div class="scope-block-label">Validation status</div>
+        <p class="scope-text">No telemetry comparison yet. Current trust evidence is parameter enforcement contracts and solver residual telemetry. Telemetry overlay is on the v2 roadmap. See the Validation tab.</p>
+
+        <div class="scope-block-label">Code paths</div>
+        <ul class="scope-list scope-list-code">
+          <li>src/simulator/util/calcSpeedProfile.py</li>
+          <li>src/simulator/util/vehicleDynamics.py</li>
+          <li>src/vehicle/Tyres/baseTyre.py</li>
+        </ul>
+      </div>
+    </div>
+  </div>
 
   <div id="chatPanel" class="chat-panel hidden">
     <div class="chat-panel-header">

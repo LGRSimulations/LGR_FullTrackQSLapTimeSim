@@ -2,7 +2,7 @@ const CHANNEL_REGISTRY = {
   speeds_kmh:          { label: 'Speed',             unit: 'km/h', color: '#4e9af1', group: 'Speed',       flex: 2,
     tip: 'Vehicle speed along the track, in km/h. Always non-negative.' },
   g_lat:               { label: 'Lat G',             unit: 'g',    color: '#f1a24e', group: 'G-Forces',    flex: 1,
-    tip: 'Lateral acceleration, in g. Sign follows the local track curvature. Positive in a left-hand turn, negative in a right-hand turn.' },
+    tip: 'Lateral acceleration, in g. Sign follows the local track curvature. Positive in a left-hand turn, negative in a right-hand turn. Computed from quasi-static equilibrium. Transient yaw response and counter-steer lag are not modelled.' },
   g_long:              { label: 'Long G',            unit: 'g',    color: '#e05d5d', group: 'G-Forces',    flex: 1,
     tip: 'Longitudinal acceleration, in g. Positive when accelerating along the track direction, negative when braking. Magnitudes under braking usually exceed magnitudes under acceleration because braking is tyre-limited while acceleration is power-limited.' },
   mu_util:             { label: 'Mu Utilisation',    unit: '',     color: '#d4a017', group: 'Grip',        flex: 1,
@@ -1562,6 +1562,17 @@ document.getElementById('askBtn').addEventListener('click', () => toggleChatPane
 document.getElementById('chatSubmit').addEventListener('click', sendChatMessage);
 document.getElementById('chatQuestion').addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.target.disabled) sendChatMessage();
+});
+
+function setScopeModalOpen(open) {
+  const modal = document.getElementById('scopeModal');
+  modal.classList.toggle('hidden', !open);
+}
+document.getElementById('scopeOpenBtn').addEventListener('click', () => setScopeModalOpen(true));
+document.getElementById('scopeCloseBtn').addEventListener('click', () => setScopeModalOpen(false));
+document.getElementById('scopeBackdrop').addEventListener('click', () => setScopeModalOpen(false));
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') setScopeModalOpen(false);
 });
 
 function initInfoTips() {
